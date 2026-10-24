@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
@@ -32,6 +33,7 @@ type API struct {
 	AI      *anthropic.Client
 	Mail    foliomail.Mailer
 	Captcha base64Captcha.Store
+	Hub     *wsHub
 }
 
 func New(db *gorm.DB, cfg config.Config, rc *cache.Cache) *API {
@@ -54,6 +56,7 @@ func New(db *gorm.DB, cfg config.Config, rc *cache.Cache) *API {
 		AI:      aiClient,
 		Mail:    foliomail.New(cfg),
 		Captcha: base64Captcha.NewMemoryStore(20240, 5*time.Minute),
+		Hub:     newWSHub(),
 	}
 }
 
@@ -103,14 +106,10 @@ func (a *API) issueToken(u *models.User) (string, error) {
 	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(a.Cfg.Secret))
 }
 
-func (a *API) userFromRequest(c *gin.Context) *models.User {
-	header := c.GetHeader("Authorization")
-	if !strings.HasPrefix(header, "Bearer ") {
-		return nil
-	}
-	token := strings.TrimSpace(strings.TrimPrefix(header, "Bearer "))
+func (a *API) userFromToken(token string, ctx context.Context) (*models.User, *tokenClaims) {
+	token = strings.TrimSpace(token)
 	if token == "" {
-		return nil
+		return nil, nil
 	}
 	var claims tokenClaims
 	t, err := jwt.ParseWithClaims(token, &claims, func(t *jwt.Token) (any, error) {
@@ -120,17 +119,28 @@ func (a *API) userFromRequest(c *gin.Context) *models.User {
 		return []byte(a.Cfg.Secret), nil
 	})
 	if err != nil || !t.Valid {
-		return nil
+		return nil, nil
 	}
-	if a.Cache.IsBlacklisted(c.Request.Context(), claims.ID) {
-		return nil
+	if a.Cache.IsBlacklisted(ctx, claims.ID) {
+		return nil, nil
 	}
-	c.Set("claims", &claims)
 	var u models.User
 	if err := a.DB.First(&u, claims.UserID).Error; err != nil {
+		return nil, &claims
+	}
+	return &u, &claims
+}
+
+func (a *API) userFromRequest(c *gin.Context) *models.User {
+	header := c.GetHeader("Authorization")
+	if !strings.HasPrefix(header, "Bearer ") {
 		return nil
 	}
-	return &u
+	u, claims := a.userFromToken(strings.TrimPrefix(header, "Bearer "), c.Request.Context())
+	if claims != nil {
+		c.Set("claims", claims)
+	}
+	return u
 }
 
 func (a *API) Auth() gin.HandlerFunc {

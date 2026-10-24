@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"folio/server/cache"
 	"folio/server/config"
@@ -21,6 +22,7 @@ import (
 	"folio/server/handlers"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gorilla/websocket"
 )
 
 type testAPI struct {
@@ -382,9 +384,13 @@ func TestImageUpload(t *testing.T) {
 		t.Fatalf("解码测试图片失败: %v", err)
 	}
 
-	status, _ := s.upload(t, readerToken, "file", "reader.png", pngData)
-	if status != http.StatusForbidden {
-		t.Fatalf("读者不应能上传图片，实际 %d", status)
+	readerData, err := base64.StdEncoding.DecodeString("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7")
+	if err != nil {
+		t.Fatalf("解码读者测试图片失败: %v", err)
+	}
+	status, readerImage := s.upload(t, readerToken, "file", "reader.gif", readerData)
+	if status != http.StatusCreated {
+		t.Fatalf("读者应能上传聊天图片，实际 %d %v", status, readerImage)
 	}
 
 	status, first := s.upload(t, ownerToken, "file", "tiny.png", pngData)
@@ -408,8 +414,8 @@ func TestImageUpload(t *testing.T) {
 	}
 
 	status, list := s.do(t, "GET", "/api/images", ownerToken, nil)
-	if status != http.StatusOK || len(list["items"].([]any)) != 1 {
-		t.Fatalf("图片列表异常: %d %v", status, list)
+	if status != http.StatusOK || len(list["items"].([]any)) != 2 {
+		t.Fatalf("超级管理员应能看到两张图片: %d %v", status, list)
 	}
 	status, _ = s.do(t, "GET", "/api/images", readerToken, nil)
 	if status != http.StatusForbidden {
@@ -925,5 +931,77 @@ func TestCommentToggle(t *testing.T) {
 	})
 	if status != http.StatusCreated || obj(defaultCreated, "doc")["openComment"] != true {
 		t.Fatalf("默认应允许评论: %d %v", status, defaultCreated)
+	}
+}
+
+func TestMessageImagesAndWebSocket(t *testing.T) {
+	s := newTestAPI(t)
+	senderToken, _ := s.register(t, "msg_sender")
+	receiverToken, _ := s.register(t, "msg_receiver")
+	otherToken, _ := s.register(t, "msg_other")
+
+	pngData, err := base64.StdEncoding.DecodeString("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgwJ/lK3Q6wAAAABJRU5ErkJggg==")
+	if err != nil {
+		t.Fatalf("解码测试图片失败: %v", err)
+	}
+	status, uploaded := s.upload(t, senderToken, "file", "chat.png", pngData)
+	if status != http.StatusCreated {
+		t.Fatalf("上传聊天图片失败: %d %v", status, uploaded)
+	}
+	imageURL, _ := uploaded["url"].(string)
+
+	server := httptest.NewServer(s.handler)
+	defer server.Close()
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/api/ws?token=" + url.QueryEscape(receiverToken)
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	if err != nil {
+		t.Fatalf("建立 WebSocket 失败: %v", err)
+	}
+	defer conn.Close()
+	_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	var ready map[string]any
+	if err := conn.ReadJSON(&ready); err != nil || ready["type"] != "ready" {
+		t.Fatalf("没有收到 WebSocket 就绪事件: %v %v", ready, err)
+	}
+
+	status, sent := s.do(t, "POST", "/api/messages/with/msg_receiver", senderToken, map[string]string{
+		"type": "image", "imageURL": imageURL, "content": "看这张图",
+	})
+	if status != http.StatusCreated {
+		t.Fatalf("发送图片私信失败: %d %v", status, sent)
+	}
+	var event map[string]any
+	if err := conn.ReadJSON(&event); err != nil {
+		t.Fatalf("没有收到实时私信: %v", err)
+	}
+	message := obj(event, "message")
+	if event["type"] != "message" || message["type"] != "image" || message["imageURL"] != imageURL {
+		t.Fatalf("实时私信内容不正确: %v", event)
+	}
+
+	status, conversations := s.do(t, "GET", "/api/messages/conversations", receiverToken, nil)
+	if status != http.StatusOK {
+		t.Fatalf("读取会话失败: %d", status)
+	}
+	items := list(conversations, "items")
+	if len(items) != 1 || !strings.HasPrefix(fmt.Sprint(items[0].(map[string]any)["lastMessage"]), "[图片]") {
+		t.Fatalf("会话预览应显示图片标记: %v", items)
+	}
+
+	// 不能盗用别人上传的图片
+	otherData, err := base64.StdEncoding.DecodeString("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7")
+	if err != nil {
+		t.Fatalf("解码第二张测试图片失败: %v", err)
+	}
+	status, otherUpload := s.upload(t, otherToken, "file", "other.gif", otherData)
+	if status != http.StatusCreated {
+		t.Fatalf("其他用户上传图片失败: %d", status)
+	}
+	otherURL, _ := otherUpload["url"].(string)
+	status, _ = s.do(t, "POST", "/api/messages/with/msg_receiver", senderToken, map[string]string{
+		"type": "image", "imageURL": otherURL,
+	})
+	if status != http.StatusBadRequest {
+		t.Fatalf("不应允许发送别人的图片，实际 %d", status)
 	}
 }

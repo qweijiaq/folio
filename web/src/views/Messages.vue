@@ -1,7 +1,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { api } from '../api/client'
+import { api, getToken } from '../api/client'
 import { auth, refreshInbox } from '../stores/auth'
 import { toast, toastError } from '../stores/toast'
 import { timeAgo, shortDate } from '../utils/format'
@@ -28,9 +28,19 @@ const threadBody = ref(null)
 const userQuery = ref('')
 const userResults = ref([])
 const searchingUsers = ref(false)
+const composeTextarea = ref(null)
+const emojiOpen = ref(false)
+const imageInput = ref(null)
+const uploadingImage = ref(false)
+const wsConnected = ref(false)
+const emojis = ['😀', '😄', '🙂', '😉', '😍', '🤔', '😎', '😢', '😡', '👍', '👏', '🙏', '🎉', '❤️', '🔥', '✨', '🌱', '☕', '📚', '💡', '✅', '👀', '😅', '🤝']
 
 let pollTimer = null
 let searchTimer = null
+let socket = null
+let reconnectTimer = null
+let reconnectDelay = 1000
+let closedByUser = false
 
 async function loadConversations() {
   try {
@@ -108,6 +118,95 @@ async function send() {
   }
 }
 
+function insertEmoji(emoji) {
+  const el = composeTextarea.value
+  if (!el) {
+    draft.value += emoji
+    emojiOpen.value = false
+    return
+  }
+  const start = el.selectionStart ?? draft.value.length
+  const end = el.selectionEnd ?? start
+  draft.value = draft.value.slice(0, start) + emoji + draft.value.slice(end)
+  emojiOpen.value = false
+  nextTick(() => {
+    el.focus()
+    const pos = start + emoji.length
+    el.setSelectionRange(pos, pos)
+  })
+}
+
+function onImagePick(event) {
+  const file = (event.target.files || [])[0]
+  event.target.value = ''
+  if (file) sendImage(file)
+}
+
+async function sendImage(file) {
+  if (!peer.value || uploadingImage.value) return
+  if (!file.type.startsWith('image/')) {
+    toast('只能发送图片文件')
+    return
+  }
+  uploadingImage.value = true
+  try {
+    const image = await api.uploadImage(file)
+    await api.post(`/messages/with/${peer.value.username}`, {
+      type: 'image',
+      imageURL: image.url,
+      content: draft.value.trim()
+    })
+    draft.value = ''
+    await loadThread()
+  } catch (err) {
+    toastError(err)
+  } finally {
+    uploadingImage.value = false
+  }
+}
+
+function handleRealtimeMessage(message) {
+  const me = auth.user?.id
+  if (!me || (message.senderID !== me && message.receiverID !== me)) return
+  if (tab.value === 'messages' && withUser.value && peer.value) {
+    const inThread = message.senderID === peer.value.id || message.receiverID === peer.value.id
+    if (inThread) {
+      loadThread(true)
+      return
+    }
+  }
+  loadConversations()
+  refreshInbox()
+}
+
+function connectWS() {
+  if (socket || !getToken() || closedByUser) return
+  const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
+  const ws = new WebSocket(`${protocol}://${window.location.host}/api/ws?token=${encodeURIComponent(getToken())}`)
+  socket = ws
+  ws.onopen = () => {
+    wsConnected.value = true
+    reconnectDelay = 1000
+  }
+  ws.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data)
+      if (data.type === 'message' && data.message) handleRealtimeMessage(data.message)
+    } catch {
+      /* 忽略非 JSON 消息 */
+    }
+  }
+  ws.onclose = () => {
+    socket = null
+    wsConnected.value = false
+    if (closedByUser) return
+    window.clearTimeout(reconnectTimer)
+    reconnectTimer = window.setTimeout(connectWS, reconnectDelay)
+    reconnectDelay = Math.min(reconnectDelay * 2, 15000)
+  }
+  ws.onerror = () => ws.close()
+}
+
 function selectPeer(username) {
   userResults.value = []
   userQuery.value = ''
@@ -168,6 +267,7 @@ watch(userQuery, onSearchInput)
 
 onMounted(async () => {
   await refreshInbox()
+  connectWS()
   pollTimer = window.setInterval(() => {
     if (document.visibilityState === 'hidden') return
     if (tab.value === 'messages') {
@@ -180,8 +280,11 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  closedByUser = true
+  if (socket) socket.close()
   if (pollTimer) window.clearInterval(pollTimer)
   if (searchTimer) window.clearTimeout(searchTimer)
+  if (reconnectTimer) window.clearTimeout(reconnectTimer)
 })
 </script>
 
@@ -291,13 +394,32 @@ onBeforeUnmount(() => {
                   class="message"
                   :class="{ mine: message.senderID === auth.user?.id }"
                 >
-                  <div class="message-bubble">{{ message.content }}</div>
+                  <div v-if="message.type === 'image'" class="message-image">
+                    <a :href="message.imageURL" target="_blank" rel="noopener">
+                      <img :src="message.imageURL" :alt="message.content || '图片消息'" loading="lazy" />
+                    </a>
+                  </div>
+                  <div v-if="message.content" class="message-bubble">{{ message.content }}</div>
                   <span class="message-time">{{ timeAgo(message.createdAt) }}</span>
                 </div>
               </div>
 
               <form class="thread-compose" @submit.prevent="send">
+                <div class="thread-compose-tools">
+                  <button class="compose-tool" type="button" title="表情" @click="emojiOpen = !emojiOpen">😊</button>
+                  <button class="compose-tool" type="button" title="发送图片" :disabled="uploadingImage" @click="imageInput?.click()">
+                    <Icon name="image" :size="16" />
+                    {{ uploadingImage ? '上传中…' : '图片' }}
+                  </button>
+                  <span class="compose-status" :class="{ online: wsConnected }">
+                    {{ wsConnected ? '实时连接' : '每 10 秒同步' }}
+                  </span>
+                  <div v-if="emojiOpen" class="emoji-panel">
+                    <button v-for="emoji in emojis" :key="emoji" type="button" @click="insertEmoji(emoji)">{{ emoji }}</button>
+                  </div>
+                </div>
                 <textarea
+                  ref="composeTextarea"
                   v-model="draft"
                   rows="2"
                   maxlength="1000"
@@ -305,12 +427,13 @@ onBeforeUnmount(() => {
                   @keydown.enter.exact.prevent="send"
                 ></textarea>
                 <div class="thread-compose-foot">
-                  <span class="hint">{{ draft.length }} / 1000</span>
-                  <button class="btn btn-primary btn-sm" type="submit" :disabled="sending">
+                  <span class="hint">{{ draft.length }} / 1000 · 支持图片和表情</span>
+                  <button class="btn btn-primary btn-sm" type="submit" :disabled="sending || uploadingImage">
                     <Icon name="send" :size="15" />
                     {{ sending ? '发送中…' : '发送' }}
                   </button>
                 </div>
+                <input ref="imageInput" class="hidden-file" type="file" accept="image/jpeg,image/png,image/gif,image/webp" @change="onImagePick" />
               </form>
             </template>
             <EmptyState v-else icon="message" title="选择一段对话" description="从左侧选择会话，或搜索用户开始新的私信。">

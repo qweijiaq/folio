@@ -14,7 +14,7 @@
 - **邮箱能力**：配置 SMTP 后支持邮箱验证码注册、验证码登录、绑定/更换邮箱和自助找回密码。
 - **站点设置与审计**：超级管理员可以在后台修改站点名称、描述、维护者、注册开关和登录图形验证码；登录、内容、分类、图片、角色等关键动作都会写入操作日志。
 - **删繁就简**：去掉复杂的角色表、文档权限、文档密码与试看、审核流、QQ 登录、Elasticsearch；只保留一个极简的三级角色字段。
-- **保留基本互动**：评论（两级）、评论点赞、内容点赞、收藏、关注/粉丝、私信、站内通知、管理后台；每篇文章或文档都可以单独关闭评论。
+- **保留基本互动**：评论（两级）、评论点赞、内容点赞、收藏、关注/粉丝、私信、站内通知、管理后台；每篇文章或文档都可以单独关闭评论。私信支持图片、表情和 WebSocket 实时推送。
 - **个人站点权限**：只有超级管理员和管理员可以发布文章与文档；普通读者可以评论、点赞、收藏、关注和私信。超级管理员可以在管理后台把读者设为管理员。
 
 ## 三种运行模式
@@ -38,6 +38,7 @@ Mock 模式每次启动都会重新写入演示数据，退出即清空，适合
 | 前端 | Vue 3 · Vite · Vue Router |
 | 手绘视觉 | rough.js（Canvas 封面/头像 + SVG 装饰线） |
 | 内容渲染 | markdown-it + highlight.js（仅语法标记，主题 CSS 手写） |
+| 实时消息 | WebSocket（gorilla/websocket）+ 10 秒轮询兜底 |
 | 样式 | 原生 CSS，明暗主题，响应式 |
 
 ## 目录结构
@@ -142,6 +143,7 @@ cd web && npm install && npm run dev
 | 能力 | 超级管理员 | 管理员 | 读者 |
 | --- | --- | --- | --- |
 | 阅读、评论、点赞、收藏、关注、私信 | ✓ | ✓ | ✓ |
+| 上传图片（正文或私信） | ✓ | ✓ | ✓ |
 | 发布、编辑、删除自己的内容 | ✓ | ✓ | — |
 | 编辑、删除任何人的内容 | ✓ | — | — |
 | 进入管理后台 | ✓ | ✓（只看自己的内容） | — |
@@ -226,7 +228,7 @@ Go 服务会自动托管 `../web/dist`，访问 <http://localhost:8080> 即可�
 | `comments` | 两级评论：`parent_id` 为空是根评论，否则指向根评论 |
 | `comment_likes` | 评论点赞 |
 | `follows` | 关注关系 |
-| `messages` | 私信 |
+| `messages` | 私信：类型（文字/图片）、正文、图片地址、已读时间 |
 | `notifications` | 点赞 / 评论 / 关注通知 |
 | `images` | 上传图片：文件名、路径、MIME、大小、内容哈希、上传者 |
 | `view_histories` | 登录用户的浏览历史（用户 + 内容唯一） |
@@ -285,7 +287,7 @@ MySQL 与 SQLite 共用同一套模型和迁移代码；Redis 不保存业务数
 - 管理后台的「图片管理」可以预览、复制链接、下载和删除图片；超级管理员看全站，管理员只看自己上传的；
 - 封面与头像仍然由 rough.js 自动生成，不提供上传。
 
-Docker 全栈使用独立的 `uploads-data` 卷保存图片，重建容器不会丢失。
+Docker 全栈使用独立的 `uploads-data` 卷保存图片，重建容器不会丢失。私信里的图片也走同一套上传接口，登录读者即可上传聊天图片。
 
 ## AI 摘要（可选）
 
@@ -357,7 +359,7 @@ FOLIO_SMTP_FROM=you@qq.com
 - `/search` 全站搜索：关键词搜索；点击任意标签进入该标签的全站聚合
 - `/u/:username` 公开主页：文章、文档、关注、粉丝
 - `/write`、`/write/:id` 编辑器：Markdown 分栏预览、图片上传/粘贴/拖拽、分类、自动封面预览、标签、评论开关、草稿/发布、文档树父级与排序（仅超级管理员和管理员）
-- `/messages` 私信与通知：会话列表、消息轮询、通知已读
+- `/messages` 私信与通知：会话列表、WebSocket 实时消息、图片与表情、轮询兜底、通知已读
 - `/me` 我的空间：资料、密码、收藏夹、浏览历史；管理员额外看到自己的文章与文档
 - `/admin` 管理后台：概览、内容管理、分类管理、图片管理；超级管理员额外拥有用户与权限、站点设置和操作日志
 - `/login`、`/register` 登录注册：密码登录、邮箱验证码登录、注册
@@ -365,7 +367,8 @@ FOLIO_SMTP_FROM=you@qq.com
 
 互动说明：
 
-- 私信没有 WebSocket，页面每 10 秒拉取一次，并在打开会话时标记已读；
+- 私信通过 WebSocket 实时推送；连接不可用或断开时，页面每 10 秒轮询兜底。打开会话时会标记已读；
+- 私信支持发送图片和常用表情，图片仍使用本站上传与 `/uploads` 静态访问；
 - 通知只针对点赞、评论/回复、关注三种行为；
 - 收藏是私密的，只有自己能在「我的收藏」里看到；收藏可以分到不同收藏夹，默认收藏夹不能删除；
 - 评论只有两级，回复会显示「回复 @某某」；编辑器里关掉「允许读者评论」后，接口会拒绝新评论，已有评论仍可阅读和点赞。
@@ -383,7 +386,7 @@ FOLIO_SMTP_FROM=you@qq.com
 | 图片 | `POST /images`、`GET /images`、`DELETE /images/:id`，文件通过 `/uploads/*` 访问 |
 | AI | `GET /ai/status`、`POST /ai/analyze`（仅管理员） |
 | 互动 | `POST /docs/:id/like`、`POST /docs/:id/favorite`、`GET|POST /docs/:id/comments`、`POST /comments/:id/like` |
-| 消息 | `GET /messages/conversations`、`GET|POST /messages/with/:username`、`GET /notifications` |
+| 消息 | `GET /messages/conversations`、`GET|POST /messages/with/:username`、`GET /notifications`、`GET /ws`（WebSocket，token 查询参数） |
 | 我的 | `GET /me/docs`、`GET /me/favorites`、`GET|DELETE /me/history`、`GET|POST /favorite-folders`、`PUT|DELETE /favorite-folders/:id`、`PUT /me`、`PUT /me/password`、`GET /inbox` |
 | 视觉 | `GET /art/cover.svg`、`GET /art/avatar.svg` |
 | 系统 | `GET /health` |
@@ -400,7 +403,7 @@ FOLIO_SMTP_FROM=you@qq.com
 
 ## 已知边界
 
-- 没有实时推送，私信与通知靠轮询。
+- 通知仍然靠 10 秒轮询；私信有 WebSocket 实时推送与轮询兜底。
 - 邮件是可选的：未配置 SMTP 时邮箱验证码、邮箱登录和找回密码会自动关闭，用户名密码登录不受影响。
 - 搜索使用 `LIKE`，适合个人规模的数据量；MySQL 下同样可用。
 - 演示数据默认开启；正式使用请设置 `FOLIO_DEMO=0` 并修改 `FOLIO_SECRET`。

@@ -16,6 +16,9 @@ const (
 	NotifyLike    = "like"
 	NotifyComment = "comment"
 	NotifyFollow  = "follow"
+
+	MessageText  = "text"
+	MessageImage = "image"
 )
 
 type Base struct {
@@ -116,7 +119,9 @@ type Message struct {
 	Base
 	SenderID   uint       `gorm:"index" json:"senderID"`
 	ReceiverID uint       `gorm:"index" json:"receiverID"`
+	Type       string     `gorm:"size:16;default:text" json:"type"`
 	Content    string     `gorm:"size:2000" json:"content"`
+	ImageURL   string     `gorm:"size:512" json:"imageURL"`
 	ReadAt     *time.Time `json:"readAt"`
 }
 

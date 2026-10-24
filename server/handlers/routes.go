@@ -31,6 +31,7 @@ func (a *API) Routes(r *gin.Engine) {
 	g := r.Group("/api")
 
 	g.GET("/health", a.Health)
+	g.GET("/ws", a.WebSocket)
 
 	// 生成式视觉资源
 	g.GET("/art/cover.svg", a.CoverArt)
@@ -60,7 +61,7 @@ func (a *API) Routes(r *gin.Engine) {
 	g.POST("/docs/:id/comments", a.Auth(), a.CommentCreate)
 
 	// 图片：只有可以写作的角色能上传，图片本身通过 /uploads 静态访问
-	g.POST("/images", a.Auth(), a.StaffOnly(), a.ImageUpload)
+	g.POST("/images", a.Auth(), a.ImageUpload)
 	g.GET("/images", a.Auth(), a.StaffOnly(), a.ImageList)
 	g.DELETE("/images/:id", a.Auth(), a.StaffOnly(), a.ImageDelete)
 

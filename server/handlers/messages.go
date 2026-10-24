@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"folio/server/models"
@@ -52,9 +53,17 @@ func (a *API) Conversations(c *gin.Context) {
 			continue
 		}
 		item := byPeer[peerID]
+		preview := item.last.Content
+		if item.last.Type == models.MessageImage {
+			if preview == "" {
+				preview = "[图片]"
+			} else {
+				preview = "[图片] " + preview
+			}
+		}
 		items = append(items, conversationOut{
 			User:        toBrief(u),
-			LastMessage: item.last.Content,
+			LastMessage: preview,
 			LastAt:      item.last.CreatedAt,
 			Unread:      item.unread,
 		})
@@ -105,22 +114,58 @@ func (a *API) MessageSend(c *gin.Context) {
 		return
 	}
 	var in struct {
-		Content string `json:"content"`
+		Type     string `json:"type"`
+		Content  string `json:"content"`
+		ImageURL string `json:"imageURL"`
 	}
 	if err := c.ShouldBindJSON(&in); err != nil {
 		bad(c, "请求格式错误")
 		return
 	}
-	in.Content = trim(in.Content)
-	if runeLen(in.Content) < 1 || runeLen(in.Content) > 1000 {
-		bad(c, "消息长度需在 1-1000 个字符之间")
+	messageType := strings.ToLower(trim(in.Type))
+	if messageType == "" {
+		messageType = models.MessageText
+	}
+	if messageType != models.MessageText && messageType != models.MessageImage {
+		bad(c, "消息类型不正确")
 		return
 	}
-	m := models.Message{SenderID: me.ID, ReceiverID: peer.ID, Content: in.Content}
+	in.Content = trim(in.Content)
+	in.ImageURL = trim(in.ImageURL)
+	if messageType == models.MessageText {
+		if runeLen(in.Content) < 1 || runeLen(in.Content) > 1000 {
+			bad(c, "消息长度需在 1-1000 个字符之间")
+			return
+		}
+	} else {
+		if runeLen(in.Content) > 500 {
+			bad(c, "图片说明最多 500 个字符")
+			return
+		}
+		if in.ImageURL == "" || !strings.HasPrefix(in.ImageURL, "/uploads/") ||
+			strings.Contains(in.ImageURL, "..") || runeLen(in.ImageURL) > 512 {
+			bad(c, "图片地址不正确")
+			return
+		}
+		relative := strings.TrimPrefix(in.ImageURL, "/uploads/")
+		var image models.Image
+		if err := a.DB.Where("user_id = ? AND path = ?", me.ID, relative).First(&image).Error; err != nil {
+			bad(c, "图片不存在或不属于你")
+			return
+		}
+	}
+	m := models.Message{
+		SenderID:   me.ID,
+		ReceiverID: peer.ID,
+		Type:       messageType,
+		Content:    in.Content,
+		ImageURL:   in.ImageURL,
+	}
 	if err := a.DB.Create(&m).Error; err != nil {
 		fail(c, http.StatusInternalServerError, "发送失败")
 		return
 	}
+	a.Hub.send([]uint{me.ID, peer.ID}, gin.H{"type": "message", "message": m})
 	c.JSON(http.StatusCreated, gin.H{"message": m})
 }
 
