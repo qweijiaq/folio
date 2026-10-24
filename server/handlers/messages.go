@@ -113,6 +113,10 @@ func (a *API) MessageSend(c *gin.Context) {
 		bad(c, "不能给自己发私信")
 		return
 	}
+	if !a.userSetting(peer.ID).OpenPrivateChat {
+		fail(c, http.StatusForbidden, "对方暂不接收私信")
+		return
+	}
 	var in struct {
 		Type     string `json:"type"`
 		Content  string `json:"content"`

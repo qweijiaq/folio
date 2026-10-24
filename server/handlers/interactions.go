@@ -14,6 +14,13 @@ func (a *API) notify(userID, actorID uint, typ string, doc *models.Document, con
 	if userID == 0 || userID == actorID {
 		return
 	}
+	setting := a.userSetting(userID)
+	if typ == models.NotifyLike && !setting.OpenDiggMessage {
+		return
+	}
+	if typ == models.NotifyComment && !setting.OpenCommentMessage {
+		return
+	}
 	n := models.Notification{
 		UserID:  userID,
 		ActorID: actorID,

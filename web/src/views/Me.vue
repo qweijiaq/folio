@@ -27,7 +27,16 @@ const history = ref([])
 const savingProfile = ref(false)
 const savingPassword = ref(false)
 const savingEmail = ref(false)
+const savingPrivacy = ref(false)
 const emailEnabled = ref(false)
+const privacySettings = reactive({
+  openFollow: true,
+  openFans: true,
+  openPrivateChat: true,
+  openCommentMessage: true,
+  openDiggMessage: true,
+  homeStyle: 'cover'
+})
 
 const profileForm = reactive({ nickname: '', bio: '' })
 const emailForm = reactive({ email: '', code: '' })
@@ -41,7 +50,8 @@ const currentFolder = computed(
 const tabs = computed(() => {
   const list = [
     { key: 'profile', label: '资料设置', icon: 'user' },
-    { key: 'security', label: '账号安全', icon: 'settings' }
+    { key: 'security', label: '账号安全', icon: 'settings' },
+    { key: 'privacy', label: '隐私与消息', icon: 'eye' }
   ]
   if (staff.value) {
     list.push(
@@ -182,6 +192,8 @@ async function loadTab() {
     } else if (tab.value === 'history') {
       const data = await api.get('/me/history', { pageSize: 50 })
       history.value = data.items
+    } else if (tab.value === 'privacy') {
+      await loadPrivacySettings()
     }
   } catch (err) {
     toastError(err)
@@ -217,6 +229,28 @@ async function saveProfile() {
     toastError(err)
   } finally {
     savingProfile.value = false
+  }
+}
+
+async function loadPrivacySettings() {
+  try {
+    const data = await api.get('/me/settings')
+    Object.assign(privacySettings, data.settings)
+  } catch (err) {
+    toastError(err)
+  }
+}
+
+async function savePrivacySettings() {
+  savingPrivacy.value = true
+  try {
+    const data = await api.put('/me/settings', { ...privacySettings })
+    Object.assign(privacySettings, data.settings)
+    toast('隐私与消息设置已保存')
+  } catch (err) {
+    toastError(err)
+  } finally {
+    savingPrivacy.value = false
   }
 }
 
@@ -467,6 +501,70 @@ onMounted(async () => {
             </template>
             <p v-else class="hint">站点未配置邮件服务，暂时不能绑定或验证邮箱。</p>
           </section>
+        </div>
+
+        <div v-else-if="tab === 'privacy'" class="panel">
+          <header class="panel-head">
+            <h2>隐私与消息</h2>
+            <p>控制别人能看到什么，以及哪些互动会通知你。修改后立即生效。</p>
+          </header>
+
+          <p v-if="tabLoading" class="muted loading-line">正在加载…</p>
+          <form v-else class="settings-form" @submit.prevent="savePrivacySettings">
+            <div class="settings-switches">
+              <label class="switch-row">
+                <input v-model="privacySettings.openFollow" type="checkbox" />
+                <span>
+                  <strong>公开关注列表</strong>
+                  <small>关闭后，别人看不到你关注了谁，关注数量也会隐藏。</small>
+                </span>
+              </label>
+              <label class="switch-row">
+                <input v-model="privacySettings.openFans" type="checkbox" />
+                <span>
+                  <strong>公开粉丝列表</strong>
+                  <small>关闭后，别人看不到你的粉丝，粉丝数量也会隐藏。</small>
+                </span>
+              </label>
+              <label class="switch-row">
+                <input v-model="privacySettings.openPrivateChat" type="checkbox" />
+                <span>
+                  <strong>允许接收私信</strong>
+                  <small>关闭后，别人无法再给你发送新的私信，已有对话仍可查看。</small>
+                </span>
+              </label>
+              <label class="switch-row">
+                <input v-model="privacySettings.openCommentMessage" type="checkbox" />
+                <span>
+                  <strong>评论与回复通知</strong>
+                  <small>关闭后，别人评论你的内容时不再生成站内通知。</small>
+                </span>
+              </label>
+              <label class="switch-row">
+                <input v-model="privacySettings.openDiggMessage" type="checkbox" />
+                <span>
+                  <strong>点赞通知</strong>
+                  <small>关闭后，别人点赞你的内容时不再生成站内通知。</small>
+                </span>
+              </label>
+            </div>
+
+            <div class="field">
+              <label for="me-home-style">公开主页样式</label>
+              <select id="me-home-style" v-model="privacySettings.homeStyle">
+                <option value="cover">封面：保留顶部自动封面</option>
+                <option value="compact">紧凑：较矮的封面条</option>
+                <option value="plain">纯文字：不显示封面</option>
+              </select>
+              <span class="hint">只影响 `/u/{{ auth.user.username }}` 公开主页的头部。</span>
+            </div>
+
+            <div class="form-actions">
+              <button class="btn btn-primary btn-sm" type="submit" :disabled="savingPrivacy">
+                {{ savingPrivacy ? '保存中…' : '保存设置' }}
+              </button>
+            </div>
+          </form>
         </div>
 
         <div v-else-if="tab === 'articles' || tab === 'docs'" class="panel">

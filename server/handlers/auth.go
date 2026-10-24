@@ -303,9 +303,20 @@ func (a *API) UserProfile(c *gin.Context) {
 		a.DB.Model(&models.Follow{}).Where("follower_id = ? AND followee_id = ?", viewer.ID, u.ID).Count(&n)
 		isFollowing = n > 0
 	}
+	setting := a.userSetting(u.ID)
+	counts := a.countsFor(&u)
+	if !isSelf && !isSuperAdmin(viewer) {
+		if !setting.OpenFollow {
+			counts["following"] = int64(0)
+		}
+		if !setting.OpenFans {
+			counts["followers"] = int64(0)
+		}
+	}
 	payload := gin.H{
 		"user":        toBrief(u),
-		"counts":      a.countsFor(&u),
+		"counts":      counts,
+		"settings":    publicUserSettings(setting),
 		"isSelf":      isSelf,
 		"isFollowing": isFollowing,
 	}
@@ -355,6 +366,12 @@ func (a *API) Followers(c *gin.Context) {
 		fail(c, http.StatusNotFound, "用户不存在")
 		return
 	}
+	viewer := currentUser(c)
+	if (viewer == nil || (viewer.ID != u.ID && !isSuperAdmin(viewer))) && !a.userSetting(u.ID).OpenFans {
+		page, size := pageParams(c)
+		c.JSON(http.StatusOK, gin.H{"items": []gin.H{}, "total": 0, "page": page, "pageSize": size, "hidden": true})
+		return
+	}
 	var rows []models.Follow
 	a.DB.Where("followee_id = ?", u.ID).Order("id DESC").Find(&rows)
 	ids := make([]uint, 0, len(rows))
@@ -368,6 +385,12 @@ func (a *API) Following(c *gin.Context) {
 	var u models.User
 	if err := a.DB.Where("lower(username) = lower(?)", c.Param("username")).First(&u).Error; err != nil {
 		fail(c, http.StatusNotFound, "用户不存在")
+		return
+	}
+	viewer := currentUser(c)
+	if (viewer == nil || (viewer.ID != u.ID && !isSuperAdmin(viewer))) && !a.userSetting(u.ID).OpenFollow {
+		page, size := pageParams(c)
+		c.JSON(http.StatusOK, gin.H{"items": []gin.H{}, "total": 0, "page": page, "pageSize": size, "hidden": true})
 		return
 	}
 	var rows []models.Follow

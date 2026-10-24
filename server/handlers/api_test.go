@@ -1005,3 +1005,90 @@ func TestMessageImagesAndWebSocket(t *testing.T) {
 		t.Fatalf("不应允许发送别人的图片，实际 %d", status)
 	}
 }
+
+func TestUserPrivacySettings(t *testing.T) {
+	s := newTestAPI(t)
+	aliceToken, aliceID := s.register(t, "alice")
+	bobToken, _ := s.register(t, "bob")
+
+	status, settings := s.do(t, "GET", "/api/me/settings", aliceToken, nil)
+	initial := obj(settings, "settings")
+	if status != http.StatusOK || initial["openFans"] != true || initial["homeStyle"] != "cover" {
+		t.Fatalf("默认隐私设置不正确: %d %v", status, settings)
+	}
+
+	status, created := s.do(t, "POST", "/api/docs", aliceToken, map[string]any{
+		"kind": "article", "title": "隐私测试文章", "content": "正文", "status": "published",
+	})
+	if status != http.StatusCreated {
+		t.Fatalf("创建文章失败: %d %v", status, created)
+	}
+	docID := uint(number(obj(created, "doc")["id"]))
+
+	status, _ = s.do(t, "POST", "/api/users/alice/follow", bobToken, nil)
+	if status != http.StatusOK {
+		t.Fatalf("关注失败: %d", status)
+	}
+	status, notificationData := s.do(t, "GET", "/api/notifications", aliceToken, nil)
+	if status != http.StatusOK {
+		t.Fatalf("读取通知失败: %d", status)
+	}
+	before := len(list(notificationData, "items"))
+
+	status, _ = s.do(t, "PUT", "/api/me/settings", aliceToken, map[string]any{
+		"openFollow": false, "openFans": false, "openPrivateChat": false,
+		"openCommentMessage": false, "openDiggMessage": false, "homeStyle": "plain",
+	})
+	if status != http.StatusOK {
+		t.Fatalf("保存隐私设置失败: %d", status)
+	}
+
+	status, profileData := s.do(t, "GET", "/api/users/alice", bobToken, nil)
+	profileSettings := obj(profileData, "settings")
+	if status != http.StatusOK || profileSettings["openFans"] != false || profileSettings["homeStyle"] != "plain" {
+		t.Fatalf("公开主页没有反映隐私设置: %d %v", status, profileData)
+	}
+	if number(obj(profileData, "counts")["followers"]) != 0 || number(obj(profileData, "counts")["following"]) != 0 {
+		t.Fatalf("隐藏后计数应归零: %v", profileData)
+	}
+
+	status, hidden := s.do(t, "GET", "/api/users/alice/followers", bobToken, nil)
+	if status != http.StatusOK || hidden["hidden"] != true || len(list(hidden, "items")) != 0 {
+		t.Fatalf("粉丝列表应被隐藏: %d %v", status, hidden)
+	}
+
+	status, _ = s.do(t, "POST", "/api/docs/"+itoa(docID)+"/like", bobToken, nil)
+	if status != http.StatusOK {
+		t.Fatalf("点赞失败: %d", status)
+	}
+	status, comment := s.do(t, "POST", "/api/docs/"+itoa(docID)+"/comments", bobToken, map[string]string{"content": "关闭通知后的评论"})
+	if status != http.StatusCreated {
+		t.Fatalf("评论失败: %d %v", status, comment)
+	}
+	_, notificationData = s.do(t, "GET", "/api/notifications", aliceToken, nil)
+	if after := len(list(notificationData, "items")); after != before {
+		t.Fatalf("关闭通知后不应新增通知: before=%d after=%d", before, after)
+	}
+
+	status, _ = s.do(t, "POST", "/api/messages/with/alice", bobToken, map[string]string{"content": "你好"})
+	if status != http.StatusForbidden {
+		t.Fatalf("关闭私信后应返回 403，实际 %d", status)
+	}
+
+	status, _ = s.do(t, "PUT", "/api/me/settings", aliceToken, map[string]any{
+		"openFollow": true, "openFans": true, "openPrivateChat": true,
+		"openCommentMessage": true, "openDiggMessage": true, "homeStyle": "compact",
+	})
+	if status != http.StatusOK {
+		t.Fatalf("重新打开隐私设置失败: %d", status)
+	}
+	status, _ = s.do(t, "POST", "/api/messages/with/alice", bobToken, map[string]string{"content": "现在可以了"})
+	if status != http.StatusCreated {
+		t.Fatalf("打开私信后应可发送，实际 %d", status)
+	}
+	status, profileData = s.do(t, "GET", "/api/users/alice", bobToken, nil)
+	if status != http.StatusOK || obj(profileData, "settings")["homeStyle"] != "compact" {
+		t.Fatalf("主页样式没有更新: %v", profileData)
+	}
+	_ = aliceID
+}

@@ -3626,3 +3626,21 @@
     max-width: 220px;
   }
 }
+
+.profile-page--compact .profile-banner {
+  height: 160px;
+}
+
+.profile-page--compact .profile-head {
+  margin-top: -40px;
+}
+
+.profile-page--plain .profile-head {
+  margin-top: 56px;
+}
+
+.profile-chat-closed {
+  align-self: center;
+  color: var(--ink-faint);
+  font-size: 12px;
+}

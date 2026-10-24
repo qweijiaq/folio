@@ -163,6 +163,18 @@ type EmailCode struct {
 	IP         string     `gorm:"size:64" json:"ip"`
 }
 
+// UserSetting 保存隐私、消息通知与主页样式偏好。
+type UserSetting struct {
+	Base
+	UserID             uint   `gorm:"uniqueIndex;not null" json:"userID"`
+	OpenFollow         bool   `json:"openFollow"`
+	OpenFans           bool   `json:"openFans"`
+	OpenPrivateChat    bool   `json:"openPrivateChat"`
+	OpenCommentMessage bool   `json:"openCommentMessage"`
+	OpenDiggMessage    bool   `json:"openDiggMessage"`
+	HomeStyle          string `gorm:"size:16" json:"homeStyle"`
+}
+
 // SiteSetting 是单行站点设置，后台修改后立即生效。
 type SiteSetting struct {
 	Base

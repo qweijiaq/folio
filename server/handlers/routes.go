@@ -89,6 +89,8 @@ func (a *API) Routes(r *gin.Engine) {
 	authed.PUT("/me", a.MeUpdate)
 	authed.PUT("/me/email", a.BindEmail)
 	authed.PUT("/me/password", a.MePassword)
+	authed.GET("/me/settings", a.MeSettings)
+	authed.PUT("/me/settings", a.MeSettingsUpdate)
 	authed.GET("/me/docs", a.MyDocs)
 	authed.GET("/me/favorites", a.MyFavorites)
 	authed.GET("/me/history", a.MyHistory)

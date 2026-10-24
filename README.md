@@ -13,6 +13,7 @@
 - **保留内容能力**：正文图片上传与图库、粘贴/拖拽插图、文章分类、文章推荐、收藏夹分组、浏览历史、评论、点赞、收藏、关注、私信、通知都已恢复。
 - **邮箱能力**：配置 SMTP 后支持邮箱验证码注册、验证码登录、绑定/更换邮箱和自助找回密码。
 - **站点设置与审计**：超级管理员可以在后台修改站点名称、描述、维护者、注册开关和登录图形验证码；登录、内容、分类、图片、角色等关键动作都会写入操作日志。
+- **隐私与消息偏好**：每个人都可以决定是否公开关注/粉丝列表、是否接收私信和点赞/评论通知，并选择公开主页的封面样式。
 - **删繁就简**：去掉复杂的角色表、文档权限、文档密码与试看、审核流、QQ 登录、Elasticsearch；只保留一个极简的三级角色字段。
 - **保留基本互动**：评论（两级）、评论点赞、内容点赞、收藏、关注/粉丝、私信、站内通知、管理后台；每篇文章或文档都可以单独关闭评论。私信支持图片、表情和 WebSocket 实时推送。
 - **个人站点权限**：只有超级管理员和管理员可以发布文章与文档；普通读者可以评论、点赞、收藏、关注和私信。超级管理员可以在管理后台把读者设为管理员。
@@ -51,7 +52,7 @@ folio/
 │   ├── db/                 # SQLite / MySQL / 内存数据库
 │   ├── cache/              # Redis：JWT 黑名单、浏览量去重
 │   ├── mail/               # SMTP 发信与本地调试邮件
-│   ├── models/             # 16 张表的模型
+│   ├── models/             # 17 张表的模型
 │   ├── art/                # 生成式封面与头像
 │   ├── handlers/           # 路由、接口与集成测试
 │   └── seed/               # 演示数据
@@ -215,11 +216,12 @@ Go 服务会自动托管 `../web/dist`，访问 <http://localhost:8080> 即可�
 
 ## 数据模型
 
-只有 16 张表：
+只有 17 张表：
 
 | 表 | 用途 |
 | --- | --- |
 | `users` | 用户名、昵称、邮箱、密码哈希、简介、角色、最后登录 |
+| `user_settings` | 隐私与消息偏好：关注/粉丝可见性、私信开关、点赞/评论通知、主页样式 |
 | `categories` | 文章分类 |
 | `documents` | 文章与文档共用：`kind`、`title`、`abstract`、`content`、`parent_id`、`category_id`、`tags`、`status`、`open_comment`、计数字段 |
 | `likes` | 用户与内容点赞（唯一索引） |
@@ -303,6 +305,17 @@ Docker 全栈使用独立的 `uploads-data` 卷保存图片，重建容器不会
 FOLIO_AI_API_KEY=sk-ant-... FOLIO_AI_MODEL=claude-opus-5-5 ./dev.sh
 ```
 
+## 隐私与消息偏好
+
+「我的空间 → 隐私与消息」里可以设置：
+
+- 是否公开关注列表、粉丝列表（关闭后列表与数量都会隐藏，自己仍然看得到）；
+- 是否允许别人发送私信（关闭后新私信会被拒绝，已有对话仍可查看）；
+- 是否生成评论/回复通知、点赞通知；
+- 公开主页头部样式：`cover`（封面）、`compact`（紧凑）、`plain`（纯文字）。
+
+这些设置保存在 `user_settings`，没有记录时按全部公开、全部通知处理，老用户不需要迁移。
+
 ## 邮箱验证码（可选）
 
 配置 SMTP 后，站点会启用邮箱相关能力：
@@ -357,10 +370,10 @@ FOLIO_SMTP_FROM=you@qq.com
 - `/docs` 知识库总览：左侧目录树 + 文档卡片
 - `/docs/:id` 文档详情：目录树、面包屑、正文与右侧目录、上一篇/下一篇、点赞收藏、评论
 - `/search` 全站搜索：关键词搜索；点击任意标签进入该标签的全站聚合
-- `/u/:username` 公开主页：文章、文档、关注、粉丝
+- `/u/:username` 公开主页：文章、文档、关注、粉丝；可按隐私设置隐藏关注/粉丝，并支持封面、紧凑、纯文字三种头部样式
 - `/write`、`/write/:id` 编辑器：Markdown 分栏预览、图片上传/粘贴/拖拽、分类、自动封面预览、标签、评论开关、草稿/发布、文档树父级与排序（仅超级管理员和管理员）
 - `/messages` 私信与通知：会话列表、WebSocket 实时消息、图片与表情、轮询兜底、通知已读
-- `/me` 我的空间：资料、密码、收藏夹、浏览历史；管理员额外看到自己的文章与文档
+- `/me` 我的空间：资料、密码、隐私与消息、收藏夹、浏览历史；管理员额外看到自己的文章与文档
 - `/admin` 管理后台：概览、内容管理、分类管理、图片管理；超级管理员额外拥有用户与权限、站点设置和操作日志
 - `/login`、`/register` 登录注册：密码登录、邮箱验证码登录、注册
 - `/forgot` 通过邮箱验证码重置密码
@@ -387,7 +400,7 @@ FOLIO_SMTP_FROM=you@qq.com
 | AI | `GET /ai/status`、`POST /ai/analyze`（仅管理员） |
 | 互动 | `POST /docs/:id/like`、`POST /docs/:id/favorite`、`GET|POST /docs/:id/comments`、`POST /comments/:id/like` |
 | 消息 | `GET /messages/conversations`、`GET|POST /messages/with/:username`、`GET /notifications`、`GET /ws`（WebSocket，token 查询参数） |
-| 我的 | `GET /me/docs`、`GET /me/favorites`、`GET|DELETE /me/history`、`GET|POST /favorite-folders`、`PUT|DELETE /favorite-folders/:id`、`PUT /me`、`PUT /me/password`、`GET /inbox` |
+| 我的 | `GET /me/docs`、`GET /me/favorites`、`GET|DELETE /me/history`、`GET|POST /favorite-folders`、`PUT|DELETE /favorite-folders/:id`、`PUT /me`、`PUT /me/password`、`GET|PUT /me/settings`、`GET /inbox` |
 | 视觉 | `GET /art/cover.svg`、`GET /art/avatar.svg` |
 | 系统 | `GET /health` |
 | 管理 | `GET /admin/stats`、`GET /admin/docs`、`GET /admin/users`、`DELETE /admin/users/:id`、`PUT /admin/users/:id/role`、`GET|PUT /admin/settings`、`GET /admin/logs` |
