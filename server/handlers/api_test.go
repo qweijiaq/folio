@@ -1121,3 +1121,105 @@ func TestMyLoginRecords(t *testing.T) {
 	}
 	_ = token
 }
+
+func TestQQLogin(t *testing.T) {
+	qqServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/oauth2.0/token":
+			_, _ = w.Write([]byte(`{"access_token":"fake-token","expires_in":3600}`))
+		case "/oauth2.0/me":
+			_, _ = w.Write([]byte(`{"client_id":"test-app","openid":"openid-123"}`))
+		case "/user/get_user_info":
+			_, _ = w.Write([]byte(`{"ret":0,"nickname":"QQ 小友"}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer qqServer.Close()
+
+	s := newTestAPI(t, func(cfg *config.Config) {
+		cfg.QQAppID = "test-app"
+		cfg.QQAppKey = "test-key"
+		cfg.QQRedirect = "http://localhost:8080/api/auth/qq/callback"
+		cfg.QQAPIBase = qqServer.URL
+	})
+	s.register(t, "qqbase")
+
+	status, data := s.do(t, "GET", "/api/auth/qq/status", "", nil)
+	if status != http.StatusOK || data["enabled"] != true {
+		t.Fatalf("QQ 登录应启用: %d %v", status, data)
+	}
+	status, data = s.do(t, "GET", "/api/auth/qq/url", "", nil)
+	if status != http.StatusOK {
+		t.Fatalf("获取 QQ 登录地址失败: %d %v", status, data)
+	}
+	authURL, _ := data["url"].(string)
+	parsed, err := url.Parse(authURL)
+	if err != nil || parsed.Query().Get("client_id") != "test-app" || parsed.Query().Get("state") == "" {
+		t.Fatalf("QQ 授权地址不正确: %s", authURL)
+	}
+	state := parsed.Query().Get("state")
+
+	callbackPath := "/api/auth/qq/callback?code=fake-code&state=" + url.QueryEscape(state)
+	req := httptest.NewRequest("GET", callbackPath, nil)
+	rec := httptest.NewRecorder()
+	s.handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusFound {
+		t.Fatalf("QQ 回调应重定向，实际 %d: %s", rec.Code, rec.Body.String())
+	}
+	location, err := url.Parse(rec.Header().Get("Location"))
+	if err != nil {
+		t.Fatalf("解析回调地址失败: %v", err)
+	}
+	ticket := location.Query().Get("qq_ticket")
+	if ticket == "" {
+		t.Fatalf("回调没有返回登录凭证: %s", location.String())
+	}
+
+	status, exchanged := s.do(t, "POST", "/api/auth/qq/exchange", "", map[string]string{"ticket": ticket})
+	if status != http.StatusOK {
+		t.Fatalf("兑换 QQ 登录凭证失败: %d %v", status, exchanged)
+	}
+	user := obj(exchanged, "user")
+	if !strings.HasPrefix(fmt.Sprint(user["username"]), "qq_") || user["nickname"] != "QQ 小友" {
+		t.Fatalf("QQ 用户信息不正确: %v", user)
+	}
+
+	// 同一个 openid 再次登录应复用账号
+	req = httptest.NewRequest("GET", callbackPath, nil)
+	rec = httptest.NewRecorder()
+	s.handler.ServeHTTP(rec, req)
+	location, _ = url.Parse(rec.Header().Get("Location"))
+	ticket = location.Query().Get("qq_ticket")
+	status, exchangedAgain := s.do(t, "POST", "/api/auth/qq/exchange", "", map[string]string{"ticket": ticket})
+	if status != http.StatusOK || obj(exchangedAgain, "user")["id"] != user["id"] {
+		t.Fatalf("QQ 重复登录应复用账号: %d %v", status, exchangedAgain)
+	}
+
+	status, _ = s.do(t, "GET", "/api/me", exchangedAgain["token"].(string), nil)
+	if status != http.StatusOK {
+		t.Fatalf("QQ 登录 token 不可用: %d", status)
+	}
+
+	// 非法 state 应被拒绝
+	req = httptest.NewRequest("GET", "/api/auth/qq/callback?code=fake&state=bad", nil)
+	rec = httptest.NewRecorder()
+	s.handler.ServeHTTP(rec, req)
+	badLocation, _ := url.Parse(rec.Header().Get("Location"))
+	if badLocation == nil || badLocation.Query().Get("qq_error") == "" {
+		t.Fatalf("非法 state 应返回错误: %s", rec.Header().Get("Location"))
+	}
+}
+
+func TestQQDisabledByDefault(t *testing.T) {
+	s := newTestAPI(t)
+	status, data := s.do(t, "GET", "/api/auth/qq/status", "", nil)
+	if status != http.StatusOK || data["enabled"] != false {
+		t.Fatalf("默认应关闭 QQ 登录: %d %v", status, data)
+	}
+	status, _ = s.do(t, "GET", "/api/auth/qq/url", "", nil)
+	if status != http.StatusServiceUnavailable {
+		t.Fatalf("未配置时获取 QQ 地址应返回 503，实际 %d", status)
+	}
+}

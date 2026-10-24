@@ -75,6 +75,10 @@ func (a *API) Routes(r *gin.Engine) {
 
 	// 认证
 	g.GET("/auth/captcha", a.CaptchaImage)
+	g.GET("/auth/qq/status", a.QQStatus)
+	g.GET("/auth/qq/url", a.QQURL)
+	g.GET("/auth/qq/callback", a.QQCallback)
+	g.POST("/auth/qq/exchange", a.QQExchange)
 	g.GET("/auth/email/status", a.EmailStatus)
 	g.POST("/auth/email/code", a.OptionalAuth(), a.SendEmailCode)
 	g.POST("/auth/email/login", a.EmailLogin)

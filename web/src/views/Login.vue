@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { login, loginWithEmail } from '../stores/auth'
+import { login, loginWithEmail, loginWithQQTicket } from '../stores/auth'
 import { api } from '../api/client'
 import { site } from '../stores/site'
 import { toast } from '../stores/toast'
@@ -19,6 +19,8 @@ const password = ref('')
 const email = ref('')
 const emailCode = ref('')
 const emailEnabled = ref(false)
+const qqEnabled = ref(false)
+const qqLoading = ref(false)
 const captchaId = ref('')
 const captchaCode = ref('')
 const captchaRef = ref(null)
@@ -31,12 +33,53 @@ const redirect = computed(() => {
   return value.startsWith('/') ? value : '/'
 })
 
+async function finishQQLogin(ticket) {
+  submitting.value = true
+  try {
+    await loginWithQQTicket(ticket)
+    toast('QQ 登录成功')
+    router.replace('/')
+  } catch (err) {
+    error.value = err.message || 'QQ 登录失败'
+    router.replace({ path: '/login' })
+  } finally {
+    submitting.value = false
+  }
+}
+
+async function startQQ() {
+  qqLoading.value = true
+  error.value = ''
+  try {
+    const data = await api.get('/auth/qq/url')
+    window.location.href = data.url
+  } catch (err) {
+    error.value = err.message || 'QQ 登录暂不可用'
+    qqLoading.value = false
+  }
+}
+
 onMounted(async () => {
+  const qqError = String(route.query.qq_error || '')
+  if (qqError) {
+    error.value = qqError
+    router.replace({ path: '/login' })
+  }
+  const ticket = String(route.query.qq_ticket || '')
+  if (ticket) {
+    await finishQQLogin(ticket)
+  }
   try {
     const data = await api.get('/auth/email/status')
     emailEnabled.value = Boolean(data.enabled)
   } catch {
     emailEnabled.value = false
+  }
+  try {
+    const data = await api.get('/auth/qq/status')
+    qqEnabled.value = Boolean(data.enabled)
+  } catch {
+    qqEnabled.value = false
   }
 })
 
@@ -149,6 +192,14 @@ function fillDemo() {
               {{ submitting ? '登录中…' : mode === 'email' ? '验证码登录' : '登录' }}
             </button>
           </form>
+
+          <template v-if="qqEnabled">
+            <div class="auth-divider"><span>或</span></div>
+            <button class="btn btn-ghost btn-block qq-login" type="button" :disabled="qqLoading || submitting" @click="startQQ">
+              <span class="qq-mark">Q</span>
+              {{ qqLoading ? '正在跳转…' : '使用 QQ 登录' }}
+            </button>
+          </template>
 
           <div v-if="isDev && mode === 'password'" class="demo-box">
             <span>演示账号：weijia / folio1234</span>

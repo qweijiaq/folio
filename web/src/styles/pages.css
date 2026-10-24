@@ -3720,3 +3720,40 @@
     display: none;
   }
 }
+
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 20px 0 14px;
+  color: var(--ink-faint);
+  font-size: 11.5px;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  flex: 1;
+  height: 0;
+  border-top: 1.2px dashed var(--line);
+  content: "";
+}
+
+.qq-login {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.qq-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 21px;
+  height: 21px;
+  border: 1.2px solid currentColor;
+  border-radius: 50% 45% 48% 42%;
+  font-family: var(--hand);
+  font-size: 13px;
+  line-height: 1;
+}

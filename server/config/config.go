@@ -42,6 +42,13 @@ type Config struct {
 	// 登录图形验证码（可选）
 	LoginCaptcha bool
 
+	// QQ 登录（可选）
+	QQAppID    string
+	QQAppKey   string
+	QQRedirect string
+	QQAPIBase  string
+	WebURL     string
+
 	// Redis 可选：地址为空时自动降级为无缓存模式
 	RedisAddr     string
 	RedisPassword string
@@ -65,6 +72,12 @@ func envBool(key string, fallback bool) bool {
 
 func (c Config) AIEnabled() bool {
 	return strings.TrimSpace(c.AIAPIKey) != ""
+}
+
+func (c Config) QQEnabled() bool {
+	return strings.TrimSpace(c.QQAppID) != "" &&
+		strings.TrimSpace(c.QQAppKey) != "" &&
+		strings.TrimSpace(c.QQRedirect) != ""
 }
 
 func Load() Config {
@@ -124,6 +137,12 @@ func Load() Config {
 		MailDebug:    envBool("FOLIO_MAIL_DEBUG", false),
 
 		LoginCaptcha: envBool("FOLIO_LOGIN_CAPTCHA", false),
+
+		QQAppID:    getenv("FOLIO_QQ_APP_ID", ""),
+		QQAppKey:   getenv("FOLIO_QQ_APP_KEY", ""),
+		QQRedirect: getenv("FOLIO_QQ_REDIRECT", ""),
+		QQAPIBase:  getenv("FOLIO_QQ_API_BASE", "https://graph.qq.com"),
+		WebURL:     strings.TrimRight(getenv("FOLIO_WEB_URL", ""), "/"),
 
 		RedisAddr:     getenv("FOLIO_REDIS_ADDR", ""),
 		RedisPassword: getenv("FOLIO_REDIS_PASSWORD", ""),

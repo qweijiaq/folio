@@ -35,6 +35,7 @@ type User struct {
 	Password    string     `gorm:"size:128;not null" json:"-"`
 	Bio         string     `gorm:"size:255" json:"bio"`
 	Role        string     `gorm:"size:16;not null;default:user" json:"role"`
+	QQOpenID    string     `gorm:"size:64;index" json:"-"`
 	LastLoginAt *time.Time `json:"lastLoginAt"`
 }
 

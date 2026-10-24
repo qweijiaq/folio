@@ -14,7 +14,7 @@
 - **邮箱能力**：配置 SMTP 后支持邮箱验证码注册、验证码登录、绑定/更换邮箱和自助找回密码。
 - **站点设置与审计**：超级管理员可以在后台修改站点名称、描述、维护者、注册开关和登录图形验证码；登录、内容、分类、图片、角色等关键动作都会写入操作日志。
 - **隐私与消息偏好**：每个人都可以决定是否公开关注/粉丝列表、是否接收私信和点赞/评论通知，并选择公开主页的封面样式。
-- **删繁就简**：去掉复杂的角色表、文档权限、文档密码与试看、审核流、QQ 登录、Elasticsearch；只保留一个极简的三级角色字段。
+- **删繁就简**：去掉复杂的角色表、文档权限、文档密码与试看、审核流、Banner、Elasticsearch；只保留一个极简的三级角色字段。
 - **保留基本互动**：评论（两级）、评论点赞、内容点赞、收藏、关注/粉丝、私信、站内通知、管理后台；每篇文章或文档都可以单独关闭评论。私信支持图片、表情和 WebSocket 实时推送。
 - **个人站点权限**：只有超级管理员和管理员可以发布文章与文档；普通读者可以评论、点赞、收藏、关注和私信。超级管理员可以在管理后台把读者设为管理员。
 
@@ -35,7 +35,7 @@ Mock 模式每次启动都会重新写入演示数据，退出即清空，适合
 | 后端 | Go 1.24 · Gin · GORM |
 | 数据库 | SQLite（默认）/ MySQL 8.4 |
 | 缓存 | Redis 7（可选） |
-| 登录 | 用户名密码 / 邮箱验证码；可选图形验证码；JWT（30 天）+ 可选 Redis 黑名单 |
+| 登录 | 用户名密码 / 邮箱验证码 / 可选 QQ 登录；可选图形验证码；JWT（30 天）+ 可选 Redis 黑名单 |
 | 前端 | Vue 3 · Vite · Vue Router |
 | 手绘视觉 | rough.js（Canvas 封面/头像 + SVG 装饰线） |
 | 内容渲染 | markdown-it + highlight.js（仅语法标记，主题 CSS 手写） |
@@ -206,6 +206,11 @@ Go 服务会自动托管 `../web/dist`，访问 <http://localhost:8080> 即可�
 | `FOLIO_SMTP_TLS` | `465` 端口为 `1` | 是否使用隐式 TLS（465）；587 端口走 STARTTLS |
 | `FOLIO_MAIL_DEBUG` | `0` | 设为 `1` 时不发邮件，把验证码写进日志并在界面显示，仅用于自测 |
 | `FOLIO_LOGIN_CAPTCHA` | `0` | 设为 `1` 时，密码登录和发送邮箱验证码需要图形验证码 |
+| `FOLIO_QQ_APP_ID` | 空 | QQ 互联应用 ID；三项都填才启用 QQ 登录 |
+| `FOLIO_QQ_APP_KEY` | 空 | QQ 互联应用密钥 |
+| `FOLIO_QQ_REDIRECT` | 空 | QQ 回调地址，例如 `http://localhost:8080/api/auth/qq/callback` |
+| `FOLIO_QQ_API_BASE` | `https://graph.qq.com` | QQ 接口地址，一般无需修改 |
+| `FOLIO_WEB_URL` | 空 | QQ 登录成功后的前端地址；Vite 开发填 `http://localhost:5173`，同源部署留空 |
 | `FOLIO_WEB` | `../web/dist` | 前端构建产物目录 |
 | `FOLIO_DEMO` | `1` | 是否在空库时写入演示数据；`0` 关闭 |
 | `FOLIO_SITE_NAME` | `知微` | 站点名 |
@@ -305,6 +310,20 @@ Docker 全栈使用独立的 `uploads-data` 卷保存图片，重建容器不会
 FOLIO_AI_API_KEY=sk-ant-... FOLIO_AI_MODEL=claude-opus-5-5 ./dev.sh
 ```
 
+## QQ 登录（可选）
+
+在 [QQ 互联](https://connect.qq.com/) 创建网站应用后，配置：
+
+```bash
+FOLIO_QQ_APP_ID=你的 AppID
+FOLIO_QQ_APP_KEY=你的 AppKey
+FOLIO_QQ_REDIRECT=http://localhost:8080/api/auth/qq/callback
+```
+
+回调地址必须与 QQ 互联后台的「回调地址」完全一致。第一次用 QQ 登录会自动创建账号（用户名形如 `qq_ab12cd34`，昵称取 QQ 昵称，密码随机），之后用同一个 QQ 号会回到同一账号。QQ 用户可以在「账号安全」里绑定邮箱，再用邮箱验证码设置密码。
+
+流程是服务端回调：QQ 授权后跳回 `/api/auth/qq/callback`，服务端校验签名与 state，再用 5 分钟有效的一次性票据把浏览器送回 `/login` 并换取登录 token，token 不出现在 URL 里。本地 Vite 开发时把 `FOLIO_WEB_URL` 设为 `http://localhost:5173`；Docker 或同源部署留空即可。
+
 ## 隐私与消息偏好
 
 「我的空间 → 隐私与消息」里可以设置：
@@ -377,7 +396,7 @@ FOLIO_SMTP_FROM=you@qq.com
 - `/messages` 私信与通知：会话列表、WebSocket 实时消息、图片与表情、轮询兜底、通知已读
 - `/me` 我的空间：资料、密码、隐私与消息、最近登录记录、收藏夹、浏览历史；管理员额外看到自己的文章与文档
 - `/admin` 管理后台：概览、内容管理、分类管理、图片管理；超级管理员额外拥有用户与权限、站点设置和操作日志
-- `/login`、`/register` 登录注册：密码登录、邮箱验证码登录、注册
+- `/login`、`/register` 登录注册：密码登录、邮箱验证码登录、QQ 登录、注册
 - `/forgot` 通过邮箱验证码重置密码
 
 互动说明：
@@ -394,7 +413,7 @@ FOLIO_SMTP_FROM=you@qq.com
 
 | 分组 | 主要接口 |
 | --- | --- |
-| 认证 | `POST /auth/register`、`POST /auth/login`、`POST /auth/email/login`、`POST /auth/password/reset`、`POST /auth/email/code`、`GET /auth/email/status`、`GET /auth/captcha`、`POST /auth/logout`、`GET /me`、`PUT /me/email` |
+| 认证 | `POST /auth/register`、`POST /auth/login`、`POST /auth/email/login`、`POST /auth/password/reset`、`POST /auth/email/code`、`GET /auth/email/status`、`GET /auth/captcha`、`GET /auth/qq/status`、`GET /auth/qq/url`、`GET /auth/qq/callback`、`POST /auth/qq/exchange`、`POST /auth/logout`、`GET /me`、`PUT /me/email` |
 | 用户 | `GET /users/:username`、`POST|DELETE /users/:username/follow`、`GET /users/:username/followers|following` |
 | 内容 | `GET /docs`、`GET /docs/:id`、`GET /docs/:id/related`、`POST /docs`、`PUT /docs/:id`、`DELETE /docs/:id`、`GET /doc-tree` |
 | 分类 | `GET /categories`、`POST /categories`、`PUT /categories/:id`、`DELETE /categories/:id` |
