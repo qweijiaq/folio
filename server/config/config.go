@@ -33,10 +33,16 @@ type Config struct {
 	QiniuRegion    string
 	QiniuPrefix    string
 
-	// AI（可选，官方 Anthropic API）
+	// AI（可选，官方 Anthropic API；站点 Key 仅用于后台 AI 摘要）
 	AIAPIKey  string
 	AIModel   string
 	AIBaseURL string
+
+	// 问答服务商地址覆盖（可选，留空使用官方地址；代理部署时可改写）
+	DeepSeekBaseURL string
+	GLMBaseURL      string
+	KimiBaseURL     string
+	QwenBaseURL     string
 
 	// 邮件（可选，用于邮箱验证码、邮箱登录与找回密码）
 	SMTPHost     string
@@ -153,6 +159,11 @@ func Load() Config {
 		AIAPIKey:  getenv("FOLIO_AI_API_KEY", getenv("ANTHROPIC_API_KEY", "")),
 		AIModel:   getenv("FOLIO_AI_MODEL", "claude-opus-5-5"),
 		AIBaseURL: getenv("FOLIO_AI_BASE_URL", ""),
+
+		DeepSeekBaseURL: getenv("FOLIO_DEEPSEEK_BASE_URL", ""),
+		GLMBaseURL:      getenv("FOLIO_GLM_BASE_URL", ""),
+		KimiBaseURL:     getenv("FOLIO_KIMI_BASE_URL", ""),
+		QwenBaseURL:     getenv("FOLIO_QWEN_BASE_URL", ""),
 
 		SMTPHost:     getenv("FOLIO_SMTP_HOST", ""),
 		SMTPPort:     smtpPort,

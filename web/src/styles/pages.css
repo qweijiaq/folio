@@ -4309,6 +4309,10 @@
   min-width: 0;
 }
 
+.ask-custom-model {
+  margin-top: 2px;
+}
+
 .ask-examples {
   display: flex;
   flex-wrap: wrap;

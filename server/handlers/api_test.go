@@ -1760,3 +1760,112 @@ func TestAIAskUsesUserKey(t *testing.T) {
 		t.Fatalf("未登录不应能使用 AI 问答，实际 %d", status)
 	}
 }
+
+func TestAIAskOpenAICompatibleProviders(t *testing.T) {
+	var seenAuth, seenBody, seenPath string
+	var calls int
+	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		seenAuth = r.Header.Get("Authorization")
+		seenPath = r.URL.Path
+		body, _ := io.ReadAll(r.Body)
+		seenBody = string(body)
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"choices":[{"message":{"role":"assistant","content":"这是兼容接口的回答。"}}]}`)
+	}))
+	defer fake.Close()
+
+	s := newTestAPI(t, func(cfg *config.Config) {
+		cfg.AIAPIKey = "site-key-must-not-be-used"
+		cfg.DeepSeekBaseURL = fake.URL
+		cfg.GLMBaseURL = fake.URL
+		cfg.KimiBaseURL = fake.URL
+		cfg.QwenBaseURL = fake.URL
+	})
+	token, _ := s.register(t, "compatreader")
+	status, created := s.do(t, "POST", "/api/docs", token, map[string]any{
+		"kind": "article", "title": "兼容接口知识库", "content": "这篇内容介绍多服务商问答的检索方式。", "status": "published",
+	})
+	if status != http.StatusCreated {
+		t.Fatalf("创建问答资料失败: %d %v", status, created)
+	}
+
+	status, data := s.do(t, "GET", "/api/ai/providers", token, nil)
+	if status != http.StatusOK {
+		t.Fatalf("读取服务商失败: %d %v", status, data)
+	}
+	providers := list(data, "providers")
+	if len(providers) != 5 {
+		t.Fatalf("应有 5 个服务商，实际 %d", len(providers))
+	}
+	ids := map[string]bool{}
+	for _, item := range providers {
+		provider := item.(map[string]any)
+		ids[provider["id"].(string)] = true
+		if provider["baseURL"] != nil {
+			t.Fatalf("服务商信息不应暴露内部地址: %v", provider)
+		}
+	}
+	for _, id := range []string{"anthropic", "deepseek", "glm", "kimi", "qwen"} {
+		if !ids[id] {
+			t.Fatalf("缺少服务商 %s", id)
+		}
+	}
+
+	cases := []struct {
+		provider string
+		model    string
+	}{
+		{"deepseek", "deepseek-chat"},
+		{"glm", "glm-4.6"},
+		{"kimi", "kimi-k2-0905-preview"},
+		{"qwen", "qwen3-max"},
+	}
+	for _, tc := range cases {
+		calls = 0
+		status, answer := s.do(t, "POST", "/api/ai/ask", token, map[string]string{
+			"question": "多服务商怎么检索？", "apiKey": "user-secret-key",
+			"provider": tc.provider, "model": tc.model,
+		})
+		if status != http.StatusOK {
+			t.Fatalf("%s 问答失败: %d %v", tc.provider, status, answer)
+		}
+		if answer["answer"] != "这是兼容接口的回答。" || answer["provider"] != tc.provider {
+			t.Fatalf("%s 返回不正确: %v", tc.provider, answer)
+		}
+		if calls != 1 || seenAuth != "Bearer user-secret-key" {
+			t.Fatalf("%s 应使用用户 Key，实际 calls=%d auth=%q", tc.provider, calls, seenAuth)
+		}
+		if seenPath != "/chat/completions" {
+			t.Fatalf("%s 请求路径不正确: %s", tc.provider, seenPath)
+		}
+		if !strings.Contains(seenBody, tc.model) || !strings.Contains(seenBody, "多服务商问答") {
+			t.Fatalf("%s 请求缺少模型或检索资料: %s", tc.provider, seenBody)
+		}
+	}
+
+	calls = 0
+	status, answer := s.do(t, "POST", "/api/ai/ask", token, map[string]string{
+		"question": "多服务商怎么检索？", "apiKey": "user-secret-key",
+		"provider": "deepseek", "model": "deepseek-next-preview",
+	})
+	if status != http.StatusOK {
+		t.Fatalf("自定义模型应允许: %d %v", status, answer)
+	}
+
+	calls = 0
+	status, _ = s.do(t, "POST", "/api/ai/ask", token, map[string]string{
+		"question": "多服务商怎么检索？", "apiKey": "user-secret-key", "provider": "unknown",
+	})
+	if status != http.StatusBadRequest || calls != 0 {
+		t.Fatalf("未知服务商应在本地拒绝，实际 %d calls=%d", status, calls)
+	}
+
+	calls = 0
+	status, _ = s.do(t, "POST", "/api/ai/ask", token, map[string]string{
+		"question": "多服务商怎么检索？", "provider": "deepseek", "model": "deepseek-chat",
+	})
+	if status != http.StatusBadRequest || calls != 0 {
+		t.Fatalf("未提供用户 Key 时不应调用上游，实际 %d calls=%d", status, calls)
+	}
+}
