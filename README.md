@@ -12,6 +12,7 @@
 - **三种数据模式**：SQLite（默认）、MySQL、进程内内存 Mock。Redis 可选，用于登出黑名单与浏览量去重。
 - **保留内容能力**：正文图片上传与图库、粘贴/拖拽插图、文章分类、文章推荐、收藏夹分组、浏览历史、评论、点赞、收藏、关注、私信、通知都已恢复。
 - **邮箱能力**：配置 SMTP 后支持邮箱验证码注册、验证码登录、绑定/更换邮箱和自助找回密码。
+- **站点设置与审计**：超级管理员可以在后台修改站点名称、描述、维护者、注册开关和登录图形验证码；登录、内容、分类、图片、角色等关键动作都会写入操作日志。
 - **删繁就简**：去掉复杂的角色表、文档权限、文档密码与试看、审核流、QQ 登录、Elasticsearch；只保留一个极简的三级角色字段。
 - **保留基本互动**：评论（两级）、评论点赞、内容点赞、收藏、关注/粉丝、私信、站内通知、管理后台。
 - **个人站点权限**：只有超级管理员和管理员可以发布文章与文档；普通读者可以评论、点赞、收藏、关注和私信。超级管理员可以在管理后台把读者设为管理员。
@@ -49,7 +50,7 @@ folio/
 │   ├── db/                 # SQLite / MySQL / 内存数据库
 │   ├── cache/              # Redis：JWT 黑名单、浏览量去重
 │   ├── mail/               # SMTP 发信与本地调试邮件
-│   ├── models/             # 14 张表的模型
+│   ├── models/             # 16 张表的模型
 │   ├── art/                # 生成式封面与头像
 │   ├── handlers/           # 路由、接口与集成测试
 │   └── seed/               # 演示数据
@@ -144,7 +145,7 @@ cd web && npm install && npm run dev
 | 发布、编辑、删除自己的内容 | ✓ | ✓ | — |
 | 编辑、删除任何人的内容 | ✓ | — | — |
 | 进入管理后台 | ✓ | ✓（只看自己的内容） | — |
-| 删除用户、设置或取消管理员 | ✓ | — | — |
+| 删除用户、设置或取消管理员、修改站点设置、查看操作日志 | ✓ | — | — |
 
 规则很简单：站点只有一个超级管理员，通常是第一位注册用户；超级管理员在 `/admin` 的「用户与权限」里把读者设为管理员，或把管理员降回读者。管理员降级后不能继续发布，但已经发布的内容和互动会保留。
 
@@ -212,7 +213,7 @@ Go 服务会自动托管 `../web/dist`，访问 <http://localhost:8080> 即可�
 
 ## 数据模型
 
-只有 14 张表：
+只有 16 张表：
 
 | 表 | 用途 |
 | --- | --- |
@@ -230,6 +231,8 @@ Go 服务会自动托管 `../web/dist`，访问 <http://localhost:8080> 即可�
 | `images` | 上传图片：文件名、路径、MIME、大小、内容哈希、上传者 |
 | `view_histories` | 登录用户的浏览历史（用户 + 内容唯一） |
 | `email_codes` | 邮箱验证码：用途、HMAC 摘要、过期时间、尝试次数、消费时间 |
+| `site_settings` | 单行站点设置：名称、描述、维护者、注册开关、图形验证码 |
+| `operation_logs` | 操作日志：操作者、动作、对象、详情、IP、User-Agent |
 
 `documents.status` 只有 `draft` 与 `published`。草稿只有作者本人和超级管理员可见。分类只作用于文章，文档仍然使用 `parent_id` 目录树。
 
@@ -335,6 +338,15 @@ FOLIO_SMTP_PASSWORD=你的 SMTP 授权码
 FOLIO_SMTP_FROM=you@qq.com
 ```
 
+## 站点设置与操作日志
+
+超级管理员进入 `/admin` 后有两个额外入口：
+
+- **站点设置**：修改站点名称、描述、页脚维护者，决定是否开放注册，以及是否要求登录图形验证码。保存后页头、页脚与首页立即更新；
+- **操作日志**：记录登录、注册、创建/更新/删除内容、分类、图片、角色调整、站点设置等动作，包含操作者、时间、IP 与对象编号，可按关键词搜索并分页。
+
+`FOLIO_SITE_NAME`、`FOLIO_SITE_DESC`、`FOLIO_SITE_OWNER` 和 `FOLIO_LOGIN_CAPTCHA` 只在数据库还没有站点设置时作为初始值。第一次启动后，以管理后台里的值为准。
+
 ## 页面与功能
 
 - `/` 首页：首屏、置顶文章、最近文章、知识库入口、标签与最近加入
@@ -347,7 +359,7 @@ FOLIO_SMTP_FROM=you@qq.com
 - `/write`、`/write/:id` 编辑器：Markdown 分栏预览、图片上传/粘贴/拖拽、分类、自动封面预览、标签、草稿/发布、文档树父级与排序（仅超级管理员和管理员）
 - `/messages` 私信与通知：会话列表、消息轮询、通知已读
 - `/me` 我的空间：资料、密码、收藏夹、浏览历史；管理员额外看到自己的文章与文档
-- `/admin` 管理后台：概览、内容管理、分类管理、图片管理；超级管理员额外拥有用户与权限管理
+- `/admin` 管理后台：概览、内容管理、分类管理、图片管理；超级管理员额外拥有用户与权限、站点设置和操作日志
 - `/login`、`/register` 登录注册：密码登录、邮箱验证码登录、注册
 - `/forgot` 通过邮箱验证码重置密码
 
@@ -375,7 +387,7 @@ FOLIO_SMTP_FROM=you@qq.com
 | 我的 | `GET /me/docs`、`GET /me/favorites`、`GET|DELETE /me/history`、`GET|POST /favorite-folders`、`PUT|DELETE /favorite-folders/:id`、`PUT /me`、`PUT /me/password`、`GET /inbox` |
 | 视觉 | `GET /art/cover.svg`、`GET /art/avatar.svg` |
 | 系统 | `GET /health` |
-| 管理 | `GET /admin/stats`、`GET /admin/docs`、`GET /admin/users`、`DELETE /admin/users/:id`、`PUT /admin/users/:id/role` |
+| 管理 | `GET /admin/stats`、`GET /admin/docs`、`GET /admin/users`、`DELETE /admin/users/:id`、`PUT /admin/users/:id/role`、`GET|PUT /admin/settings`、`GET /admin/logs` |
 
 ## 一些实现约定
 
@@ -393,3 +405,4 @@ FOLIO_SMTP_FROM=you@qq.com
 - 搜索使用 `LIKE`，适合个人规模的数据量；MySQL 下同样可用。
 - 演示数据默认开启；正式使用请设置 `FOLIO_DEMO=0` 并修改 `FOLIO_SECRET`。
 - 旧四个项目的 MySQL 数据尚未迁移到新表结构；需要的话可以再写一个导入脚本。
+- 操作日志没有自动归档；个人站点数据量下通常无需处理，数据量大时可以按时间手动清理 `operation_logs`。

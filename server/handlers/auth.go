@@ -76,6 +76,10 @@ func (a *API) Register(c *gin.Context) {
 		bad(c, "请求格式错误")
 		return
 	}
+	if !a.allowRegistration() {
+		fail(c, http.StatusForbidden, "站点暂未开放注册")
+		return
+	}
 	in.Username = trim(in.Username)
 	in.Nickname = trim(in.Nickname)
 	in.Email = normalizeEmail(in.Email)
@@ -152,6 +156,7 @@ func (a *API) Register(c *gin.Context) {
 		return
 	}
 	_, _ = a.ensureDefaultFolder(u.ID)
+	a.recordLog(c, &u, "注册账号", "user", u.ID, "注册方式："+map[bool]string{true: "邮箱验证码", false: "用户名密码"}[a.emailEnabled()])
 	token, err := a.issueToken(&u)
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "登录失败")
@@ -186,6 +191,7 @@ func (a *API) Login(c *gin.Context) {
 	}
 	now := time.Now()
 	a.DB.Model(&u).UpdateColumn("last_login_at", now)
+	a.recordLog(c, &u, "登录", "user", u.ID, "用户名密码登录")
 	token, err := a.issueToken(&u)
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "登录失败")

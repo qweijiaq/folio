@@ -12,7 +12,7 @@ import (
 // CaptchaImage 生成一张 4 位图形验证码。关闭时返回 enabled=false，前端据此隐藏输入框。
 func (a *API) CaptchaImage(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
-	if !a.Cfg.LoginCaptcha {
+	if !a.loginCaptchaEnabled() {
 		c.JSON(http.StatusOK, gin.H{"enabled": false})
 		return
 	}
@@ -42,7 +42,7 @@ func (a *API) CaptchaImage(c *gin.Context) {
 
 // requireCaptcha 在开启图形验证码时校验并消费一次验证码。
 func (a *API) requireCaptcha(c *gin.Context, id, code string) bool {
-	if !a.Cfg.LoginCaptcha {
+	if !a.loginCaptchaEnabled() {
 		return true
 	}
 	id = strings.TrimSpace(id)

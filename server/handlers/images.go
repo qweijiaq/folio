@@ -133,6 +133,7 @@ func (a *API) ImageUpload(c *gin.Context) {
 		return
 	}
 	img.User = *user
+	a.logAction(c, "上传图片", "image", img.ID, img.Filename)
 	c.JSON(http.StatusCreated, gin.H{"image": a.imagePayload(img), "url": imageURL(img.Path)})
 }
 
@@ -201,5 +202,6 @@ func (a *API) ImageDelete(c *gin.Context) {
 		return
 	}
 	a.removeImageFileIfUnused(path)
+	a.logAction(c, "删除图片", "image", img.ID, img.Filename)
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }

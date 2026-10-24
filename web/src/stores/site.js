@@ -5,6 +5,7 @@ export const site = reactive({
   name: '知微',
   description: '一个人的知识花园，存放文章、手册与零散的思考。',
   owner: 'weijia',
+  allowRegister: true,
   year: new Date().getFullYear(),
   loaded: false
 })

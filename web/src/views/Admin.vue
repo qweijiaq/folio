@@ -1,10 +1,11 @@
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '../api/client'
 import { auth, refreshMe } from '../stores/auth'
 import { toast, toastError } from '../stores/toast'
 import { formatBytes, roleLabel, shortDate } from '../utils/format'
+import { mergeSite } from '../stores/site'
 import UserAvatar from '../components/UserAvatar.vue'
 import EmptyState from '../components/EmptyState.vue'
 import Icon from '../components/Icon.vue'
@@ -29,6 +30,19 @@ const imageUploading = ref(false)
 const imageInput = ref(null)
 const newCategory = ref({ name: '', sort: 0 })
 const editingCategory = ref({ id: 0, name: '', sort: 0 })
+const savingSettings = ref(false)
+const settingsForm = reactive({
+  siteName: '',
+  siteDesc: '',
+  siteOwner: '',
+  allowRegister: true,
+  loginCaptcha: false
+})
+const logs = ref([])
+const logTotal = ref(0)
+const logPage = ref(1)
+const logQuery = ref('')
+const logPageSize = 30
 
 const isSuper = computed(() => auth.user?.role === 'super_admin')
 const staff = computed(() => ['super_admin', 'admin'].includes(auth.user?.role))
@@ -40,7 +54,13 @@ const tabs = computed(() => {
     { key: 'categories', label: '分类管理', icon: 'tag' },
     { key: 'images', label: '图片管理', icon: 'image' }
   ]
-  if (isSuper.value) list.push({ key: 'users', label: '用户与权限', icon: 'user' })
+  if (isSuper.value) {
+    list.push(
+      { key: 'users', label: '用户与权限', icon: 'user' },
+      { key: 'settings', label: '站点设置', icon: 'settings' },
+      { key: 'logs', label: '操作日志', icon: 'clock' }
+    )
+  }
   return list
 })
 
@@ -90,6 +110,81 @@ async function loadImages() {
   } catch (err) {
     toastError(err)
   }
+}
+
+async function loadSettings() {
+  try {
+    const data = await api.get('/admin/settings')
+    const setting = data.settings || {}
+    settingsForm.siteName = setting.siteName || ''
+    settingsForm.siteDesc = setting.siteDesc || ''
+    settingsForm.siteOwner = setting.siteOwner || ''
+    settingsForm.allowRegister = Boolean(setting.allowRegister)
+    settingsForm.loginCaptcha = Boolean(setting.loginCaptcha)
+  } catch (err) {
+    toastError(err)
+  }
+}
+
+async function saveSettings() {
+  const name = settingsForm.siteName.trim()
+  if (!name) {
+    toast('站点名称不能为空')
+    return
+  }
+  savingSettings.value = true
+  try {
+    const data = await api.put('/admin/settings', {
+      siteName: name,
+      siteDesc: settingsForm.siteDesc.trim(),
+      siteOwner: settingsForm.siteOwner.trim(),
+      allowRegister: settingsForm.allowRegister,
+      loginCaptcha: settingsForm.loginCaptcha
+    })
+    if (data.site) mergeSite(data.site)
+    toast('站点设置已保存')
+  } catch (err) {
+    toastError(err)
+  } finally {
+    savingSettings.value = false
+  }
+}
+
+async function loadLogs(page = logPage.value) {
+  logPage.value = page
+  try {
+    const data = await api.get('/admin/logs', {
+      page,
+      pageSize: logPageSize,
+      q: logQuery.value.trim() || undefined
+    })
+    logs.value = data.items
+    logTotal.value = data.total
+  } catch (err) {
+    toastError(err)
+  }
+}
+
+function searchLogs() {
+  logPage.value = 1
+  loadLogs(1)
+}
+
+function logPages() {
+  return Math.max(1, Math.ceil(logTotal.value / logPageSize))
+}
+
+function targetLabel(type) {
+  return { article: '文章', doc: '文档', user: '用户', category: '分类', image: '图片', site: '站点' }[type] || type
+}
+
+function logTime(value) {
+  if (!value) return ''
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return ''
+  const hh = String(d.getHours()).padStart(2, '0')
+  const mm = String(d.getMinutes()).padStart(2, '0')
+  return `${shortDate(value)} ${hh}:${mm}`
 }
 
 async function loadCategories() {
@@ -210,6 +305,20 @@ async function loadTab() {
       } else {
         await loadUsers()
       }
+    } else if (tab.value === 'settings') {
+      if (!isSuper.value) {
+        tab.value = 'overview'
+        await loadStats()
+      } else {
+        await loadSettings()
+      }
+    } else if (tab.value === 'logs') {
+      if (!isSuper.value) {
+        tab.value = 'overview'
+        await loadStats()
+      } else {
+        await loadLogs(1)
+      }
     }
   } finally {
     tabLoading.value = false
@@ -306,7 +415,7 @@ onMounted(async () => {
       <div class="page-hero-row">
         <div>
           <h1>管理后台</h1>
-          <p class="page-lede">写作、内容与权限。只有超级管理员和管理员可以进入这里。</p>
+          <p class="page-lede">写作、内容、站点设置与权限。只有超级管理员和管理员可以进入这里。</p>
         </div>
         <RouterLink to="/" class="text-link">返回站点 <Icon name="arrowRight" :size="14" /></RouterLink>
       </div>
@@ -606,6 +715,98 @@ onMounted(async () => {
               </button>
               <span v-else class="hint">当前站点所有者</span>
             </div>
+          </div>
+        </div>
+
+        <div v-else-if="tab === 'settings' && isSuper" class="panel">
+          <header class="panel-head">
+            <h2>站点设置</h2>
+            <p>站点名称、描述与维护者会立即显示在页头、页脚和首页；注册开关对访客生效。</p>
+          </header>
+
+          <p v-if="tabLoading" class="muted loading-line">正在加载…</p>
+          <form v-else class="settings-form" @submit.prevent="saveSettings">
+            <div class="form-row">
+              <div class="field">
+                <label for="setting-name">站点名称</label>
+                <input id="setting-name" v-model="settingsForm.siteName" maxlength="32" />
+              </div>
+              <div class="field">
+                <label for="setting-owner">维护者</label>
+                <input id="setting-owner" v-model="settingsForm.siteOwner" maxlength="32" />
+              </div>
+            </div>
+            <div class="field">
+              <label for="setting-desc">站点描述</label>
+              <textarea id="setting-desc" v-model="settingsForm.siteDesc" rows="3" maxlength="120" placeholder="一句话说明这个站点…"></textarea>
+              <span class="hint">{{ settingsForm.siteDesc.length }} / 120</span>
+            </div>
+
+            <div class="settings-switches">
+              <label class="switch-row">
+                <input v-model="settingsForm.allowRegister" type="checkbox" />
+                <span>
+                  <strong>开放注册</strong>
+                  <small>关闭后登录页不再显示注册入口，注册接口会返回 403。已有账号不受影响。</small>
+                </span>
+              </label>
+              <label class="switch-row">
+                <input v-model="settingsForm.loginCaptcha" type="checkbox" />
+                <span>
+                  <strong>登录图形验证码</strong>
+                  <small>开启后密码登录和发送邮箱验证码都需要输入图片字符。环境变量只作为首次启动的默认值。</small>
+                </span>
+              </label>
+            </div>
+
+            <div class="form-actions">
+              <button class="btn btn-primary btn-sm" type="submit" :disabled="savingSettings">
+                {{ savingSettings ? '保存中…' : '保存设置' }}
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <div v-else-if="tab === 'logs' && isSuper" class="panel">
+          <header class="panel-head panel-head--row">
+            <div>
+              <h2>操作日志</h2>
+              <p>记录登录、内容、分类、图片、角色与站点设置等关键动作，按时间倒序排列。</p>
+            </div>
+            <form class="admin-search" @submit.prevent="searchLogs">
+              <input v-model="logQuery" type="search" placeholder="搜索用户、动作或详情" />
+              <button class="btn btn-ghost btn-sm" type="submit">搜索</button>
+            </form>
+          </header>
+
+          <p v-if="tabLoading" class="muted loading-line">正在加载…</p>
+          <EmptyState v-else-if="!logs.length" icon="clock" title="还没有操作记录" description="登录或管理内容后，动作会记录在这里。" />
+          <div v-else class="admin-table admin-logs-table">
+            <div class="admin-table-head">
+              <span>时间</span>
+              <span>用户</span>
+              <span>动作</span>
+              <span>详情</span>
+              <span>IP</span>
+            </div>
+            <div v-for="entry in logs" :key="entry.id" class="admin-table-row">
+              <span class="log-time">{{ logTime(entry.createdAt) }}</span>
+              <span class="log-user">@{{ entry.username || '匿名' }}</span>
+              <span><span class="badge">{{ entry.action }}</span></span>
+              <span class="log-detail">
+                {{ entry.detail || '—' }}
+                <span v-if="entry.targetType" class="log-target">
+                  {{ targetLabel(entry.targetType) }}#{{ entry.targetID }}
+                </span>
+              </span>
+              <span class="log-ip">{{ entry.ip || '—' }}</span>
+            </div>
+          </div>
+
+          <div v-if="logTotal > logPageSize" class="log-pager">
+            <button class="btn btn-ghost btn-sm" type="button" :disabled="logPage <= 1" @click="loadLogs(logPage - 1)">上一页</button>
+            <span>{{ logPage }} / {{ logPages() }} · 共 {{ logTotal }} 条</span>
+            <button class="btn btn-ghost btn-sm" type="button" :disabled="logPage >= logPages()" @click="loadLogs(logPage + 1)">下一页</button>
           </div>
         </div>
       </section>

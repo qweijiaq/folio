@@ -106,6 +106,7 @@ func (a *API) AdminUpdateRole(c *gin.Context) {
 		return
 	}
 	target.Role = in.Role
+	a.logAction(c, "设置角色", "user", target.ID, target.Username+" → "+target.Role)
 	c.JSON(http.StatusOK, gin.H{"ok": true, "user": toBrief(target)})
 }
 
@@ -167,6 +168,7 @@ func (a *API) AdminDeleteUser(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "删除失败")
 		return
 	}
+	a.logAction(c, "删除用户", "user", target.ID, target.Username)
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 

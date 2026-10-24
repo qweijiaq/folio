@@ -55,6 +55,7 @@ func (a *API) CategoryCreate(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "创建分类失败")
 		return
 	}
+	a.logAction(c, "创建分类", "category", category.ID, category.Name)
 	c.JSON(http.StatusCreated, gin.H{"category": category})
 }
 
@@ -90,6 +91,7 @@ func (a *API) CategoryUpdate(c *gin.Context) {
 	}
 	category.Name = in.Name
 	category.Sort = in.Sort
+	a.logAction(c, "更新分类", "category", category.ID, category.Name)
 	c.JSON(http.StatusOK, gin.H{"category": category})
 }
 
@@ -113,5 +115,6 @@ func (a *API) CategoryDelete(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "删除分类失败")
 		return
 	}
+	a.logAction(c, "删除分类", "category", category.ID, category.Name)
 	c.JSON(http.StatusOK, gin.H{"ok": true, "moved": moved})
 }

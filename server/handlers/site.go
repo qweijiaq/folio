@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"sort"
-	"time"
 
 	"folio/server/models"
 
@@ -89,12 +88,7 @@ func (a *API) SiteHome(c *gin.Context) {
 	}
 
 	payload := gin.H{
-		"site": gin.H{
-			"name":        a.Cfg.SiteName,
-			"description": a.Cfg.SiteDesc,
-			"owner":       a.Cfg.SiteOwner,
-			"year":        time.Now().Year(),
-		},
+		"site":   a.siteInfo(),
 		"stats":  gin.H{"articles": articles, "docs": docs, "users": users, "views": views},
 		"recent": recent,
 		"docs":   recentDocs,

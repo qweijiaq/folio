@@ -32,6 +32,7 @@ go test ./...
 - 图片上传、去重、静态文件落盘、列表与删除权限；
 - 邮箱验证码发送、注册校验、邮箱登录、绑定邮箱与重置密码（使用调试邮件，不真实发信）；
 - 图形验证码的生成、缺失/错误拦截与正确校验；
+- 站点设置保存与生效、关闭注册、后台图形验证码开关、操作日志记录与权限；
 - AI 摘要的启用状态、权限与 JSON 解析（使用 mock 上游，不消耗真实额度）；
 - 浏览历史记录、清空，以及相关文章推荐；
 - 点赞、收藏、两级评论与回复；
@@ -149,6 +150,14 @@ docker compose restart app
 - [ ] 「我的空间 → 账号安全」可以绑定新邮箱，换绑后旧邮箱不能再登录；
 - [ ] `/forgot` 能通过邮箱验证码重置密码，旧密码随即失效；
 - [ ] 未配置 SMTP 时，邮箱入口隐藏或给出明确提示，用户名密码登录仍然正常。
+
+### 站点设置与操作日志
+
+- [ ] 超级管理员在「站点设置」修改名称、描述、维护者并保存，页头、页脚立即变化；
+- [ ] 关闭「开放注册」后，登录页不再显示注册入口，直接注册返回 403，已有账号仍可登录；
+- [ ] 打开「登录图形验证码」后，密码登录和发送邮箱验证码都要求验证码；
+- [ ] 「操作日志」能看到登录、创建内容、修改设置等记录，搜索与分页正常；
+- [ ] 普通管理员看不到「站点设置」和「操作日志」，直接调用接口返回 403。
 
 ### 图形验证码（`FOLIO_LOGIN_CAPTCHA=1`）
 
@@ -277,6 +286,7 @@ SET FOREIGN_KEY_CHECKS=0;
 TRUNCATE TABLE notifications; TRUNCATE TABLE messages; TRUNCATE TABLE follows;
 TRUNCATE TABLE comment_likes; TRUNCATE TABLE comments; TRUNCATE TABLE favorites;
 TRUNCATE TABLE likes; TRUNCATE TABLE documents; TRUNCATE TABLE users;
+TRUNCATE TABLE email_codes; TRUNCATE TABLE operation_logs; TRUNCATE TABLE site_settings;
 SET FOREIGN_KEY_CHECKS=1;"
 docker compose restart app
 ```

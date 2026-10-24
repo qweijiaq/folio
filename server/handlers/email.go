@@ -87,7 +87,7 @@ func (a *API) EmailStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"enabled":         a.emailEnabled(),
 		"requireRegister": a.emailEnabled(),
-		"captcha":         a.Cfg.LoginCaptcha,
+		"captcha":         a.loginCaptchaEnabled(),
 		"expiresIn":       int(emailCodeTTL.Seconds()),
 	})
 }
@@ -117,6 +117,10 @@ func (a *API) SendEmailCode(c *gin.Context) {
 	case emailPurposeRegister, emailPurposeReset, emailPurposeBind, emailPurposeLogin:
 	default:
 		bad(c, "验证码用途不正确")
+		return
+	}
+	if purpose == emailPurposeRegister && !a.allowRegistration() {
+		fail(c, http.StatusForbidden, "站点暂未开放注册")
 		return
 	}
 	if !a.requireCaptcha(c, in.CaptchaID, in.CaptchaCode) {
@@ -272,6 +276,7 @@ func (a *API) EmailLogin(c *gin.Context) {
 		return
 	}
 	a.DB.Model(&u).UpdateColumn("last_login_at", time.Now())
+	a.recordLog(c, &u, "登录", "user", u.ID, "邮箱验证码登录")
 	token, err := a.issueToken(&u)
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "登录失败")
@@ -318,6 +323,7 @@ func (a *API) ResetPassword(c *gin.Context) {
 		return
 	}
 	a.DB.Model(&u).UpdateColumn("password", hash)
+	a.recordLog(c, &u, "重置密码", "user", u.ID, "通过邮箱验证码重置")
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
@@ -362,5 +368,6 @@ func (a *API) BindEmail(c *gin.Context) {
 		return
 	}
 	a.DB.First(u, u.ID)
+	a.recordLog(c, u, "绑定邮箱", "user", u.ID, "邮箱："+email)
 	c.JSON(http.StatusOK, gin.H{"user": a.mePayload(u)})
 }

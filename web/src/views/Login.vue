@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { login, loginWithEmail } from '../stores/auth'
 import { api } from '../api/client'
+import { site } from '../stores/site'
 import { toast } from '../stores/toast'
 import RoughAccent from '../components/RoughAccent.vue'
 import EmailCode from '../components/EmailCode.vue'
@@ -154,10 +155,11 @@ function fillDemo() {
             <button type="button" class="text-link" @click="fillDemo">填入</button>
           </div>
 
-          <p class="auth-switch">
+          <p v-if="site.allowRegister" class="auth-switch">
             还没有账号？
             <RouterLink :to="{ path: '/register', query: route.query }">注册一个</RouterLink>
           </p>
+          <p v-else class="auth-switch auth-switch--muted">站点暂时关闭了注册，请使用已有账号登录。</p>
         </div>
 
         <RouterLink to="/" class="auth-back">

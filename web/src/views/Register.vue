@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { register } from '../stores/auth'
 import { api } from '../api/client'
+import { site } from '../stores/site'
 import { toast } from '../stores/toast'
 import RoughAccent from '../components/RoughAccent.vue'
 import EmailCode from '../components/EmailCode.vue'
@@ -109,7 +110,11 @@ async function submit() {
             }}
           </p>
 
-          <form class="auth-form" @submit.prevent="submit">
+          <div v-if="!site.allowRegister" class="empty-note">
+            站点暂时关闭了注册。如果你已经有账号，可以直接登录；需要新账号请联系超级管理员。
+          </div>
+
+          <form v-else class="auth-form" @submit.prevent="submit">
             <div class="form-row">
               <div class="field">
                 <label for="reg-username">用户名</label>

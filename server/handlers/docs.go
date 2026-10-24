@@ -391,6 +391,7 @@ func (a *API) DocCreate(c *gin.Context) {
 	a.DB.Preload("Author", func(db *gorm.DB) *gorm.DB {
 		return db.Select("id", "username", "nickname", "bio", "role", "created_at")
 	}).First(&doc, doc.ID)
+	a.logAction(c, "创建内容", doc.Kind, doc.ID, doc.Title+"（"+doc.Status+"）")
 	c.JSON(http.StatusCreated, gin.H{"doc": doc})
 }
 
@@ -468,6 +469,7 @@ func (a *API) DocUpdate(c *gin.Context) {
 	a.DB.Preload("Author", func(db *gorm.DB) *gorm.DB {
 		return db.Select("id", "username", "nickname", "bio", "role", "created_at")
 	}).First(&doc, doc.ID)
+	a.logAction(c, "更新内容", doc.Kind, doc.ID, doc.Title+"（"+doc.Status+"）")
 	c.JSON(http.StatusOK, gin.H{"doc": doc})
 }
 
@@ -533,6 +535,7 @@ func (a *API) DocDelete(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "删除失败")
 		return
 	}
+	a.logAction(c, "删除内容", doc.Kind, doc.ID, doc.Title)
 	c.JSON(http.StatusOK, gin.H{"ok": true, "deleted": len(ids)})
 }
 

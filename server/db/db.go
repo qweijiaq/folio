@@ -44,6 +44,8 @@ func migrate(gdb *gorm.DB) error {
 		&models.Image{},
 		&models.ViewHistory{},
 		&models.EmailCode{},
+		&models.SiteSetting{},
+		&models.OperationLog{},
 	); err != nil {
 		return err
 	}
@@ -68,6 +70,24 @@ func ensureSuperAdmin(gdb *gorm.DB) error {
 		}
 	}
 	return gdb.Model(&models.User{}).Where("id = ?", u.ID).UpdateColumn("role", models.RoleSuperAdmin).Error
+}
+
+// EnsureSiteSetting 为老库补一条站点设置，之后以数据库里的值为准。
+func EnsureSiteSetting(gdb *gorm.DB, cfg config.Config) error {
+	var count int64
+	if err := gdb.Model(&models.SiteSetting{}).Count(&count).Error; err != nil {
+		return err
+	}
+	if count > 0 {
+		return nil
+	}
+	return gdb.Create(&models.SiteSetting{
+		SiteName:      cfg.SiteName,
+		SiteDesc:      cfg.SiteDesc,
+		SiteOwner:     cfg.SiteOwner,
+		AllowRegister: true,
+		LoginCaptcha:  cfg.LoginCaptcha,
+	}).Error
 }
 
 // EnsureFavoriteFolders 为所有用户补齐默认收藏夹，并把旧收藏归入默认收藏夹。

@@ -819,3 +819,71 @@ func TestCaptchaDisabled(t *testing.T) {
 		t.Fatalf("未开启时图形验证码应关闭: %d %v", status, data)
 	}
 }
+
+func TestSiteSettingsAndLogs(t *testing.T) {
+	s := newTestAPI(t)
+	ownerToken, _ := s.register(t, "siteowner")
+	adminToken, adminID := s.register(t, "plainadmin")
+	status, _ := s.do(t, "PUT", "/api/admin/users/"+itoa(adminID)+"/role", ownerToken, map[string]any{"role": "admin"})
+	if status != http.StatusOK {
+		t.Fatalf("提升管理员失败: %d", status)
+	}
+
+	status, siteData := s.do(t, "GET", "/api/site", "", nil)
+	if status != http.StatusOK {
+		t.Fatalf("读取站点失败: %d", status)
+	}
+	info := obj(siteData, "site")
+	if info["name"] != "测试站" || info["allowRegister"] != true {
+		t.Fatalf("默认站点设置不正确: %v", info)
+	}
+
+	status, updated := s.do(t, "PUT", "/api/admin/settings", ownerToken, map[string]any{
+		"siteName":      "新站点",
+		"siteDesc":      "新的描述",
+		"siteOwner":     "新维护者",
+		"allowRegister": false,
+		"loginCaptcha":  true,
+	})
+	if status != http.StatusOK {
+		t.Fatalf("保存站点设置失败: %d %v", status, updated)
+	}
+	status, siteData = s.do(t, "GET", "/api/site", "", nil)
+	info = obj(siteData, "site")
+	if info["name"] != "新站点" || info["allowRegister"] != false {
+		t.Fatalf("站点设置未生效: %v", info)
+	}
+
+	status, _ = s.do(t, "POST", "/api/auth/register", "", map[string]string{
+		"username": "closed", "nickname": "关闭注册", "email": "closed@example.com", "password": "password123",
+	})
+	if status != http.StatusForbidden {
+		t.Fatalf("关闭注册后应返回 403，实际 %d", status)
+	}
+
+	status, captcha := s.do(t, "GET", "/api/auth/captcha", "", nil)
+	if status != http.StatusOK || captcha["enabled"] != true {
+		t.Fatalf("后台开启图形验证码后应生效: %d %v", status, captcha)
+	}
+
+	status, logData := s.do(t, "GET", "/api/admin/logs", ownerToken, nil)
+	if status != http.StatusOK {
+		t.Fatalf("读取操作日志失败: %d", status)
+	}
+	actions := map[string]bool{}
+	for _, item := range list(logData, "items") {
+		entry, _ := item.(map[string]any)
+		actions[fmt.Sprint(entry["action"])] = true
+	}
+	if !actions["注册账号"] || !actions["更新设置"] {
+		t.Fatalf("操作日志缺少关键动作: %v", actions)
+	}
+
+	// 管理员不能修改站点设置
+	status, _ = s.do(t, "PUT", "/api/admin/settings", adminToken, map[string]any{
+		"siteName": "越权", "siteDesc": "", "siteOwner": "", "allowRegister": true, "loginCaptcha": false,
+	})
+	if status != http.StatusForbidden {
+		t.Fatalf("管理员不应能修改站点设置，实际 %d", status)
+	}
+}

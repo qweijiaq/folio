@@ -157,6 +157,29 @@ type EmailCode struct {
 	IP         string     `gorm:"size:64" json:"ip"`
 }
 
+// SiteSetting 是单行站点设置，后台修改后立即生效。
+type SiteSetting struct {
+	Base
+	SiteName      string `gorm:"size:64" json:"siteName"`
+	SiteDesc      string `gorm:"size:255" json:"siteDesc"`
+	SiteOwner     string `gorm:"size:64" json:"siteOwner"`
+	AllowRegister bool   `json:"allowRegister"`
+	LoginCaptcha  bool   `json:"loginCaptcha"`
+}
+
+// OperationLog 记录登录、内容与后台管理动作，供超级管理员审计。
+type OperationLog struct {
+	Base
+	UserID     uint   `gorm:"index" json:"userID"`
+	Username   string `gorm:"size:32;index" json:"username"`
+	Action     string `gorm:"size:32;index;not null" json:"action"`
+	TargetType string `gorm:"size:32" json:"targetType"`
+	TargetID   uint   `json:"targetID"`
+	Detail     string `gorm:"size:500" json:"detail"`
+	IP         string `gorm:"size:64" json:"ip"`
+	UserAgent  string `gorm:"size:255" json:"userAgent"`
+}
+
 // ViewHistory 记录登录用户最近打开过的内容，用于「浏览历史」。
 type ViewHistory struct {
 	Base
