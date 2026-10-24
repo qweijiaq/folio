@@ -322,9 +322,13 @@ docker compose up -d --build
 docker compose exec db mysql -ufolio -pfolio_pass folio -e "
 SET FOREIGN_KEY_CHECKS=0;
 TRUNCATE TABLE notifications; TRUNCATE TABLE messages; TRUNCATE TABLE follows;
-TRUNCATE TABLE comment_likes; TRUNCATE TABLE comments; TRUNCATE TABLE favorites;
-TRUNCATE TABLE likes; TRUNCATE TABLE documents; TRUNCATE TABLE users;
-TRUNCATE TABLE email_codes; TRUNCATE TABLE operation_logs; TRUNCATE TABLE site_settings;
+TRUNCATE TABLE comment_likes; TRUNCATE TABLE comments;
+TRUNCATE TABLE likes; TRUNCATE TABLE favorite_folders; TRUNCATE TABLE favorites;
+TRUNCATE TABLE documents; TRUNCATE TABLE users;
+TRUNCATE TABLE images; TRUNCATE TABLE view_histories;
+TRUNCATE TABLE email_codes; TRUNCATE TABLE user_settings;
+TRUNCATE TABLE notice_reads; TRUNCATE TABLE global_notices;
+TRUNCATE TABLE operation_logs; TRUNCATE TABLE site_settings;
 SET FOREIGN_KEY_CHECKS=1;"
 docker compose restart app
 ```
