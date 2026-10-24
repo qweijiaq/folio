@@ -28,6 +28,13 @@ func CORS(cfg config.Config) gin.HandlerFunc {
 }
 
 func (a *API) Routes(r *gin.Engine) {
+	r.GET("/feed.xml", a.RSSFeed)
+	r.HEAD("/feed.xml", a.RSSFeed)
+	r.GET("/sitemap.xml", a.Sitemap)
+	r.HEAD("/sitemap.xml", a.Sitemap)
+	r.GET("/robots.txt", a.Robots)
+	r.HEAD("/robots.txt", a.Robots)
+
 	g := r.Group("/api")
 
 	g.GET("/health", a.Health)
@@ -35,6 +42,8 @@ func (a *API) Routes(r *gin.Engine) {
 
 	// 生成式视觉资源
 	g.GET("/art/cover.svg", a.CoverArt)
+	g.GET("/art/cover.png", a.CoverPNG)
+	g.HEAD("/art/cover.png", a.CoverPNG)
 	g.GET("/art/avatar.svg", a.AvatarArt)
 
 	// 站点与发现

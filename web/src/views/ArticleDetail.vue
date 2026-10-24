@@ -13,7 +13,9 @@ import TagPill from '../components/TagPill.vue'
 import EmptyState from '../components/EmptyState.vue'
 import Icon from '../components/Icon.vue'
 import ReadingBar from '../components/ReadingBar.vue'
+import ShareCard from '../components/ShareCard.vue'
 import { useReadingProgress } from '../composables/useReadingProgress'
+import { usePageMeta } from '../composables/usePageMeta'
 import { formatDate, formatNumber, readingTime, shortDate } from '../utils/format'
 
 const route = useRoute()
@@ -27,6 +29,7 @@ const toc = ref([])
 const related = ref([])
 const loading = ref(true)
 const notFound = ref(false)
+const shareOpen = ref(false)
 const { progress, activeId, refresh: refreshReading } = useReadingProgress()
 
 const canEdit = computed(() => {
@@ -35,6 +38,40 @@ const canEdit = computed(() => {
 })
 
 const articleToc = computed(() => toc.value.filter((item) => item.level <= 3))
+
+usePageMeta(() => {
+  const current = doc.value
+  if (!current) return { title: '文章', description: '知微文章', image: '/api/art/cover.png?seed=articles&kind=site' }
+  const image = `/api/art/cover.png?seed=${current.id}&kind=article`
+  return {
+    title: current.title,
+    description: current.abstract || '',
+    image,
+    type: 'article',
+    url: `/articles/${current.id}`,
+    published: current.publishedAt || current.createdAt,
+    modified: current.updatedAt,
+    section: current.category?.name || '',
+    tags: current.tags || [],
+    jsonLd: {
+      '@context': 'https://schema.org',
+      '@type': 'BlogPosting',
+      headline: current.title,
+      description: current.abstract || '',
+      datePublished: current.publishedAt || current.createdAt,
+      dateModified: current.updatedAt,
+      image: new URL(image, window.location.origin).href,
+      mainEntityOfPage: `${window.location.origin}/articles/${current.id}`,
+      author: {
+        '@type': 'Person',
+        name: current.author?.nickname,
+        url: `${window.location.origin}/u/${current.author?.username}`
+      },
+      ...(current.category ? { articleSection: current.category.name } : {}),
+      ...(current.tags?.length ? { keywords: current.tags.join(',') } : {})
+    }
+  }
+})
 
 async function load() {
   loading.value = true
@@ -112,18 +149,10 @@ async function toggleFollow() {
   }
 }
 
-async function share() {
-  const url = window.location.href
-  try {
-    if (navigator.share) {
-      await navigator.share({ title: doc.value.title, url })
-    } else {
-      await navigator.clipboard.writeText(url)
-      toast('链接已复制')
-    }
-  } catch {
-    /* 用户取消分享 */
-  }
+const shareUrl = computed(() => (doc.value ? `${window.location.origin}/articles/${doc.value.id}` : ''))
+
+function share() {
+  shareOpen.value = true
 }
 
 onMounted(load)
@@ -283,6 +312,7 @@ watch(
           </div>
         </aside>
       </div>
+      <ShareCard v-if="shareOpen" :doc="doc" :url="shareUrl" @close="shareOpen = false" />
     </article>
   </div>
 </template>

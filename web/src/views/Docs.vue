@@ -9,11 +9,19 @@ import DocCard from '../components/DocCard.vue'
 import DocCardSkeleton from '../components/DocCardSkeleton.vue'
 import EmptyState from '../components/EmptyState.vue'
 import Icon from '../components/Icon.vue'
+import { usePageMeta } from '../composables/usePageMeta'
 
 const tree = ref([])
 const docs = ref([])
 const loading = ref(true)
 const staff = computed(() => ['super_admin', 'admin'].includes(auth.user?.role))
+
+usePageMeta(() => ({
+  title: '文档',
+  description: '按主题整理的长期笔记：手册、速查、清单。',
+  image: '/api/art/cover.png?seed=docs&kind=site',
+  url: '/docs'
+}))
 
 onMounted(async () => {
   try {

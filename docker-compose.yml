@@ -71,6 +71,7 @@ services:
       FOLIO_WEB_URL: "${FOLIO_WEB_URL:-}"
       FOLIO_SECRET: "${FOLIO_SECRET:-please-change-this-secret}"
       FOLIO_DEMO: "${FOLIO_DEMO:-1}"
+      FOLIO_SITE_URL: "${FOLIO_SITE_URL:-}"
       FOLIO_SITE_NAME: "知微"
       FOLIO_SITE_OWNER: "weijia"
     ports:

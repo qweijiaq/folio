@@ -10,9 +10,12 @@ import EmailCode from '../components/EmailCode.vue'
 import CaptchaField from '../components/CaptchaField.vue'
 import PasswordInput from '../components/PasswordInput.vue'
 import Icon from '../components/Icon.vue'
+import { usePageMeta } from '../composables/usePageMeta'
 
 const route = useRoute()
 const router = useRouter()
+
+usePageMeta(() => ({ title: '注册', description: '注册知微账号', noindex: true }))
 
 const form = ref({ username: '', nickname: '', email: '', password: '', code: '' })
 const submitting = ref(false)

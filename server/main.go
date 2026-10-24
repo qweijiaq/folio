@@ -85,7 +85,7 @@ func main() {
 					return
 				}
 			}
-			c.File(filepath.Join(dist, "index.html"))
+			api.ServeIndex(c, dist)
 		})
 	} else {
 		r.NoRoute(func(c *gin.Context) {

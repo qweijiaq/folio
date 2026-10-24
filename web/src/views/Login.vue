@@ -10,9 +10,12 @@ import EmailCode from '../components/EmailCode.vue'
 import CaptchaField from '../components/CaptchaField.vue'
 import PasswordInput from '../components/PasswordInput.vue'
 import Icon from '../components/Icon.vue'
+import { usePageMeta } from '../composables/usePageMeta'
 
 const route = useRoute()
 const router = useRouter()
+
+usePageMeta(() => ({ title: '登录', description: '登录知微', noindex: true }))
 
 const mode = ref('password')
 const username = ref('')

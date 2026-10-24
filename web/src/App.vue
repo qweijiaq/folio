@@ -225,6 +225,7 @@ onBeforeUnmount(() => {
               <RouterLink to="/articles">全部文章</RouterLink>
               <RouterLink to="/docs">知识库</RouterLink>
               <RouterLink to="/search">搜索</RouterLink>
+              <a href="/feed.xml">RSS 订阅</a>
             </div>
             <div class="footer-col">
               <h4>参与</h4>

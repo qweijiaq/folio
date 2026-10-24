@@ -41,6 +41,7 @@ Mock 模式每次启动都会重新写入演示数据，退出即清空，适合
 | 手绘视觉 | rough.js（Canvas 封面/头像 + SVG 装饰线） |
 | 内容渲染 | markdown-it + highlight.js（仅语法标记，主题 CSS 手写） |
 | 实时消息 | WebSocket（gorilla/websocket）+ 10 秒轮询兜底 |
+| SEO / 订阅 | RSS 2.0、sitemap.xml、robots.txt、服务端注入的 OG/JSON-LD 分享信息 |
 | 样式 | 原生 CSS，明暗主题，响应式 |
 
 ## 目录结构
@@ -226,6 +227,7 @@ Go 服务会自动托管 `../web/dist`，访问 <http://localhost:8080> 即可�
 | `FOLIO_SITE_NAME` | `知微` | 站点名 |
 | `FOLIO_SITE_DESC` | 一句话简介 | 站点描述 |
 | `FOLIO_SITE_OWNER` | `weijia` | 页脚署名 |
+| `FOLIO_SITE_URL` | 空 | 站点公开地址，例如 `https://example.com`；留空时按请求 Host 推导，生产环境建议显式配置 |
 
 复制 `.env.example` 为 `.env` 即可让 `./dev.sh` 读取。DSN 中含 `&`，在 `.env` 里请用引号包住。
 
@@ -418,6 +420,25 @@ FOLIO_SMTP_FROM=you@qq.com
 
 `FOLIO_SITE_NAME`、`FOLIO_SITE_DESC`、`FOLIO_SITE_OWNER` 和 `FOLIO_LOGIN_CAPTCHA` 只在数据库还没有站点设置时作为初始值。第一次启动后，以管理后台里的值为准。
 
+## SEO、RSS 与分享卡片
+
+站点不依赖前端 JS 也能提供基础 SEO 信息：
+
+- `/feed.xml`：最近 30 篇已发布文章的 RSS 2.0 订阅；
+- `/sitemap.xml`：首页、文章/文档列表、全部已发布内容与公开读者主页；
+- `/robots.txt`：屏蔽后台、登录、私信、编辑与搜索页，并指向 sitemap；
+- `/api/art/cover.png`：1200×630 的分享卡片底图，与站内封面同一套线稿语言；
+- Go 服务在返回 `index.html` 时会根据当前路径注入标题、description、canonical、Open Graph、Twitter Card 和 JSON-LD；爬虫不执行 JS 也能读到；
+- 文章/文档页的「分享」按钮会打开一张可视化分享卡片，支持复制链接、系统分享、X 和微博。
+
+生产环境请设置：
+
+```bash
+FOLIO_SITE_URL=https://your-domain.com
+```
+
+不设置时会按请求的 `Host` 推导，效果在本地可用，但反向代理后可能出现错误域名。
+
 ## 页面与功能
 
 - `/` 首页：首屏、置顶文章、最近文章、知识库入口、标签与最近加入
@@ -465,7 +486,8 @@ FOLIO_SMTP_FROM=you@qq.com
 | 互动 | `POST /docs/:id/like`、`POST /docs/:id/favorite`、`GET|POST /docs/:id/comments`、`POST /comments/:id/like` |
 | 消息 | `GET /messages/conversations`、`GET|POST /messages/with/:username`、`GET /notifications`、`GET /notices`、`POST /notices/read`、`GET /ws`（WebSocket，token 查询参数） |
 | 我的 | `GET /me/docs`、`GET /me/favorites`、`GET|DELETE /me/history`、`GET|POST /favorite-folders`、`PUT|DELETE /favorite-folders/:id`、`PUT /me`、`PUT /me/password`、`GET|PUT /me/settings`、`GET /me/login-records`、`GET /inbox` |
-| 视觉 | `GET /art/cover.svg`、`GET /art/avatar.svg` |
+| 视觉 | `GET /art/cover.svg`、`GET /art/cover.png`、`GET /art/avatar.svg` |
+| SEO | `GET /feed.xml`、`GET /sitemap.xml`、`GET /robots.txt` |
 | 系统 | `GET /health` |
 | 管理 | `GET /admin/stats`、`GET /admin/docs`、`GET /admin/users`、`DELETE /admin/users/:id`、`PUT /admin/users/:id/role`、`GET|PUT /admin/settings`、`GET /admin/logs`、`GET|POST /admin/notices`、`DELETE /admin/notices/:id` |
 

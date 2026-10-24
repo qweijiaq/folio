@@ -7,8 +7,11 @@ import RoughAccent from '../components/RoughAccent.vue'
 import EmailCode from '../components/EmailCode.vue'
 import PasswordInput from '../components/PasswordInput.vue'
 import Icon from '../components/Icon.vue'
+import { usePageMeta } from '../composables/usePageMeta'
 
 const router = useRouter()
+
+usePageMeta(() => ({ title: '找回密码', description: '找回知微账号密码', noindex: true }))
 
 const form = ref({ email: '', code: '', password: '', confirm: '' })
 const emailEnabled = ref(false)

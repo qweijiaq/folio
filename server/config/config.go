@@ -14,6 +14,7 @@ type Config struct {
 	SiteName  string
 	SiteDesc  string
 	SiteOwner string
+	SiteURL   string
 
 	// 数据库：sqlite（默认）| mysql | memory（进程内 SQLite，重启即清空）
 	DBDriver string
@@ -132,6 +133,7 @@ func Load() Config {
 		SiteName:  getenv("FOLIO_SITE_NAME", "知微"),
 		SiteDesc:  getenv("FOLIO_SITE_DESC", "一个人的知识花园，存放文章、手册与零散的思考。"),
 		SiteOwner: getenv("FOLIO_SITE_OWNER", "weijia"),
+		SiteURL:   strings.TrimRight(getenv("FOLIO_SITE_URL", ""), "/"),
 
 		DBDriver: driver,
 		DBPath:   dbPath,

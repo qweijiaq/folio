@@ -11,10 +11,29 @@ import UserAvatar from '../components/UserAvatar.vue'
 import Icon from '../components/Icon.vue'
 import RoughAccent from '../components/RoughAccent.vue'
 import { shortDate, formatNumber } from '../utils/format'
+import { usePageMeta } from '../composables/usePageMeta'
 
 const data = ref(null)
 const loading = ref(true)
 const staff = computed(() => ['super_admin', 'admin'].includes(auth.user?.role))
+
+usePageMeta(() => ({
+  title: '',
+  description: site.description,
+  url: '/',
+  jsonLd: {
+    '@context': 'https://schema.org',
+    '@type': 'WebSite',
+    name: site.name,
+    description: site.description,
+    url: window.location.origin + '/',
+    potentialAction: {
+      '@type': 'SearchAction',
+      target: window.location.origin + '/search?q={search_term_string}',
+      'query-input': 'required name=search_term_string'
+    }
+  }
+}))
 
 onMounted(async () => {
   try {

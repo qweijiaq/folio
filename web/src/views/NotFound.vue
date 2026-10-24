@@ -1,5 +1,8 @@
 <script setup>
 import EmptyState from '../components/EmptyState.vue'
+import { usePageMeta } from '../composables/usePageMeta'
+
+usePageMeta(() => ({ title: '页面未找到', description: '页面不存在', noindex: true }))
 </script>
 
 <template>

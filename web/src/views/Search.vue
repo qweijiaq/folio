@@ -7,6 +7,7 @@ import DocCard from '../components/DocCard.vue'
 import DocCardSkeleton from '../components/DocCardSkeleton.vue'
 import EmptyState from '../components/EmptyState.vue'
 import Icon from '../components/Icon.vue'
+import { usePageMeta } from '../composables/usePageMeta'
 
 const route = useRoute()
 const router = useRouter()
@@ -21,6 +22,13 @@ const searched = ref(false)
 const keyword = computed(() => String(route.query.q || '').trim())
 const activeTag = computed(() => String(route.query.tag || '').trim())
 const label = computed(() => activeTag.value || keyword.value)
+
+usePageMeta(() => ({
+  title: label.value ? `搜索：${label.value}` : '搜索',
+  description: '在知微的文章与文档中搜索。',
+  noindex: true,
+  url: '/search'
+}))
 
 const articleTotal = computed(() => articles.value.length)
 const docTotal = computed(() => docs.value.length)

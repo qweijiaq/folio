@@ -9,9 +9,12 @@ import { mergeSite } from '../stores/site'
 import UserAvatar from '../components/UserAvatar.vue'
 import EmptyState from '../components/EmptyState.vue'
 import Icon from '../components/Icon.vue'
+import { usePageMeta } from '../composables/usePageMeta'
 
 const route = useRoute()
 const router = useRouter()
+
+usePageMeta(() => ({ title: '管理后台', description: '知微管理后台', noindex: true }))
 
 const tab = ref(String(route.query.tab || 'overview'))
 const loading = ref(true)

@@ -7,9 +7,12 @@ import { buildTree, flattenTree } from '../utils/tree'
 import CoverImage from '../components/CoverImage.vue'
 import MarkdownView from '../components/MarkdownView.vue'
 import Icon from '../components/Icon.vue'
+import { usePageMeta } from '../composables/usePageMeta'
 
 const route = useRoute()
 const router = useRouter()
+
+usePageMeta(() => ({ title: '写作', description: '知微编辑器', noindex: true }))
 
 const form = reactive({
   kind: route.query.kind === 'doc' ? 'doc' : 'article',

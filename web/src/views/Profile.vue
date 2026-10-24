@@ -10,6 +10,7 @@ import UserAvatar from '../components/UserAvatar.vue'
 import DocCard from '../components/DocCard.vue'
 import EmptyState from '../components/EmptyState.vue'
 import Icon from '../components/Icon.vue'
+import { usePageMeta } from '../composables/usePageMeta'
 
 const route = useRoute()
 const router = useRouter()
@@ -22,6 +23,33 @@ const docs = ref([])
 const people = ref([])
 const tabLoading = ref(false)
 const peopleHidden = ref(false)
+
+usePageMeta(() => {
+  const current = profile.value
+  if (!current) return { title: '读者主页', description: '知微读者主页' }
+  const user = current.user
+  const image = `/api/art/cover.png?seed=${encodeURIComponent(user.username)}&kind=user`
+  return {
+    title: user.nickname,
+    description: user.bio || '知微读者主页',
+    image,
+    type: 'profile',
+    url: `/u/${user.username}`,
+    username: user.username,
+    jsonLd: {
+      '@context': 'https://schema.org',
+      '@type': 'ProfilePage',
+      mainEntity: {
+        '@type': 'Person',
+        name: user.nickname,
+        alternateName: user.username,
+        description: user.bio || '',
+        url: `${window.location.origin}/u/${user.username}`,
+        image: new URL(image, window.location.origin).href
+      }
+    }
+  }
+})
 
 const username = computed(() => String(route.params.username || ''))
 const isSelf = computed(() => profile.value?.isSelf)

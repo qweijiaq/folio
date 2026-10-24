@@ -8,9 +8,12 @@ import { timeAgo, shortDate } from '../utils/format'
 import UserAvatar from '../components/UserAvatar.vue'
 import EmptyState from '../components/EmptyState.vue'
 import Icon from '../components/Icon.vue'
+import { usePageMeta } from '../composables/usePageMeta'
 
 const route = useRoute()
 const router = useRouter()
+
+usePageMeta(() => ({ title: '消息', description: '知微私信与通知', noindex: true }))
 
 const tab = computed(() => (route.query.tab === 'notifications' ? 'notifications' : 'messages'))
 const withUser = computed(() => String(route.query.with || ''))

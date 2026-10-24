@@ -9,6 +9,7 @@ import DocCardSkeleton from '../components/DocCardSkeleton.vue'
 import Pagination from '../components/Pagination.vue'
 import EmptyState from '../components/EmptyState.vue'
 import Icon from '../components/Icon.vue'
+import { usePageMeta } from '../composables/usePageMeta'
 
 const route = useRoute()
 const router = useRouter()
@@ -28,6 +29,13 @@ const sort = computed(() => (route.query.sort ? String(route.query.sort) : 'late
 const keyword = computed(() => (route.query.q ? String(route.query.q) : ''))
 const author = computed(() => (route.query.author ? String(route.query.author) : ''))
 const staff = computed(() => ['super_admin', 'admin'].includes(auth.user?.role))
+
+usePageMeta(() => ({
+  title: '文章',
+  description: '较长的思考、读书笔记，以及一些还没想清楚的问题。',
+  image: '/api/art/cover.png?seed=articles&kind=site',
+  url: '/articles'
+}))
 
 async function load() {
   loading.value = true

@@ -64,6 +64,18 @@ func newTestAPI(t *testing.T, configure ...func(*config.Config)) *testAPI {
 	return &testAPI{handler: r, api: api, uploadDir: uploadDir}
 }
 
+func (s *testAPI) raw(t *testing.T, method, path, token string) (int, http.Header, string) {
+	t.Helper()
+	req := httptest.NewRequest(method, path, nil)
+	req.Host = "example.com"
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	rec := httptest.NewRecorder()
+	s.handler.ServeHTTP(rec, req)
+	return rec.Code, rec.Header(), rec.Body.String()
+}
+
 func (s *testAPI) do(t *testing.T, method, path, token string, body any) (int, map[string]any) {
 	t.Helper()
 	var req *http.Request
@@ -1320,5 +1332,85 @@ func TestGlobalNotices(t *testing.T) {
 	_, notices = s.do(t, "GET", "/api/notices", userToken, nil)
 	if len(list(notices, "items")) != 0 {
 		t.Fatalf("删除后公告仍存在: %v", notices)
+	}
+}
+
+func TestSEOEndpoints(t *testing.T) {
+	s := newTestAPI(t)
+	token, _ := s.register(t, "seoowner")
+
+	status, created := s.do(t, "POST", "/api/docs", token, map[string]any{
+		"kind": "article", "title": "分享卡片测试文章", "abstract": "这是摘要，用于 RSS 与分享卡片。",
+		"content": "正文内容", "tags": []string{"SEO", "测试"}, "status": "published",
+	})
+	if status != http.StatusCreated {
+		t.Fatalf("创建文章失败: %d %v", status, created)
+	}
+	articleID := uint(number(obj(created, "doc")["id"]))
+	status, docCreated := s.do(t, "POST", "/api/docs", token, map[string]any{
+		"kind": "doc", "title": "分享卡片测试文档", "content": "文档正文", "status": "published",
+	})
+	if status != http.StatusCreated {
+		t.Fatalf("创建文档失败: %d %v", status, docCreated)
+	}
+	docID := uint(number(obj(docCreated, "doc")["id"]))
+	status, _ = s.do(t, "POST", "/api/docs", token, map[string]any{
+		"kind": "article", "title": "不应出现在订阅里的草稿", "content": "草稿", "status": "draft",
+	})
+	if status != http.StatusCreated {
+		t.Fatalf("创建草稿失败: %d", status)
+	}
+
+	status, headers, feed := s.raw(t, "GET", "/feed.xml", "")
+	if status != http.StatusOK || !strings.Contains(headers.Get("Content-Type"), "rss+xml") {
+		t.Fatalf("RSS 响应异常: %d %s", status, headers.Get("Content-Type"))
+	}
+	if !strings.Contains(feed, "分享卡片测试文章") || !strings.Contains(feed, fmt.Sprintf("/articles/%d", articleID)) {
+		t.Fatalf("RSS 缺少文章: %s", feed)
+	}
+	if strings.Contains(feed, "不应出现在订阅里的草稿") {
+		t.Fatalf("RSS 不应包含草稿: %s", feed)
+	}
+
+	status, _, sitemap := s.raw(t, "GET", "/sitemap.xml", "")
+	if status != http.StatusOK {
+		t.Fatalf("sitemap 状态异常: %d", status)
+	}
+	for _, want := range []string{"/articles", "/docs", fmt.Sprintf("/articles/%d", articleID), fmt.Sprintf("/docs/%d", docID), "/u/seoowner"} {
+		if !strings.Contains(sitemap, want) {
+			t.Fatalf("sitemap 缺少 %s: %s", want, sitemap)
+		}
+	}
+	if strings.Contains(sitemap, "不应出现在订阅里的草稿") {
+		t.Fatalf("sitemap 不应包含草稿")
+	}
+
+	status, _, robots := s.raw(t, "GET", "/robots.txt", "")
+	if status != http.StatusOK || !strings.Contains(robots, "Sitemap: http://example.com/sitemap.xml") || !strings.Contains(robots, "Disallow: /admin") {
+		t.Fatalf("robots.txt 异常: %d %s", status, robots)
+	}
+
+	status, headers, image := s.raw(t, "GET", "/api/art/cover.png?seed=1&kind=article", "")
+	if status != http.StatusOK || headers.Get("Content-Type") != "image/png" || !strings.HasPrefix(image, "\x89PNG") {
+		t.Fatalf("分享图异常: %d %s", status, headers.Get("Content-Type"))
+	}
+
+	dist := t.TempDir()
+	index := `<!doctype html><html><head><!--folio:meta--><title>旧标题</title></head><body></body></html>`
+	if err := os.WriteFile(filepath.Join(dist, "index.html"), []byte(index), 0o644); err != nil {
+		t.Fatalf("写入测试 index.html 失败: %v", err)
+	}
+	rec := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(rec)
+	req := httptest.NewRequest("GET", fmt.Sprintf("/articles/%d", articleID), nil)
+	req.Host = "example.com"
+	ctx.Request = req
+	s.api.ServeIndex(ctx, dist)
+	page := rec.Body.String()
+	if rec.Code != http.StatusOK || !strings.Contains(page, "分享卡片测试文章 · 测试站") {
+		t.Fatalf("服务端标题注入异常: %d %s", rec.Code, page)
+	}
+	if !strings.Contains(page, `property="og:image"`) || !strings.Contains(page, "application/ld+json") {
+		t.Fatalf("分享元信息不完整: %s", page)
 	}
 }

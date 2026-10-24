@@ -16,7 +16,9 @@ import TagPill from '../components/TagPill.vue'
 import EmptyState from '../components/EmptyState.vue'
 import Icon from '../components/Icon.vue'
 import ReadingBar from '../components/ReadingBar.vue'
+import ShareCard from '../components/ShareCard.vue'
 import { useReadingProgress } from '../composables/useReadingProgress'
+import { usePageMeta } from '../composables/usePageMeta'
 
 const route = useRoute()
 const router = useRouter()
@@ -31,6 +33,7 @@ const favorited = ref(false)
 const loading = ref(true)
 const notFound = ref(false)
 const sideOpen = ref(false)
+const shareOpen = ref(false)
 const { progress, activeId, refresh: refreshReading } = useReadingProgress()
 
 const canEdit = computed(() => {
@@ -62,6 +65,38 @@ const nextDoc = computed(() =>
 )
 
 const visibleToc = computed(() => toc.value.filter((item) => item.level <= 3))
+
+usePageMeta(() => {
+  const current = doc.value
+  if (!current) return { title: '文档', description: '知微知识库', image: '/api/art/cover.png?seed=docs&kind=site' }
+  const image = `/api/art/cover.png?seed=${current.id}&kind=doc`
+  return {
+    title: current.title,
+    description: current.abstract || '',
+    image,
+    type: 'article',
+    url: `/docs/${current.id}`,
+    published: current.publishedAt || current.createdAt,
+    modified: current.updatedAt,
+    tags: current.tags || [],
+    jsonLd: {
+      '@context': 'https://schema.org',
+      '@type': 'TechArticle',
+      headline: current.title,
+      description: current.abstract || '',
+      datePublished: current.publishedAt || current.createdAt,
+      dateModified: current.updatedAt,
+      image: new URL(image, window.location.origin).href,
+      mainEntityOfPage: `${window.location.origin}/docs/${current.id}`,
+      author: {
+        '@type': 'Person',
+        name: current.author?.nickname,
+        url: `${window.location.origin}/u/${current.author?.username}`
+      },
+      ...(current.tags?.length ? { keywords: current.tags.join(',') } : {})
+    }
+  }
+})
 
 async function load() {
   loading.value = true
@@ -119,16 +154,10 @@ async function toggleFavorite() {
   }
 }
 
-async function share() {
-  try {
-    if (navigator.share) await navigator.share({ title: doc.value.title, url: window.location.href })
-    else {
-      await navigator.clipboard.writeText(window.location.href)
-      toast('链接已复制')
-    }
-  } catch {
-    /* 取消分享 */
-  }
+const shareUrl = computed(() => (doc.value ? `${window.location.origin}/docs/${doc.value.id}` : ''))
+
+function share() {
+  shareOpen.value = true
 }
 
 function goDoc(id) {
@@ -275,6 +304,7 @@ watch(
           </div>
         </aside>
       </div>
+      <ShareCard v-if="shareOpen" :doc="doc" :url="shareUrl" @close="shareOpen = false" />
     </template>
   </div>
 </template>

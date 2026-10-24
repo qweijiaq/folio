@@ -10,9 +10,12 @@ import EmailCode from '../components/EmailCode.vue'
 import PasswordInput from '../components/PasswordInput.vue'
 import EmptyState from '../components/EmptyState.vue'
 import Icon from '../components/Icon.vue'
+import { usePageMeta } from '../composables/usePageMeta'
 
 const route = useRoute()
 const router = useRouter()
+
+usePageMeta(() => ({ title: '我的空间', description: '管理知微账号资料', noindex: true }))
 
 const tab = ref(String(route.query.tab || 'profile'))
 const loading = ref(true)
