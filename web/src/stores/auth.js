@@ -39,8 +39,8 @@ export async function refreshInbox() {
   }
 }
 
-export async function login(username, password) {
-  const data = await api.post('/auth/login', { username, password })
+export async function login(username, password, captcha = {}) {
+  const data = await api.post('/auth/login', { username, password, ...captcha })
   setToken(data.token)
   auth.user = data.user
   await refreshInbox()

@@ -56,6 +56,7 @@ services:
       FOLIO_SMTP_FROM_NAME: "${FOLIO_SMTP_FROM_NAME:-}"
       FOLIO_SMTP_TLS: "${FOLIO_SMTP_TLS:-}"
       FOLIO_MAIL_DEBUG: "${FOLIO_MAIL_DEBUG:-0}"
+      FOLIO_LOGIN_CAPTCHA: "${FOLIO_LOGIN_CAPTCHA:-0}"
       FOLIO_SECRET: "${FOLIO_SECRET:-please-change-this-secret}"
       FOLIO_DEMO: "${FOLIO_DEMO:-1}"
       FOLIO_SITE_NAME: "知微"

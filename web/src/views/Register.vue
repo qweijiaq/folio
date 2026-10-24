@@ -6,6 +6,7 @@ import { api } from '../api/client'
 import { toast } from '../stores/toast'
 import RoughAccent from '../components/RoughAccent.vue'
 import EmailCode from '../components/EmailCode.vue'
+import CaptchaField from '../components/CaptchaField.vue'
 import Icon from '../components/Icon.vue'
 
 const route = useRoute()
@@ -15,6 +16,10 @@ const form = ref({ username: '', nickname: '', email: '', password: '', code: ''
 const submitting = ref(false)
 const error = ref('')
 const emailEnabled = ref(false)
+const captchaEnabled = ref(false)
+const captchaId = ref('')
+const captchaCode = ref('')
+const captchaRef = ref(null)
 
 const redirect = computed(() => {
   const value = String(route.query.redirect || '')
@@ -25,6 +30,7 @@ onMounted(async () => {
   try {
     const data = await api.get('/auth/email/status')
     emailEnabled.value = Boolean(data.requireRegister)
+    captchaEnabled.value = Boolean(data.captcha)
   } catch {
     emailEnabled.value = false
   }
@@ -64,12 +70,15 @@ async function submit() {
       nickname: form.value.nickname.trim() || form.value.username.trim(),
       email,
       password: form.value.password,
-      code: form.value.code.trim()
+      code: form.value.code.trim(),
+      captchaId: captchaId.value,
+      captchaCode: captchaCode.value
     })
     toast('账号已创建，欢迎')
     router.push(redirect.value)
   } catch (err) {
     error.value = err.message || '注册失败'
+    captchaRef.value?.refresh()
   } finally {
     submitting.value = false
   }
@@ -123,6 +132,7 @@ async function submit() {
               <label for="reg-password">密码</label>
               <input id="reg-password" v-model="form.password" type="password" autocomplete="new-password" placeholder="至少 6 位" />
             </div>
+            <CaptchaField v-if="captchaEnabled && !emailEnabled" ref="captchaRef" v-model:id="captchaId" v-model:code="captchaCode" />
 
             <p v-if="error" class="form-error">{{ error }}</p>
 

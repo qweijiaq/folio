@@ -2,6 +2,7 @@
 import { onBeforeUnmount, ref, watch } from 'vue'
 import { api } from '../api/client'
 import { toast, toastError } from '../stores/toast'
+import CaptchaField from './CaptchaField.vue'
 
 const props = defineProps({
   modelValue: { type: String, default: '' },
@@ -14,6 +15,9 @@ const emit = defineEmits(['update:modelValue', 'sent'])
 const sending = ref(false)
 const cooldown = ref(0)
 const debugCode = ref('')
+const captchaId = ref('')
+const captchaCode = ref('')
+const captchaRef = ref(null)
 let timer = null
 
 watch(
@@ -43,7 +47,12 @@ async function send() {
   }
   sending.value = true
   try {
-    const data = await api.post('/auth/email/code', { email, purpose: props.purpose })
+    const data = await api.post('/auth/email/code', {
+      email,
+      purpose: props.purpose,
+      captchaId: captchaId.value,
+      captchaCode: captchaCode.value
+    })
     startCooldown()
     emit('sent', data)
     if (data.debugCode) {
@@ -57,6 +66,7 @@ async function send() {
     toastError(err)
   } finally {
     sending.value = false
+    captchaRef.value?.refresh()
   }
 }
 
@@ -87,6 +97,7 @@ onBeforeUnmount(() => {
         {{ sending ? '发送中…' : cooldown > 0 ? `${cooldown}s 后重发` : '发送验证码' }}
       </button>
     </div>
+    <CaptchaField ref="captchaRef" v-model:id="captchaId" v-model:code="captchaCode" />
     <p v-if="debugCode" class="email-code-debug">
       开发模式验证码 <strong>{{ debugCode }}</strong>，已自动填入
     </p>

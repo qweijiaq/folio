@@ -73,6 +73,7 @@ func (a *API) Routes(r *gin.Engine) {
 	g.DELETE("/categories/:id", a.Auth(), a.StaffOnly(), a.CategoryDelete)
 
 	// 认证
+	g.GET("/auth/captcha", a.CaptchaImage)
 	g.GET("/auth/email/status", a.EmailStatus)
 	g.POST("/auth/email/code", a.OptionalAuth(), a.SendEmailCode)
 	g.POST("/auth/email/login", a.EmailLogin)

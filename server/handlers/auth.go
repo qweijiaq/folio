@@ -64,11 +64,13 @@ func (a *API) mePayload(u *models.User) gin.H {
 
 func (a *API) Register(c *gin.Context) {
 	var in struct {
-		Username string `json:"username"`
-		Nickname string `json:"nickname"`
-		Email    string `json:"email"`
-		Password string `json:"password"`
-		Code     string `json:"code"`
+		Username    string `json:"username"`
+		Nickname    string `json:"nickname"`
+		Email       string `json:"email"`
+		Password    string `json:"password"`
+		Code        string `json:"code"`
+		CaptchaID   string `json:"captchaId"`
+		CaptchaCode string `json:"captchaCode"`
 	}
 	if err := c.ShouldBindJSON(&in); err != nil {
 		bad(c, "请求格式错误")
@@ -124,6 +126,8 @@ func (a *API) Register(c *gin.Context) {
 			bad(c, err.Error())
 			return
 		}
+	} else if !a.requireCaptcha(c, in.CaptchaID, in.CaptchaCode) {
+		return
 	}
 	var total int64
 	a.DB.Model(&models.User{}).Count(&total)
@@ -158,11 +162,16 @@ func (a *API) Register(c *gin.Context) {
 
 func (a *API) Login(c *gin.Context) {
 	var in struct {
-		Username string `json:"username"`
-		Password string `json:"password"`
+		Username    string `json:"username"`
+		Password    string `json:"password"`
+		CaptchaID   string `json:"captchaId"`
+		CaptchaCode string `json:"captchaCode"`
 	}
 	if err := c.ShouldBindJSON(&in); err != nil {
 		bad(c, "请求格式错误")
+		return
+	}
+	if !a.requireCaptcha(c, in.CaptchaID, in.CaptchaCode) {
 		return
 	}
 	username := trim(in.Username)

@@ -20,16 +20,18 @@ import (
 	"github.com/anthropics/anthropic-sdk-go/option"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/mojocn/base64Captcha"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
 
 type API struct {
-	DB    *gorm.DB
-	Cfg   config.Config
-	Cache *cache.Cache
-	AI    *anthropic.Client
-	Mail  foliomail.Mailer
+	DB      *gorm.DB
+	Cfg     config.Config
+	Cache   *cache.Cache
+	AI      *anthropic.Client
+	Mail    foliomail.Mailer
+	Captcha base64Captcha.Store
 }
 
 func New(db *gorm.DB, cfg config.Config, rc *cache.Cache) *API {
@@ -45,7 +47,14 @@ func New(db *gorm.DB, cfg config.Config, rc *cache.Cache) *API {
 		client := anthropic.NewClient(options...)
 		aiClient = &client
 	}
-	return &API{DB: db, Cfg: cfg, Cache: rc, AI: aiClient, Mail: foliomail.New(cfg)}
+	return &API{
+		DB:      db,
+		Cfg:     cfg,
+		Cache:   rc,
+		AI:      aiClient,
+		Mail:    foliomail.New(cfg),
+		Captcha: base64Captcha.NewMemoryStore(20240, 5*time.Minute),
+	}
 }
 
 func fail(c *gin.Context, status int, msg string) {

@@ -33,7 +33,7 @@ Mock 模式每次启动都会重新写入演示数据，退出即清空，适合
 | 后端 | Go 1.24 · Gin · GORM |
 | 数据库 | SQLite（默认）/ MySQL 8.4 |
 | 缓存 | Redis 7（可选） |
-| 登录 | 用户名密码 / 邮箱验证码；JWT（30 天）+ 可选 Redis 黑名单 |
+| 登录 | 用户名密码 / 邮箱验证码；可选图形验证码；JWT（30 天）+ 可选 Redis 黑名单 |
 | 前端 | Vue 3 · Vite · Vue Router |
 | 手绘视觉 | rough.js（Canvas 封面/头像 + SVG 装饰线） |
 | 内容渲染 | markdown-it + highlight.js（仅语法标记，主题 CSS 手写） |
@@ -201,6 +201,7 @@ Go 服务会自动托管 `../web/dist`，访问 <http://localhost:8080> 即可�
 | `FOLIO_SMTP_FROM_NAME` | 站点名 | 发件人显示名 |
 | `FOLIO_SMTP_TLS` | `465` 端口为 `1` | 是否使用隐式 TLS（465）；587 端口走 STARTTLS |
 | `FOLIO_MAIL_DEBUG` | `0` | 设为 `1` 时不发邮件，把验证码写进日志并在界面显示，仅用于自测 |
+| `FOLIO_LOGIN_CAPTCHA` | `0` | 设为 `1` 时，密码登录和发送邮箱验证码需要图形验证码 |
 | `FOLIO_WEB` | `../web/dist` | 前端构建产物目录 |
 | `FOLIO_DEMO` | `1` | 是否在空库时写入演示数据；`0` 关闭 |
 | `FOLIO_SITE_NAME` | `知微` | 站点名 |
@@ -308,6 +309,14 @@ FOLIO_AI_API_KEY=sk-ant-... FOLIO_AI_MODEL=claude-opus-5-5 ./dev.sh
 - 验证码 10 分钟有效，只存 HMAC 摘要，验证成功或用错 5 次后立即作废；
 - 同一邮箱 60 秒内只能发一次，24 小时最多 10 封。
 
+如果站点对外开放，建议同时开启登录图形验证码：
+
+```bash
+FOLIO_LOGIN_CAPTCHA=1
+```
+
+开启后密码登录和发送邮箱验证码都需要先输入图片上的 4 位字符；验证码一次性使用，5 分钟内有效。图形验证码由服务端生成 PNG，不依赖前端组件库。
+
 本地没有 SMTP 也可以自测，把 `FOLIO_MAIL_DEBUG` 设为 `1`：
 
 ```bash
@@ -355,7 +364,7 @@ FOLIO_SMTP_FROM=you@qq.com
 
 | 分组 | 主要接口 |
 | --- | --- |
-| 认证 | `POST /auth/register`、`POST /auth/login`、`POST /auth/email/login`、`POST /auth/password/reset`、`POST /auth/email/code`、`GET /auth/email/status`、`POST /auth/logout`、`GET /me`、`PUT /me/email` |
+| 认证 | `POST /auth/register`、`POST /auth/login`、`POST /auth/email/login`、`POST /auth/password/reset`、`POST /auth/email/code`、`GET /auth/email/status`、`GET /auth/captcha`、`POST /auth/logout`、`GET /me`、`PUT /me/email` |
 | 用户 | `GET /users/:username`、`POST|DELETE /users/:username/follow`、`GET /users/:username/followers|following` |
 | 内容 | `GET /docs`、`GET /docs/:id`、`GET /docs/:id/related`、`POST /docs`、`PUT /docs/:id`、`DELETE /docs/:id`、`GET /doc-tree` |
 | 分类 | `GET /categories`、`POST /categories`、`PUT /categories/:id`、`DELETE /categories/:id` |

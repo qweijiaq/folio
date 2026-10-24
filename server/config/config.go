@@ -39,6 +39,9 @@ type Config struct {
 	SMTPTLS      bool
 	MailDebug    bool
 
+	// 登录图形验证码（可选）
+	LoginCaptcha bool
+
 	// Redis 可选：地址为空时自动降级为无缓存模式
 	RedisAddr     string
 	RedisPassword string
@@ -119,6 +122,8 @@ func Load() Config {
 		SMTPFromName: getenv("FOLIO_SMTP_FROM_NAME", ""),
 		SMTPTLS:      envBool("FOLIO_SMTP_TLS", smtpPort == 465),
 		MailDebug:    envBool("FOLIO_MAIL_DEBUG", false),
+
+		LoginCaptcha: envBool("FOLIO_LOGIN_CAPTCHA", false),
 
 		RedisAddr:     getenv("FOLIO_REDIS_ADDR", ""),
 		RedisPassword: getenv("FOLIO_REDIS_PASSWORD", ""),

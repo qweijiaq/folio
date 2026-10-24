@@ -6,6 +6,7 @@ import { api } from '../api/client'
 import { toast } from '../stores/toast'
 import RoughAccent from '../components/RoughAccent.vue'
 import EmailCode from '../components/EmailCode.vue'
+import CaptchaField from '../components/CaptchaField.vue'
 import Icon from '../components/Icon.vue'
 
 const route = useRoute()
@@ -17,6 +18,9 @@ const password = ref('')
 const email = ref('')
 const emailCode = ref('')
 const emailEnabled = ref(false)
+const captchaId = ref('')
+const captchaCode = ref('')
+const captchaRef = ref(null)
 const submitting = ref(false)
 const error = ref('')
 const isDev = import.meta.env.DEV
@@ -67,11 +71,15 @@ async function submit() {
   }
   submitting.value = true
   try {
-    await login(username.value.trim(), password.value)
+    await login(username.value.trim(), password.value, {
+      captchaId: captchaId.value,
+      captchaCode: captchaCode.value
+    })
     toast('欢迎回来')
     router.push(redirect.value)
   } catch (err) {
     error.value = err.message || '登录失败'
+    captchaRef.value?.refresh()
   } finally {
     submitting.value = false
   }
@@ -118,6 +126,7 @@ function fillDemo() {
                 <label for="login-password">密码</label>
                 <input id="login-password" v-model="password" type="password" autocomplete="current-password" placeholder="至少 6 位" />
               </div>
+              <CaptchaField ref="captchaRef" v-model:id="captchaId" v-model:code="captchaCode" />
               <p v-if="emailEnabled" class="auth-aux">
                 <RouterLink to="/forgot">忘记密码？</RouterLink>
               </p>

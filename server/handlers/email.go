@@ -87,6 +87,7 @@ func (a *API) EmailStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"enabled":         a.emailEnabled(),
 		"requireRegister": a.emailEnabled(),
+		"captcha":         a.Cfg.LoginCaptcha,
 		"expiresIn":       int(emailCodeTTL.Seconds()),
 	})
 }
@@ -97,8 +98,10 @@ func (a *API) SendEmailCode(c *gin.Context) {
 		return
 	}
 	var in struct {
-		Email   string `json:"email"`
-		Purpose string `json:"purpose"`
+		Email       string `json:"email"`
+		Purpose     string `json:"purpose"`
+		CaptchaID   string `json:"captchaId"`
+		CaptchaCode string `json:"captchaCode"`
 	}
 	if err := c.ShouldBindJSON(&in); err != nil {
 		bad(c, "请求格式错误")
@@ -114,6 +117,9 @@ func (a *API) SendEmailCode(c *gin.Context) {
 	case emailPurposeRegister, emailPurposeReset, emailPurposeBind, emailPurposeLogin:
 	default:
 		bad(c, "验证码用途不正确")
+		return
+	}
+	if !a.requireCaptcha(c, in.CaptchaID, in.CaptchaCode) {
 		return
 	}
 

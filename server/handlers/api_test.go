@@ -25,6 +25,7 @@ import (
 
 type testAPI struct {
 	handler   http.Handler
+	api       *handlers.API
 	uploadDir string
 }
 
@@ -57,7 +58,7 @@ func newTestAPI(t *testing.T, configure ...func(*config.Config)) *testAPI {
 	api := handlers.New(gdb, cfg, cache.New("", "", 0))
 	r := gin.New()
 	api.Routes(r)
-	return &testAPI{handler: r, uploadDir: uploadDir}
+	return &testAPI{handler: r, api: api, uploadDir: uploadDir}
 }
 
 func (s *testAPI) do(t *testing.T, method, path, token string, body any) (int, map[string]any) {
@@ -766,5 +767,55 @@ func TestEmailDisabled(t *testing.T) {
 	})
 	if status != http.StatusServiceUnavailable {
 		t.Fatalf("未配置邮件时发送验证码应返回 503, 实际 %d", status)
+	}
+}
+
+func TestCaptchaProtection(t *testing.T) {
+	s := newTestAPI(t, func(cfg *config.Config) {
+		cfg.LoginCaptcha = true
+	})
+
+	status, data := s.do(t, "GET", "/api/auth/captcha", "", nil)
+	if status != http.StatusOK || data["enabled"] != true {
+		t.Fatalf("图形验证码应启用: %d %v", status, data)
+	}
+	id, _ := data["captchaId"].(string)
+	image, _ := data["image"].(string)
+	if id == "" || !strings.HasPrefix(image, "data:image/png;base64,") {
+		t.Fatalf("图形验证码返回不完整: %v", data)
+	}
+
+	status, _ = s.do(t, "POST", "/api/auth/login", "", map[string]string{
+		"username": "nobody", "password": "password123",
+	})
+	if status != http.StatusBadRequest {
+		t.Fatalf("缺少图形验证码应返回 400，实际 %d", status)
+	}
+	status, _ = s.do(t, "POST", "/api/auth/login", "", map[string]string{
+		"username": "nobody", "password": "password123", "captchaId": id, "captchaCode": "zzzz",
+	})
+	if status != http.StatusBadRequest {
+		t.Fatalf("错误图形验证码应返回 400，实际 %d", status)
+	}
+
+	status, data = s.do(t, "GET", "/api/auth/captcha", "", nil)
+	id, _ = data["captchaId"].(string)
+	code := s.api.Captcha.Get(id, false)
+	if code == "" {
+		t.Fatal("测试存储中应能取到图形验证码答案")
+	}
+	status, _ = s.do(t, "POST", "/api/auth/login", "", map[string]string{
+		"username": "nobody", "password": "password123", "captchaId": id, "captchaCode": code,
+	})
+	if status != http.StatusUnauthorized {
+		t.Fatalf("验证码正确后应继续校验账号并返回 401，实际 %d", status)
+	}
+}
+
+func TestCaptchaDisabled(t *testing.T) {
+	s := newTestAPI(t)
+	status, data := s.do(t, "GET", "/api/auth/captcha", "", nil)
+	if status != http.StatusOK || data["enabled"] != false {
+		t.Fatalf("未开启时图形验证码应关闭: %d %v", status, data)
 	}
 }
