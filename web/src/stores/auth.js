@@ -47,6 +47,14 @@ export async function login(username, password) {
   return data.user
 }
 
+export async function loginWithEmail(email, code) {
+  const data = await api.post('/auth/email/login', { email, code })
+  setToken(data.token)
+  auth.user = data.user
+  await refreshInbox()
+  return data.user
+}
+
 export async function register(payload) {
   const data = await api.post('/auth/register', payload)
   setToken(data.token)

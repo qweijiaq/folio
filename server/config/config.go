@@ -29,6 +29,16 @@ type Config struct {
 	AIModel   string
 	AIBaseURL string
 
+	// 邮件（可选，用于邮箱验证码、邮箱登录与找回密码）
+	SMTPHost     string
+	SMTPPort     int
+	SMTPUser     string
+	SMTPPassword string
+	SMTPFrom     string
+	SMTPFromName string
+	SMTPTLS      bool
+	MailDebug    bool
+
 	// Redis 可选：地址为空时自动降级为无缓存模式
 	RedisAddr     string
 	RedisPassword string
@@ -40,6 +50,14 @@ func getenv(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+func envBool(key string, fallback bool) bool {
+	v := strings.ToLower(strings.TrimSpace(os.Getenv(key)))
+	if v == "" {
+		return fallback
+	}
+	return v == "1" || v == "true" || v == "yes" || v == "on"
 }
 
 func (c Config) AIEnabled() bool {
@@ -69,6 +87,10 @@ func Load() Config {
 	if uploadMB < 1 {
 		uploadMB = 10
 	}
+	smtpPort, _ := strconv.Atoi(getenv("FOLIO_SMTP_PORT", "587"))
+	if smtpPort <= 0 || smtpPort > 65535 {
+		smtpPort = 587
+	}
 	return Config{
 		Addr:      getenv("FOLIO_ADDR", ":8080"),
 		Secret:    secret,
@@ -88,6 +110,15 @@ func Load() Config {
 		AIAPIKey:  getenv("FOLIO_AI_API_KEY", getenv("ANTHROPIC_API_KEY", "")),
 		AIModel:   getenv("FOLIO_AI_MODEL", "claude-opus-5-5"),
 		AIBaseURL: getenv("FOLIO_AI_BASE_URL", ""),
+
+		SMTPHost:     getenv("FOLIO_SMTP_HOST", ""),
+		SMTPPort:     smtpPort,
+		SMTPUser:     getenv("FOLIO_SMTP_USER", ""),
+		SMTPPassword: getenv("FOLIO_SMTP_PASSWORD", ""),
+		SMTPFrom:     getenv("FOLIO_SMTP_FROM", ""),
+		SMTPFromName: getenv("FOLIO_SMTP_FROM_NAME", ""),
+		SMTPTLS:      envBool("FOLIO_SMTP_TLS", smtpPort == 465),
+		MailDebug:    envBool("FOLIO_MAIL_DEBUG", false),
 
 		RedisAddr:     getenv("FOLIO_REDIS_ADDR", ""),
 		RedisPassword: getenv("FOLIO_REDIS_PASSWORD", ""),

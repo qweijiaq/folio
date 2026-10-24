@@ -11,7 +11,8 @@
 - **CSS 全部手写**：不引入 Arco 或其他组件库，也不使用预处理器。四个 CSS 文件构成设计系统，支持明暗主题。
 - **三种数据模式**：SQLite（默认）、MySQL、进程内内存 Mock。Redis 可选，用于登出黑名单与浏览量去重。
 - **保留内容能力**：正文图片上传与图库、粘贴/拖拽插图、文章分类、文章推荐、收藏夹分组、浏览历史、评论、点赞、收藏、关注、私信、通知都已恢复。
-- **删繁就简**：去掉复杂的角色表、文档权限、文档密码与试看、审核流、QQ 与邮箱登录、验证码、Elasticsearch；只保留一个极简的三级角色字段。
+- **邮箱能力**：配置 SMTP 后支持邮箱验证码注册、验证码登录、绑定/更换邮箱和自助找回密码。
+- **删繁就简**：去掉复杂的角色表、文档权限、文档密码与试看、审核流、QQ 登录、Elasticsearch；只保留一个极简的三级角色字段。
 - **保留基本互动**：评论（两级）、评论点赞、内容点赞、收藏、关注/粉丝、私信、站内通知、管理后台。
 - **个人站点权限**：只有超级管理员和管理员可以发布文章与文档；普通读者可以评论、点赞、收藏、关注和私信。超级管理员可以在管理后台把读者设为管理员。
 
@@ -32,7 +33,7 @@ Mock 模式每次启动都会重新写入演示数据，退出即清空，适合
 | 后端 | Go 1.24 · Gin · GORM |
 | 数据库 | SQLite（默认）/ MySQL 8.4 |
 | 缓存 | Redis 7（可选） |
-| 登录 | JWT（30 天）+ 可选 Redis 黑名单 |
+| 登录 | 用户名密码 / 邮箱验证码；JWT（30 天）+ 可选 Redis 黑名单 |
 | 前端 | Vue 3 · Vite · Vue Router |
 | 手绘视觉 | rough.js（Canvas 封面/头像 + SVG 装饰线） |
 | 内容渲染 | markdown-it + highlight.js（仅语法标记，主题 CSS 手写） |
@@ -47,12 +48,13 @@ folio/
 │   ├── config/             # 环境变量配置
 │   ├── db/                 # SQLite / MySQL / 内存数据库
 │   ├── cache/              # Redis：JWT 黑名单、浏览量去重
-│   ├── models/             # 13 张表的模型
+│   ├── mail/               # SMTP 发信与本地调试邮件
+│   ├── models/             # 14 张表的模型
 │   ├── art/                # 生成式封面与头像
 │   ├── handlers/           # 路由、接口与集成测试
 │   └── seed/               # 演示数据
 ├── web/
-│   ├── src/views/          # 13 个页面
+│   ├── src/views/          # 14 个页面
 │   ├── src/components/     # 卡片、评论、目录树等组件
 │   ├── src/styles/         # base / components / pages / markdown
 │   └── src/utils/          # API 客户端、Markdown、树结构、格式化
@@ -191,6 +193,14 @@ Go 服务会自动托管 `../web/dist`，访问 <http://localhost:8080> 即可�
 | `FOLIO_AI_API_KEY` | 空 | Anthropic API Key；留空则关闭 AI 摘要 |
 | `FOLIO_AI_MODEL` | `claude-opus-5-5` | AI 摘要使用的模型 |
 | `FOLIO_AI_BASE_URL` | 空 | 可选，Anthropic 兼容网关地址 |
+| `FOLIO_SMTP_HOST` | 空 | SMTP 服务器；留空则关闭邮箱验证码 |
+| `FOLIO_SMTP_PORT` | `587` | SMTP 端口，`465` 时自动使用隐式 TLS |
+| `FOLIO_SMTP_USER` | 空 | SMTP 用户名，通常就是邮箱地址 |
+| `FOLIO_SMTP_PASSWORD` | 空 | SMTP 密码或授权码 |
+| `FOLIO_SMTP_FROM` | 空 | 发件邮箱；默认与用户名相同 |
+| `FOLIO_SMTP_FROM_NAME` | 站点名 | 发件人显示名 |
+| `FOLIO_SMTP_TLS` | `465` 端口为 `1` | 是否使用隐式 TLS（465）；587 端口走 STARTTLS |
+| `FOLIO_MAIL_DEBUG` | `0` | 设为 `1` 时不发邮件，把验证码写进日志并在界面显示，仅用于自测 |
 | `FOLIO_WEB` | `../web/dist` | 前端构建产物目录 |
 | `FOLIO_DEMO` | `1` | 是否在空库时写入演示数据；`0` 关闭 |
 | `FOLIO_SITE_NAME` | `知微` | 站点名 |
@@ -201,7 +211,7 @@ Go 服务会自动托管 `../web/dist`，访问 <http://localhost:8080> 即可�
 
 ## 数据模型
 
-只有 13 张表：
+只有 14 张表：
 
 | 表 | 用途 |
 | --- | --- |
@@ -218,6 +228,7 @@ Go 服务会自动托管 `../web/dist`，访问 <http://localhost:8080> 即可�
 | `notifications` | 点赞 / 评论 / 关注通知 |
 | `images` | 上传图片：文件名、路径、MIME、大小、内容哈希、上传者 |
 | `view_histories` | 登录用户的浏览历史（用户 + 内容唯一） |
+| `email_codes` | 邮箱验证码：用途、HMAC 摘要、过期时间、尝试次数、消费时间 |
 
 `documents.status` 只有 `draft` 与 `published`。草稿只有作者本人和超级管理员可见。分类只作用于文章，文档仍然使用 `parent_id` 目录树。
 
@@ -286,6 +297,35 @@ Docker 全栈使用独立的 `uploads-data` 卷保存图片，重建容器不会
 FOLIO_AI_API_KEY=sk-ant-... FOLIO_AI_MODEL=claude-opus-5-5 ./dev.sh
 ```
 
+## 邮箱验证码（可选）
+
+配置 SMTP 后，站点会启用邮箱相关能力：
+
+- 注册时先给邮箱发 6 位验证码，验证通过才能创建账号；
+- 登录页多一个「邮箱验证码」标签，可以不用密码登录；
+- 「我的空间 → 账号安全」里可以绑定或更换邮箱，绑定同样要验证；
+- 忘记密码时用邮箱验证码设置新密码；
+- 验证码 10 分钟有效，只存 HMAC 摘要，验证成功或用错 5 次后立即作废；
+- 同一邮箱 60 秒内只能发一次，24 小时最多 10 封。
+
+本地没有 SMTP 也可以自测，把 `FOLIO_MAIL_DEBUG` 设为 `1`：
+
+```bash
+FOLIO_MAIL_DEBUG=1 ./dev.sh
+```
+
+此时不会真的发信，验证码会打印在服务端日志里，并自动填入页面上的「开发模式验证码」提示。**部署时不要开启这个开关。**
+
+常见的 QQ 邮箱配置：
+
+```bash
+FOLIO_SMTP_HOST=smtp.qq.com
+FOLIO_SMTP_PORT=587
+FOLIO_SMTP_USER=you@qq.com
+FOLIO_SMTP_PASSWORD=你的 SMTP 授权码
+FOLIO_SMTP_FROM=you@qq.com
+```
+
 ## 页面与功能
 
 - `/` 首页：首屏、置顶文章、最近文章、知识库入口、标签与最近加入
@@ -299,7 +339,8 @@ FOLIO_AI_API_KEY=sk-ant-... FOLIO_AI_MODEL=claude-opus-5-5 ./dev.sh
 - `/messages` 私信与通知：会话列表、消息轮询、通知已读
 - `/me` 我的空间：资料、密码、收藏夹、浏览历史；管理员额外看到自己的文章与文档
 - `/admin` 管理后台：概览、内容管理、分类管理、图片管理；超级管理员额外拥有用户与权限管理
-- `/login`、`/register` 登录注册
+- `/login`、`/register` 登录注册：密码登录、邮箱验证码登录、注册
+- `/forgot` 通过邮箱验证码重置密码
 
 互动说明：
 
@@ -314,7 +355,7 @@ FOLIO_AI_API_KEY=sk-ant-... FOLIO_AI_MODEL=claude-opus-5-5 ./dev.sh
 
 | 分组 | 主要接口 |
 | --- | --- |
-| 认证 | `POST /auth/register`、`POST /auth/login`、`POST /auth/logout`、`GET /me` |
+| 认证 | `POST /auth/register`、`POST /auth/login`、`POST /auth/email/login`、`POST /auth/password/reset`、`POST /auth/email/code`、`GET /auth/email/status`、`POST /auth/logout`、`GET /me`、`PUT /me/email` |
 | 用户 | `GET /users/:username`、`POST|DELETE /users/:username/follow`、`GET /users/:username/followers|following` |
 | 内容 | `GET /docs`、`GET /docs/:id`、`GET /docs/:id/related`、`POST /docs`、`PUT /docs/:id`、`DELETE /docs/:id`、`GET /doc-tree` |
 | 分类 | `GET /categories`、`POST /categories`、`PUT /categories/:id`、`DELETE /categories/:id` |
@@ -339,7 +380,7 @@ FOLIO_AI_API_KEY=sk-ant-... FOLIO_AI_MODEL=claude-opus-5-5 ./dev.sh
 ## 已知边界
 
 - 没有实时推送，私信与通知靠轮询。
-- 没有邮件服务，注册与找回密码不需要邮箱验证。
+- 邮件是可选的：未配置 SMTP 时邮箱验证码、邮箱登录和找回密码会自动关闭，用户名密码登录不受影响。
 - 搜索使用 `LIKE`，适合个人规模的数据量；MySQL 下同样可用。
 - 演示数据默认开启；正式使用请设置 `FOLIO_DEMO=0` 并修改 `FOLIO_SECRET`。
 - 旧四个项目的 MySQL 数据尚未迁移到新表结构；需要的话可以再写一个导入脚本。

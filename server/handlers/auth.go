@@ -3,6 +3,7 @@ package handlers
 import (
 	"net/http"
 	"regexp"
+	"strings"
 	"time"
 
 	"folio/server/models"
@@ -67,6 +68,7 @@ func (a *API) Register(c *gin.Context) {
 		Nickname string `json:"nickname"`
 		Email    string `json:"email"`
 		Password string `json:"password"`
+		Code     string `json:"code"`
 	}
 	if err := c.ShouldBindJSON(&in); err != nil {
 		bad(c, "请求格式错误")
@@ -74,7 +76,7 @@ func (a *API) Register(c *gin.Context) {
 	}
 	in.Username = trim(in.Username)
 	in.Nickname = trim(in.Nickname)
-	in.Email = trim(in.Email)
+	in.Email = normalizeEmail(in.Email)
 	if !usernamePattern.MatchString(in.Username) {
 		bad(c, "用户名需为 2-20 位字母、数字或下划线")
 		return
@@ -83,7 +85,16 @@ func (a *API) Register(c *gin.Context) {
 		bad(c, "密码长度需在 6-64 位之间")
 		return
 	}
-	if !validEmail(in.Email) {
+	if a.emailEnabled() {
+		if in.Email == "" {
+			bad(c, "请填写邮箱并获取验证码")
+			return
+		}
+		if !strings.Contains(in.Email, "@") || !validEmail(in.Email) {
+			bad(c, "邮箱格式不正确")
+			return
+		}
+	} else if in.Email != "" && !validEmail(in.Email) {
 		bad(c, "邮箱格式不正确")
 		return
 	}
@@ -99,6 +110,20 @@ func (a *API) Register(c *gin.Context) {
 	if exists > 0 {
 		bad(c, "用户名已被占用")
 		return
+	}
+	if in.Email != "" {
+		var emailUsed int64
+		a.DB.Model(&models.User{}).Where("lower(email) = ?", in.Email).Count(&emailUsed)
+		if emailUsed > 0 {
+			bad(c, "该邮箱已被使用")
+			return
+		}
+	}
+	if a.emailEnabled() {
+		if err := a.consumeEmailCode(in.Email, emailPurposeRegister, in.Code); err != nil {
+			bad(c, err.Error())
+			return
+		}
 	}
 	var total int64
 	a.DB.Model(&models.User{}).Count(&total)
@@ -177,7 +202,6 @@ func (a *API) MeUpdate(c *gin.Context) {
 	var in struct {
 		Nickname string `json:"nickname"`
 		Bio      string `json:"bio"`
-		Email    string `json:"email"`
 	}
 	if err := c.ShouldBindJSON(&in); err != nil {
 		bad(c, "请求格式错误")
@@ -185,7 +209,6 @@ func (a *API) MeUpdate(c *gin.Context) {
 	}
 	in.Nickname = trim(in.Nickname)
 	in.Bio = trim(in.Bio)
-	in.Email = trim(in.Email)
 	if runeLen(in.Nickname) < 1 || runeLen(in.Nickname) > 24 {
 		bad(c, "昵称长度需在 1-24 个字符之间")
 		return
@@ -194,14 +217,9 @@ func (a *API) MeUpdate(c *gin.Context) {
 		bad(c, "简介最多 120 个字符")
 		return
 	}
-	if !validEmail(in.Email) {
-		bad(c, "邮箱格式不正确")
-		return
-	}
 	if err := a.DB.Model(u).Updates(map[string]any{
 		"nickname": in.Nickname,
 		"bio":      in.Bio,
-		"email":    in.Email,
 	}).Error; err != nil {
 		fail(c, http.StatusInternalServerError, "保存失败")
 		return

@@ -1,22 +1,38 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { register } from '../stores/auth'
+import { api } from '../api/client'
 import { toast } from '../stores/toast'
 import RoughAccent from '../components/RoughAccent.vue'
+import EmailCode from '../components/EmailCode.vue'
 import Icon from '../components/Icon.vue'
 
 const route = useRoute()
 const router = useRouter()
 
-const form = ref({ username: '', nickname: '', email: '', password: '' })
+const form = ref({ username: '', nickname: '', email: '', password: '', code: '' })
 const submitting = ref(false)
 const error = ref('')
+const emailEnabled = ref(false)
 
 const redirect = computed(() => {
   const value = String(route.query.redirect || '')
   return value.startsWith('/') ? value : '/'
 })
+
+onMounted(async () => {
+  try {
+    const data = await api.get('/auth/email/status')
+    emailEnabled.value = Boolean(data.requireRegister)
+  } catch {
+    emailEnabled.value = false
+  }
+})
+
+function validEmail(value) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
+}
 
 async function submit() {
   error.value = ''
@@ -28,13 +44,27 @@ async function submit() {
     error.value = '密码至少 6 位'
     return
   }
+  const email = form.value.email.trim()
+  if (emailEnabled.value && !email) {
+    error.value = '请填写邮箱并获取验证码'
+    return
+  }
+  if (email && !validEmail(email)) {
+    error.value = '邮箱格式不正确'
+    return
+  }
+  if (emailEnabled.value && !form.value.code.trim()) {
+    error.value = '请填写邮箱验证码'
+    return
+  }
   submitting.value = true
   try {
     await register({
       username: form.value.username.trim(),
       nickname: form.value.nickname.trim() || form.value.username.trim(),
-      email: form.value.email.trim(),
-      password: form.value.password
+      email,
+      password: form.value.password,
+      code: form.value.code.trim()
     })
     toast('账号已创建，欢迎')
     router.push(redirect.value)
@@ -62,7 +92,13 @@ async function submit() {
         <div class="auth-card">
           <span class="eyebrow">注册</span>
           <h1>创建账号</h1>
-          <p class="auth-sub">只需要一个用户名和密码。邮箱可选，用于找回账号。</p>
+          <p class="auth-sub">
+            {{
+              emailEnabled
+                ? '填写邮箱并验证，之后可以用验证码登录或找回密码。'
+                : '只需要一个用户名和密码。邮箱可选，用于找回账号。'
+            }}
+          </p>
 
           <form class="auth-form" @submit.prevent="submit">
             <div class="form-row">
@@ -76,8 +112,12 @@ async function submit() {
               </div>
             </div>
             <div class="field">
-              <label for="reg-email">邮箱（可选）</label>
+              <label for="reg-email">{{ emailEnabled ? '邮箱' : '邮箱（可选）' }}</label>
               <input id="reg-email" v-model="form.email" type="email" autocomplete="email" placeholder="you@example.com" />
+            </div>
+            <div v-if="emailEnabled" class="field">
+              <label>邮箱验证码</label>
+              <EmailCode v-model="form.code" :email="form.email" purpose="register" />
             </div>
             <div class="field">
               <label for="reg-password">密码</label>

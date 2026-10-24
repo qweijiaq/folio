@@ -13,6 +13,7 @@ import (
 
 	"folio/server/cache"
 	"folio/server/config"
+	foliomail "folio/server/mail"
 	"folio/server/models"
 
 	"github.com/anthropics/anthropic-sdk-go"
@@ -28,6 +29,7 @@ type API struct {
 	Cfg   config.Config
 	Cache *cache.Cache
 	AI    *anthropic.Client
+	Mail  foliomail.Mailer
 }
 
 func New(db *gorm.DB, cfg config.Config, rc *cache.Cache) *API {
@@ -43,7 +45,7 @@ func New(db *gorm.DB, cfg config.Config, rc *cache.Cache) *API {
 		client := anthropic.NewClient(options...)
 		aiClient = &client
 	}
-	return &API{DB: db, Cfg: cfg, Cache: rc, AI: aiClient}
+	return &API{DB: db, Cfg: cfg, Cache: rc, AI: aiClient, Mail: foliomail.New(cfg)}
 }
 
 func fail(c *gin.Context, status int, msg string) {

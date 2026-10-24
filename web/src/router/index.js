@@ -12,6 +12,7 @@ const routes = [
   { path: '/u/:username', name: 'profile', component: () => import('../views/Profile.vue'), meta: { title: '主页' } },
   { path: '/login', name: 'login', component: () => import('../views/Login.vue'), meta: { title: '登录', guest: true } },
   { path: '/register', name: 'register', component: () => import('../views/Register.vue'), meta: { title: '注册', guest: true } },
+  { path: '/forgot', name: 'forgot', component: () => import('../views/Forgot.vue'), meta: { title: '找回密码', guest: true } },
   {
     path: '/write/:id?',
     name: 'write',

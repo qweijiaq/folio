@@ -6,6 +6,7 @@ import { auth, refreshMe } from '../stores/auth'
 import { toast, toastError } from '../stores/toast'
 import { roleLabel, shortDate, timeAgo } from '../utils/format'
 import UserAvatar from '../components/UserAvatar.vue'
+import EmailCode from '../components/EmailCode.vue'
 import EmptyState from '../components/EmptyState.vue'
 import Icon from '../components/Icon.vue'
 
@@ -25,8 +26,11 @@ const folderNameDraft = ref('')
 const history = ref([])
 const savingProfile = ref(false)
 const savingPassword = ref(false)
+const savingEmail = ref(false)
+const emailEnabled = ref(false)
 
-const profileForm = reactive({ nickname: '', bio: '', email: '' })
+const profileForm = reactive({ nickname: '', bio: '' })
+const emailForm = reactive({ email: '', code: '' })
 const passwordForm = reactive({ oldPassword: '', newPassword: '', confirm: '' })
 
 const staff = computed(() => ['super_admin', 'admin'].includes(auth.user?.role))
@@ -190,7 +194,6 @@ function fillProfile() {
   if (!auth.user) return
   profileForm.nickname = auth.user.nickname || ''
   profileForm.bio = auth.user.bio || ''
-  profileForm.email = auth.user.email || ''
 }
 
 function setTab(key) {
@@ -205,8 +208,7 @@ async function saveProfile() {
   try {
     await api.put('/me', {
       nickname: profileForm.nickname,
-      bio: profileForm.bio,
-      email: profileForm.email
+      bio: profileForm.bio
     })
     await refreshMe()
     fillProfile()
@@ -215,6 +217,30 @@ async function saveProfile() {
     toastError(err)
   } finally {
     savingProfile.value = false
+  }
+}
+
+async function bindEmail() {
+  const email = emailForm.email.trim()
+  if (!email) {
+    toast('请填写要绑定的邮箱')
+    return
+  }
+  if (!emailForm.code.trim()) {
+    toast('请填写邮箱验证码')
+    return
+  }
+  savingEmail.value = true
+  try {
+    await api.put('/me/email', { email, code: emailForm.code.trim() })
+    await refreshMe()
+    emailForm.email = ''
+    emailForm.code = ''
+    toast('邮箱已绑定')
+  } catch (err) {
+    toastError(err)
+  } finally {
+    savingEmail.value = false
   }
 }
 
@@ -298,6 +324,11 @@ onMounted(async () => {
   }
   normalizeTab()
   fillProfile()
+  api.get('/auth/email/status').then((data) => {
+    emailEnabled.value = Boolean(data.enabled)
+  }).catch(() => {
+    emailEnabled.value = false
+  })
   await loadTab()
   loading.value = false
 })
@@ -368,10 +399,6 @@ onMounted(async () => {
                 </div>
               </div>
               <div class="field">
-                <label for="me-email">邮箱</label>
-                <input id="me-email" v-model="profileForm.email" type="email" placeholder="you@example.com" />
-              </div>
-              <div class="field">
                 <label for="me-bio">简介</label>
                 <textarea id="me-bio" v-model="profileForm.bio" rows="3" maxlength="120" placeholder="一句话介绍自己…"></textarea>
                 <span class="hint">{{ profileForm.bio.length }} / 120</span>
@@ -411,6 +438,35 @@ onMounted(async () => {
               </button>
             </div>
           </form>
+
+          <section class="email-bind">
+            <header>
+              <h3>邮箱</h3>
+              <p>绑定邮箱后可以用验证码登录，也可以自助找回密码。更换邮箱同样需要验证。</p>
+            </header>
+            <p v-if="auth.user.email" class="email-current">
+              当前邮箱：<strong>{{ auth.user.email }}</strong>
+            </p>
+            <p v-else class="email-current muted">还没有绑定邮箱。</p>
+            <template v-if="emailEnabled">
+              <div class="form-row email-bind-row">
+                <div class="field">
+                  <label for="me-email">新邮箱</label>
+                  <input id="me-email" v-model="emailForm.email" type="email" autocomplete="email" placeholder="you@example.com" />
+                </div>
+                <div class="field">
+                  <label>验证码</label>
+                  <EmailCode v-model="emailForm.code" :email="emailForm.email" purpose="bind" />
+                </div>
+              </div>
+              <div class="form-actions">
+                <button class="btn btn-primary btn-sm" type="button" :disabled="savingEmail" @click="bindEmail">
+                  {{ savingEmail ? '绑定中…' : auth.user.email ? '更换邮箱' : '绑定邮箱' }}
+                </button>
+              </div>
+            </template>
+            <p v-else class="hint">站点未配置邮件服务，暂时不能绑定或验证邮箱。</p>
+          </section>
         </div>
 
         <div v-else-if="tab === 'articles' || tab === 'docs'" class="panel">

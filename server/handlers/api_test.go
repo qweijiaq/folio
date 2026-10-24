@@ -647,3 +647,124 @@ func containsDoc(items []any, id uint) bool {
 func itoa(id uint) string {
 	return strconv.FormatUint(uint64(id), 10)
 }
+
+func TestEmailFlows(t *testing.T) {
+	s := newTestAPI(t, func(cfg *config.Config) {
+		cfg.MailDebug = true
+		cfg.SiteName = "测试站"
+	})
+
+	status, data := s.do(t, "GET", "/api/auth/email/status", "", nil)
+	if status != http.StatusOK || data["enabled"] != true {
+		t.Fatalf("邮件调试模式应启用邮箱能力: %d %v", status, data)
+	}
+
+	send := func(email, purpose string, tokens ...string) string {
+		t.Helper()
+		token := ""
+		if len(tokens) > 0 {
+			token = tokens[0]
+		}
+		status, body := s.do(t, "POST", "/api/auth/email/code", token, map[string]string{
+			"email": email, "purpose": purpose,
+		})
+		if status != http.StatusOK {
+			t.Fatalf("发送 %s 验证码失败: %d %v", purpose, status, body)
+		}
+		code, _ := body["debugCode"].(string)
+		if len(code) != 6 {
+			t.Fatalf("调试模式应返回 6 位验证码: %v", body)
+		}
+		return code
+	}
+
+	email := "newbie@example.com"
+	code := send(email, "register")
+
+	status, _ = s.do(t, "POST", "/api/auth/register", "", map[string]string{
+		"username": "newbie", "nickname": "新来的", "email": email, "password": "password123",
+	})
+	if status != http.StatusBadRequest {
+		t.Fatalf("缺少验证码时注册应失败, 实际 %d", status)
+	}
+	status, _ = s.do(t, "POST", "/api/auth/register", "", map[string]string{
+		"username": "newbie", "nickname": "新来的", "email": email, "password": "password123", "code": "000000",
+	})
+	if status != http.StatusBadRequest {
+		t.Fatalf("错误验证码注册应失败, 实际 %d", status)
+	}
+	status, created := s.do(t, "POST", "/api/auth/register", "", map[string]string{
+		"username": "newbie", "nickname": "新来的", "email": email, "password": "password123", "code": code,
+	})
+	if status != http.StatusCreated {
+		t.Fatalf("验证码注册失败: %d %v", status, created)
+	}
+	token, _ := created["token"].(string)
+	if token == "" {
+		t.Fatal("注册后应返回 token")
+	}
+	status, _ = s.do(t, "POST", "/api/auth/register", "", map[string]string{
+		"username": "newbie2", "nickname": "新来的", "email": email, "password": "password123", "code": code,
+	})
+	if status != http.StatusBadRequest {
+		t.Fatalf("验证码不能重复使用, 实际 %d", status)
+	}
+
+	// 邮箱验证码登录
+	loginCode := send(email, "login")
+	status, logged := s.do(t, "POST", "/api/auth/email/login", "", map[string]string{"email": email, "code": loginCode})
+	if status != http.StatusOK {
+		t.Fatalf("邮箱验证码登录失败: %d %v", status, logged)
+	}
+	if logged["token"] == "" || obj(logged, "user")["username"] != "newbie" {
+		t.Fatalf("邮箱登录返回不正确: %v", logged)
+	}
+
+	// 绑定新邮箱
+	bindEmail := "bound@example.com"
+	bindCode := send(bindEmail, "bind", token)
+	status, bound := s.do(t, "PUT", "/api/me/email", token, map[string]string{"email": bindEmail, "code": bindCode})
+	if status != http.StatusOK {
+		t.Fatalf("绑定邮箱失败: %d %v", status, bound)
+	}
+	if obj(bound, "user")["email"] != bindEmail {
+		t.Fatalf("绑定后邮箱不正确: %v", bound)
+	}
+
+	// 找回密码
+	resetCode := send(bindEmail, "reset")
+	status, reset := s.do(t, "POST", "/api/auth/password/reset", "", map[string]string{
+		"email": bindEmail, "code": resetCode, "password": "newpassword123",
+	})
+	if status != http.StatusOK {
+		t.Fatalf("重置密码失败: %d %v", status, reset)
+	}
+	status, _ = s.do(t, "POST", "/api/auth/login", "", map[string]string{
+		"username": "newbie", "password": "newpassword123",
+	})
+	if status != http.StatusOK {
+		t.Fatalf("新密码登录失败: %d", status)
+	}
+
+	// 同一邮箱 60 秒内不能重复发送
+	status, _ = s.do(t, "POST", "/api/auth/email/code", "", map[string]string{
+		"email": bindEmail, "purpose": "reset",
+	})
+	if status != http.StatusTooManyRequests {
+		t.Fatalf("重复发送应被限流, 实际 %d", status)
+	}
+}
+
+func TestEmailDisabled(t *testing.T) {
+	s := newTestAPI(t)
+	status, data := s.do(t, "GET", "/api/auth/email/status", "", nil)
+	if status != http.StatusOK || data["enabled"] != false {
+		t.Fatalf("未配置邮件时应关闭邮箱能力: %d %v", status, data)
+	}
+	status, _ = s.do(t, "POST", "/api/auth/email/code", "", map[string]string{
+		"email": "someone@example.com", "purpose": "login",
+	})
+	if status != http.StatusServiceUnavailable {
+		t.Fatalf("未配置邮件时发送验证码应返回 503, 实际 %d", status)
+	}
+}

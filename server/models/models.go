@@ -145,6 +145,18 @@ type Image struct {
 	Hash     string `gorm:"size:64;index" json:"-"`
 }
 
+// EmailCode 保存邮箱验证码。只存 HMAC 摘要，验证码用后即焚。
+type EmailCode struct {
+	Base
+	Email      string     `gorm:"size:128;index;not null" json:"email"`
+	Purpose    string     `gorm:"size:16;index;not null" json:"purpose"`
+	CodeHash   string     `gorm:"size:64;not null" json:"-"`
+	ExpiresAt  time.Time  `gorm:"index" json:"expiresAt"`
+	Attempts   int        `json:"attempts"`
+	ConsumedAt *time.Time `json:"consumedAt"`
+	IP         string     `gorm:"size:64" json:"ip"`
+}
+
 // ViewHistory 记录登录用户最近打开过的内容，用于「浏览历史」。
 type ViewHistory struct {
 	Base

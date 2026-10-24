@@ -43,6 +43,7 @@ func migrate(gdb *gorm.DB) error {
 		&models.Notification{},
 		&models.Image{},
 		&models.ViewHistory{},
+		&models.EmailCode{},
 	); err != nil {
 		return err
 	}

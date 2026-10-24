@@ -3220,3 +3220,136 @@
   }
 }
 
+
+/* ---------- 邮箱验证码 ---------- */
+
+.auth-modes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  margin-bottom: 20px;
+  padding: 4px;
+  border: 1.2px dashed var(--line-strong);
+  border-radius: var(--sketch-sm);
+  background: var(--paper-soft, transparent);
+}
+
+.auth-modes button {
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--sketch-sm);
+  background: transparent;
+  color: var(--ink-faint);
+  font-size: 13px;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.auth-modes button:hover {
+  color: var(--ink);
+}
+
+.auth-modes button.active {
+  background: var(--surface);
+  color: var(--accent);
+  box-shadow: 0 0 0 1px var(--line);
+}
+
+.auth-aux {
+  margin: -4px 0 2px;
+  text-align: right;
+  font-size: 12.5px;
+}
+
+.email-code {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.email-code-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.email-code-row input {
+  flex: 1;
+  min-width: 0;
+  letter-spacing: 0.16em;
+}
+
+.email-code-row .btn {
+  flex: none;
+  white-space: nowrap;
+}
+
+.email-code-debug {
+  margin: 0;
+  color: var(--accent);
+  font-size: 11.5px;
+  letter-spacing: 0.02em;
+}
+
+.email-code-debug strong {
+  font-family: var(--hand);
+  font-size: 14px;
+  letter-spacing: 0.12em;
+}
+
+.empty-note {
+  padding: 16px 18px;
+  border: 1.2px dashed var(--line-strong);
+  border-radius: var(--sketch-sm);
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.email-bind {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 30px;
+  padding-top: 26px;
+  border-top: 1.2px dashed var(--line);
+}
+
+.email-bind header h3 {
+  margin: 0 0 5px;
+  font-family: var(--hand);
+  font-size: 17px;
+  font-weight: 500;
+}
+
+.email-bind header p {
+  margin: 0;
+  color: var(--ink-faint);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.email-current {
+  margin: 0;
+  font-size: 13px;
+}
+
+.email-current strong {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.email-bind-row {
+  align-items: flex-start;
+}
+
+@media (max-width: 460px) {
+  .email-code-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .email-code-row .btn {
+    align-self: flex-start;
+  }
+}

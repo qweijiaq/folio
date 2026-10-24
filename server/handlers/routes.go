@@ -73,6 +73,10 @@ func (a *API) Routes(r *gin.Engine) {
 	g.DELETE("/categories/:id", a.Auth(), a.StaffOnly(), a.CategoryDelete)
 
 	// 认证
+	g.GET("/auth/email/status", a.EmailStatus)
+	g.POST("/auth/email/code", a.OptionalAuth(), a.SendEmailCode)
+	g.POST("/auth/email/login", a.EmailLogin)
+	g.POST("/auth/password/reset", a.ResetPassword)
 	g.POST("/auth/register", a.Register)
 	g.POST("/auth/login", a.Login)
 
@@ -81,6 +85,7 @@ func (a *API) Routes(r *gin.Engine) {
 	authed.POST("/auth/logout", a.Logout)
 	authed.GET("/me", a.Me)
 	authed.PUT("/me", a.MeUpdate)
+	authed.PUT("/me/email", a.BindEmail)
 	authed.PUT("/me/password", a.MePassword)
 	authed.GET("/me/docs", a.MyDocs)
 	authed.GET("/me/favorites", a.MyFavorites)
