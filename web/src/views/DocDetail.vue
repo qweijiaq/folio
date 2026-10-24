@@ -17,6 +17,7 @@ import EmptyState from '../components/EmptyState.vue'
 import Icon from '../components/Icon.vue'
 import ReadingBar from '../components/ReadingBar.vue'
 import ShareCard from '../components/ShareCard.vue'
+import DocActions from '../components/DocActions.vue'
 import { useReadingProgress } from '../composables/useReadingProgress'
 import { usePageMeta } from '../composables/usePageMeta'
 
@@ -202,7 +203,7 @@ watch(
         </nav>
       </div>
 
-      <div class="container docs-layout" :class="{ 'docs-layout--toc': visibleToc.length > 2 }">
+      <div class="container docs-layout docs-layout--toc">
         <aside class="docs-side" :class="{ open: sideOpen }">
           <div class="docs-side-head">
             <RouterLink to="/docs">文档目录</RouterLink>
@@ -255,22 +256,16 @@ watch(
             <TagPill v-for="tag in doc.tags" :key="tag" :name="tag" />
           </div>
 
-          <div class="article-actions">
-            <button class="action-btn" :class="{ active: liked }" type="button" @click="toggleLike">
-              <Icon name="heart" :size="17" />
-              <span>{{ liked ? '已点赞' : '点赞' }}</span>
-              <span class="action-count">{{ doc.likeCount || 0 }}</span>
-            </button>
-            <button class="action-btn" :class="{ active: favorited }" type="button" @click="toggleFavorite">
-              <Icon name="bookmark" :size="17" />
-              <span>{{ favorited ? '已收藏' : '收藏' }}</span>
-              <span class="action-count">{{ doc.favoriteCount || 0 }}</span>
-            </button>
-            <button class="action-btn" type="button" @click="share">
-              <Icon name="share" :size="17" />
-              <span>分享</span>
-            </button>
-          </div>
+          <DocActions
+            class="doc-actions--mobile"
+            :doc="doc"
+            :liked="liked"
+            :favorited="favorited"
+            layout="inline"
+            @like="toggleLike"
+            @favorite="toggleFavorite"
+            @share="share"
+          />
 
           <nav v-if="prevDoc || nextDoc" class="docs-pager">
             <button v-if="prevDoc" type="button" class="pager-link" @click="goDoc(prevDoc.id)">
@@ -287,8 +282,17 @@ watch(
           <CommentSection :doc-id="doc.id" :open="doc.openComment !== false" @count="doc.commentCount = $event" />
         </article>
 
-        <aside v-if="visibleToc.length > 2" class="docs-toc">
-          <div class="aside-sticky">
+        <aside class="docs-toc">
+          <DocActions
+            :doc="doc"
+            :liked="liked"
+            :favorited="favorited"
+            layout="aside"
+            @like="toggleLike"
+            @favorite="toggleFavorite"
+            @share="share"
+          />
+          <div v-if="visibleToc.length" class="aside-toc">
             <h4>本页目录</h4>
             <nav class="toc">
               <a

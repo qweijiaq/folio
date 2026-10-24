@@ -14,6 +14,7 @@ import EmptyState from '../components/EmptyState.vue'
 import Icon from '../components/Icon.vue'
 import ReadingBar from '../components/ReadingBar.vue'
 import ShareCard from '../components/ShareCard.vue'
+import DocActions from '../components/DocActions.vue'
 import { useReadingProgress } from '../composables/useReadingProgress'
 import { usePageMeta } from '../composables/usePageMeta'
 import { formatDate, formatNumber, readingTime, shortDate } from '../utils/format'
@@ -226,30 +227,17 @@ watch(
             <TagPill v-for="tag in doc.tags" :key="tag" :name="tag" />
           </div>
 
-          <div class="article-actions">
-            <button class="action-btn" :class="{ active: liked }" type="button" @click="toggleLike">
-              <Icon name="heart" :size="17" />
-              <span>{{ liked ? '已点赞' : '点赞' }}</span>
-              <span class="action-count">{{ doc.likeCount || 0 }}</span>
-            </button>
-            <button class="action-btn" :class="{ active: favorited }" type="button" @click="toggleFavorite">
-              <Icon name="bookmark" :size="17" />
-              <span>{{ favorited ? '已收藏' : '收藏' }}</span>
-              <span class="action-count">{{ doc.favoriteCount || 0 }}</span>
-            </button>
-            <button class="action-btn" type="button" @click="share">
-              <Icon name="share" :size="17" />
-              <span>分享</span>
-            </button>
-            <RouterLink
-              v-if="auth.user && auth.user.id !== doc.author.id"
-              :to="{ path: '/messages', query: { tab: 'messages', with: doc.author.username } }"
-              class="action-btn"
-            >
-              <Icon name="message" :size="17" />
-              <span>私信作者</span>
-            </RouterLink>
-          </div>
+          <DocActions
+            class="doc-actions--mobile"
+            :doc="doc"
+            :liked="liked"
+            :favorited="favorited"
+            layout="inline"
+            show-message
+            @like="toggleLike"
+            @favorite="toggleFavorite"
+            @share="share"
+          />
 
           <div class="author-card">
             <RouterLink :to="`/u/${doc.author.username}`">
@@ -295,8 +283,18 @@ watch(
           <CommentSection :doc-id="doc.id" :open="doc.openComment !== false" @count="doc.commentCount = $event" />
         </div>
 
-        <aside v-if="articleToc.length > 2" class="article-aside">
-          <div class="aside-sticky">
+        <aside class="article-aside">
+          <DocActions
+            :doc="doc"
+            :liked="liked"
+            :favorited="favorited"
+            layout="aside"
+            show-message
+            @like="toggleLike"
+            @favorite="toggleFavorite"
+            @share="share"
+          />
+          <div v-if="articleToc.length" class="aside-toc">
             <h4>目录</h4>
             <nav class="toc">
               <a

@@ -384,7 +384,15 @@
 }
 
 .article-aside {
+  position: sticky;
+  top: 96px;
+  align-self: start;
   min-width: 0;
+  max-height: calc(100vh - 120px);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow: hidden;
 }
 
 .article-tags {
@@ -613,7 +621,15 @@
 }
 
 .docs-toc {
+  position: sticky;
+  top: 96px;
+  align-self: start;
   min-width: 0;
+  max-height: calc(100vh - 120px);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow: hidden;
 }
 
 .docs-pager {
@@ -5062,4 +5078,110 @@
 .switch-row.is-disabled {
   opacity: 0.62;
   cursor: not-allowed;
+}
+
+
+/* ---------- 文章/文档侧栏操作与目录 ---------- */
+
+.doc-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.doc-actions--inline {
+  margin-top: 30px;
+}
+
+.doc-actions--mobile {
+  display: none;
+}
+
+.doc-actions--aside {
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
+.doc-actions--aside .action-btn {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+.doc-actions--aside .action-count {
+  margin-left: auto;
+}
+
+.aside-toc {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding-right: 4px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.aside-toc h4 {
+  margin-bottom: 12px;
+  color: var(--ink-faint);
+  font-family: var(--hand);
+  font-size: 15px;
+  font-weight: 500;
+}
+
+@media (max-width: 1100px) {
+  .doc-actions--mobile {
+    display: flex;
+  }
+}
+
+.back-to-top {
+  position: fixed;
+  right: 26px;
+  bottom: 26px;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  padding: 0;
+  border: 1.2px solid var(--line-strong);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  color: var(--ink-soft);
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(6px);
+  cursor: pointer;
+  transition: border-color 0.16s ease, color 0.16s ease, transform 0.16s ease;
+}
+
+.back-to-top:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  transform: translateY(-2px);
+}
+
+.back-top-enter-active,
+.back-top-leave-active {
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.back-top-enter-from,
+.back-top-leave-to {
+  opacity: 0;
+  transform: translateY(6px);
+}
+
+@media (max-width: 640px) {
+  .back-to-top {
+    right: 18px;
+    bottom: 18px;
+    width: 42px;
+    height: 42px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .back-to-top {
+    transition: none;
+  }
 }

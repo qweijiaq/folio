@@ -17,6 +17,7 @@ const route = useRoute()
 const menuOpen = ref(false)
 const mobileOpen = ref(false)
 const scrolled = ref(false)
+const showBackTop = ref(false)
 let inboxTimer = null
 
 const unreadTotal = computed(() => (auth.unread.messages || 0) + (auth.unread.notifications || 0) + (auth.unread.notices || 0))
@@ -38,6 +39,11 @@ function onDocumentClick(event) {
 
 function onScroll() {
   scrolled.value = window.scrollY > 8
+  showBackTop.value = window.scrollY > 600
+}
+
+function backToTop() {
+  window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
 function onNavClick(path) {
@@ -242,6 +248,11 @@ onBeforeUnmount(() => {
       </div>
     </footer>
 
+    <Transition name="back-top">
+      <button v-if="showBackTop" class="back-to-top" type="button" aria-label="回到顶部" title="回到顶部" @click="backToTop">
+        <Icon name="arrowUp" :size="18" />
+      </button>
+    </Transition>
     <ToastHost />
     <CommandPalette />
   </div>
