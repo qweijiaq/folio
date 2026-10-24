@@ -154,6 +154,14 @@ type Image struct {
 	Hash     string `gorm:"size:64;index" json:"-"`
 }
 
+// DocDailyStat 按天聚合内容阅读量，用于后台数据看板。
+type DocDailyStat struct {
+	Base
+	DocID uint   `gorm:"uniqueIndex:idx_doc_day;not null" json:"docID"`
+	Day   string `gorm:"size:10;uniqueIndex:idx_doc_day;not null" json:"day"`
+	Views int    `json:"views"`
+}
+
 // EmailCode 保存邮箱验证码。只存 HMAC 摘要，验证码用后即焚。
 type EmailCode struct {
 	Base

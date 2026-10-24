@@ -43,6 +43,7 @@ func migrate(gdb *gorm.DB) error {
 		&models.Notification{},
 		&models.Image{},
 		&models.ViewHistory{},
+		&models.DocDailyStat{},
 		&models.EmailCode{},
 		&models.UserSetting{},
 		&models.GlobalNotice{},
@@ -91,6 +92,12 @@ func EnsureSiteSetting(gdb *gorm.DB, cfg config.Config) error {
 		AllowRegister: true,
 		LoginCaptcha:  cfg.LoginCaptcha,
 	}).Error
+}
+
+// CleanupDailyStats 删除已不存在内容的每日统计，避免看板被历史测试数据污染。
+func CleanupDailyStats(gdb *gorm.DB) error {
+	return gdb.Where("doc_id NOT IN (?)", gdb.Model(&models.Document{}).Select("id")).
+		Delete(&models.DocDailyStat{}).Error
 }
 
 // EnsureFavoriteFolders 为所有用户补齐默认收藏夹，并把旧收藏归入默认收藏夹。

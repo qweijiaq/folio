@@ -3,6 +3,7 @@ package handlers
 import (
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type docInput struct {
@@ -296,6 +298,14 @@ func (a *API) DocDetail(c *gin.Context) {
 		if a.Cache.MarkView(c.Request.Context(), doc.ID, viewerKey, 30*time.Minute) {
 			a.DB.Model(&models.Document{}).Where("id = ?", doc.ID).UpdateColumn("view_count", gorm.Expr("view_count + 1"))
 			doc.ViewCount++
+			now := time.Now()
+			stat := models.DocDailyStat{DocID: doc.ID, Day: now.Format("2006-01-02"), Views: 1}
+			if err := a.DB.Clauses(clause.OnConflict{
+				Columns:   []clause.Column{{Name: "doc_id"}, {Name: "day"}},
+				DoUpdates: clause.Assignments(map[string]any{"views": gorm.Expr("views + 1"), "updated_at": now}),
+			}).Create(&stat).Error; err != nil {
+				log.Printf("写入每日阅读统计失败: %v", err)
+			}
 		}
 	}
 	if viewer != nil && viewer.ID != doc.AuthorID && doc.Status == models.StatusPublished {
@@ -518,6 +528,7 @@ func deleteDocumentsTx(tx *gorm.DB, ids []uint) error {
 	tx.Where("doc_id IN ?", ids).Delete(&models.Like{})
 	tx.Where("doc_id IN ?", ids).Delete(&models.Favorite{})
 	tx.Where("doc_id IN ?", ids).Delete(&models.Notification{})
+	tx.Where("doc_id IN ?", ids).Delete(&models.DocDailyStat{})
 	return tx.Where("id IN ?", ids).Delete(&models.Document{}).Error
 }
 

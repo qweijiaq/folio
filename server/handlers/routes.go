@@ -132,6 +132,7 @@ func (a *API) Routes(r *gin.Engine) {
 	admin := g.Group("/admin")
 	admin.Use(a.Auth())
 	admin.GET("/stats", a.StaffOnly(), a.AdminStats)
+	admin.GET("/dashboard", a.StaffOnly(), a.AdminDashboard)
 	admin.GET("/settings", a.SuperAdminOnly(), a.AdminSettings)
 	admin.PUT("/settings", a.SuperAdminOnly(), a.AdminSettingsUpdate)
 	admin.GET("/logs", a.SuperAdminOnly(), a.AdminLogs)

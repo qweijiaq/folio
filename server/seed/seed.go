@@ -1073,3 +1073,56 @@ func seedDocList(list []seedDoc) []seedDoc {
 	}
 	return out
 }
+
+// EnsureDailyStats 在演示模式下为历史阅读量补一份近 30 天的展示数据。
+// 只在统计表为空时执行，不会覆盖真实访问数据；FOLIO_DEMO=0 时不会调用。
+func EnsureDailyStats(gdb *gorm.DB) error {
+	var count int64
+	if err := gdb.Model(&models.DocDailyStat{}).Count(&count).Error; err != nil {
+		return err
+	}
+	if count > 0 {
+		return nil
+	}
+	var docs []models.Document
+	if err := gdb.Where("status = ? AND view_count > 0", models.StatusPublished).Find(&docs).Error; err != nil {
+		return err
+	}
+	now := time.Now()
+	stats := make([]models.DocDailyStat, 0, len(docs)*30)
+	for _, doc := range docs {
+		weights := make([]int, 30)
+		sum := 0
+		for i := 0; i < 30; i++ {
+			weight := 20 + int((uint64(doc.ID)*37+uint64(i)*19+uint64(doc.ViewCount))%53)
+			if i > 22 {
+				weight += 18
+			}
+			weights[i] = weight
+			sum += weight
+		}
+		remaining := doc.ViewCount
+		for i := 0; i < 30; i++ {
+			views := doc.ViewCount * weights[i] / sum
+			if i == 29 {
+				views = remaining
+			}
+			if views > remaining {
+				views = remaining
+			}
+			remaining -= views
+			if views <= 0 {
+				continue
+			}
+			stats = append(stats, models.DocDailyStat{
+				DocID: doc.ID,
+				Day:   now.AddDate(0, 0, i-29).Format("2006-01-02"),
+				Views: views,
+			})
+		}
+	}
+	if len(stats) == 0 {
+		return nil
+	}
+	return gdb.CreateInBatches(&stats, 100).Error
+}

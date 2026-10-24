@@ -9,6 +9,7 @@ import { mergeSite } from '../stores/site'
 import UserAvatar from '../components/UserAvatar.vue'
 import EmptyState from '../components/EmptyState.vue'
 import Icon from '../components/Icon.vue'
+import TrendChart from '../components/TrendChart.vue'
 import { usePageMeta } from '../composables/usePageMeta'
 
 const route = useRoute()
@@ -20,6 +21,9 @@ const tab = ref(String(route.query.tab || 'overview'))
 const loading = ref(true)
 const tabLoading = ref(false)
 const stats = ref(null)
+const dashboard = ref(null)
+const dashboardRange = ref(7)
+const dashboardMetric = ref('views')
 const docs = ref([])
 const users = ref([])
 const images = ref([])
@@ -56,6 +60,7 @@ const staff = computed(() => ['super_admin', 'admin'].includes(auth.user?.role))
 const tabs = computed(() => {
   const list = [
     { key: 'overview', label: '概览', icon: 'home' },
+    { key: 'dashboard', label: '数据看板', icon: 'chart' },
     { key: 'content', label: '内容管理', icon: 'edit' },
     { key: 'categories', label: '分类管理', icon: 'tag' },
     { key: 'images', label: '图片管理', icon: 'image' },
@@ -73,6 +78,40 @@ const tabs = computed(() => {
 
 const siteStats = computed(() => stats.value?.site || {})
 const myStats = computed(() => stats.value?.mine || {})
+const dashboardSummary = computed(() => dashboard.value?.summary || {})
+const dashboardSystem = computed(() => dashboard.value?.system || {})
+const dashboardTrendLabels = computed(() => dashboard.value?.trend?.dates || [])
+const dashboardTrendValues = computed(() => dashboard.value?.trend?.[dashboardMetric.value] || [])
+const dashboardMetrics = [
+  { key: 'views', label: '阅读' },
+  { key: 'content', label: '内容' },
+  { key: 'users', label: '读者' },
+  { key: 'logins', label: '登录' }
+]
+
+async function loadDashboard() {
+  try {
+    dashboard.value = await api.get('/admin/dashboard', { range: dashboardRange.value })
+  } catch (err) {
+    toastError(err)
+  }
+}
+
+function setDashboardRange(range) {
+  if (dashboardRange.value === range) return
+  dashboardRange.value = range
+  loadDashboard()
+}
+
+function uptimeLabel(seconds) {
+  const total = Number(seconds) || 0
+  const days = Math.floor(total / 86400)
+  const hours = Math.floor((total % 86400) / 3600)
+  const minutes = Math.floor((total % 3600) / 60)
+  if (days) return `${days} 天 ${hours} 小时`
+  if (hours) return `${hours} 小时 ${minutes} 分`
+  return `${minutes} 分钟`
+}
 
 async function loadStats() {
   try {
@@ -344,6 +383,7 @@ async function loadTab() {
   tabLoading.value = true
   try {
     if (tab.value === 'overview') await loadStats()
+    else if (tab.value === 'dashboard') await loadDashboard()
     else if (tab.value === 'content') await loadDocs()
     else if (tab.value === 'categories') await loadCategories()
     else if (tab.value === 'images') await loadImages()
@@ -551,6 +591,134 @@ onMounted(async () => {
               <RouterLink v-if="isSuper" :to="{ path: '/admin', query: { tab: 'users' } }" class="btn btn-ghost btn-sm">
                 <Icon name="user" :size="15" /> 用户与权限
               </RouterLink>
+            </div>
+          </template>
+        </div>
+
+        <div v-else-if="tab === 'dashboard'" class="panel dashboard-panel">
+          <header class="panel-head panel-head--row">
+            <div>
+              <h2>数据看板</h2>
+              <p>阅读、内容、读者与登录趋势；每日阅读从当前版本开始累计。</p>
+            </div>
+            <div class="dashboard-range">
+              <button v-for="range in [7, 30, 90]" :key="range" type="button" :class="{ active: dashboardRange === range }" @click="setDashboardRange(range)">
+                {{ range }} 天
+              </button>
+            </div>
+          </header>
+
+          <p v-if="tabLoading" class="muted loading-line">正在计算数据…</p>
+          <EmptyState v-else-if="!dashboard" icon="chart" title="暂无数据" description="产生阅读、内容或登录后，这里会显示趋势。">
+            <button class="btn btn-ghost btn-sm" type="button" @click="loadDashboard">重新加载</button>
+          </EmptyState>
+          <template v-else>
+            <div class="admin-stat-grid dashboard-stat-grid">
+              <div class="admin-stat">
+                <span>{{ dashboardRange }} 天阅读</span>
+                <strong>{{ dashboardSummary.viewsRange || 0 }}</strong>
+              </div>
+              <div class="admin-stat">
+                <span>累计阅读</span>
+                <strong>{{ dashboardSummary.views || 0 }}</strong>
+              </div>
+              <div class="admin-stat">
+                <span>新增内容</span>
+                <strong>{{ dashboardSummary.newContent || 0 }}</strong>
+              </div>
+              <div class="admin-stat">
+                <span>新增读者</span>
+                <strong>{{ dashboardSummary.newUsers || 0 }}</strong>
+              </div>
+              <div class="admin-stat">
+                <span>今日登录</span>
+                <strong>{{ dashboardSummary.todayLogins || 0 }}</strong>
+              </div>
+              <div class="admin-stat">
+                <span>图片 / 存储</span>
+                <strong>{{ dashboardSummary.images || 0 }} <small>{{ formatBytes(dashboardSummary.uploadBytes || 0) }}</small></strong>
+              </div>
+            </div>
+
+            <section class="dashboard-chart-card">
+              <header class="dashboard-chart-head">
+                <div>
+                  <h3>趋势</h3>
+                  <p>{{ dashboardRange }} 天内的每日变化</p>
+                </div>
+                <div class="tag-row">
+                  <button
+                    v-for="metric in dashboardMetrics"
+                    :key="metric.key"
+                    class="tag"
+                    :class="{ 'tag--active': dashboardMetric === metric.key }"
+                    type="button"
+                    @click="dashboardMetric = metric.key"
+                  >
+                    {{ metric.label }}
+                  </button>
+                </div>
+              </header>
+              <TrendChart :labels="dashboardTrendLabels" :values="dashboardTrendValues" />
+            </section>
+
+            <div class="dashboard-columns">
+              <section class="dashboard-card">
+                <header class="dashboard-card-head">
+                  <div>
+                    <h3>热门内容</h3>
+                    <p>按累计阅读排序</p>
+                  </div>
+                  <RouterLink :to="{ path: '/admin', query: { tab: 'content' } }" class="text-link">全部内容</RouterLink>
+                </header>
+                <EmptyState v-if="!dashboard.top?.length" icon="edit" title="还没有内容" description="发布文章或文档后会出现在这里。" />
+                <div v-else class="dashboard-rank-list">
+                  <RouterLink
+                    v-for="(item, index) in dashboard.top"
+                    :key="item.id"
+                    :to="`/${item.kind === 'doc' ? 'docs' : 'articles'}/${item.id}`"
+                    class="dashboard-rank"
+                  >
+                    <span class="dashboard-rank-num">{{ index + 1 }}</span>
+                    <span class="dashboard-rank-main">
+                      <strong>{{ item.title }}</strong>
+                      <small>{{ item.kind === 'doc' ? '文档' : '文章' }} · {{ item.author?.nickname }}<template v-if="item.category"> · {{ item.category.name }}</template></small>
+                    </span>
+                    <span class="dashboard-rank-count">{{ item.viewCount }} 阅读</span>
+                  </RouterLink>
+                </div>
+              </section>
+
+              <section class="dashboard-card">
+                <header class="dashboard-card-head">
+                  <div>
+                    <h3>最近动态</h3>
+                    <p>登录、发布与管理动作</p>
+                  </div>
+                  <RouterLink v-if="isSuper" :to="{ path: '/admin', query: { tab: 'logs' } }" class="text-link">全部日志</RouterLink>
+                </header>
+                <p v-if="!dashboard.activity?.length" class="empty-inline">这段时间还没有记录。</p>
+                <div v-else class="dashboard-activity-list">
+                  <div v-for="entry in dashboard.activity" :key="entry.id" class="dashboard-activity">
+                    <span class="badge">{{ entry.action }}</span>
+                    <span class="dashboard-activity-main">
+                      <strong>@{{ entry.username || '匿名' }}</strong>
+                      <span>{{ entry.detail || '—' }}</span>
+                    </span>
+                    <time>{{ shortDate(entry.createdAt) }}</time>
+                  </div>
+                </div>
+              </section>
+            </div>
+
+            <div class="dashboard-system">
+              <span>数据库 {{ dashboardSystem.db || '—' }}</span>
+              <span>Redis {{ dashboardSystem.redis || 'off' }}</span>
+              <span>图片存储 {{ dashboardSystem.storage || 'local' }}</span>
+              <span>Go {{ dashboardSystem.goVersion }}</span>
+              <span>{{ dashboardSystem.goroutines }} goroutines</span>
+              <span>内存 {{ formatBytes(dashboardSystem.memoryBytes || 0) }}</span>
+              <span>运行 {{ uptimeLabel(dashboardSystem.uptimeSec) }}</span>
             </div>
           </template>
         </div>

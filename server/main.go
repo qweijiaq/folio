@@ -34,12 +34,18 @@ func main() {
 		if err := seed.Run(gdb, cfg); err != nil {
 			log.Printf("演示数据初始化失败: %v", err)
 		}
+		if err := seed.EnsureDailyStats(gdb); err != nil {
+			log.Printf("演示阅读统计初始化失败: %v", err)
+		}
 	}
 	if err := db.EnsureFavoriteFolders(gdb); err != nil {
 		log.Printf("收藏夹初始化失败: %v", err)
 	}
 	if err := db.EnsureSiteSetting(gdb, cfg); err != nil {
 		log.Printf("站点设置初始化失败: %v", err)
+	}
+	if err := db.CleanupDailyStats(gdb); err != nil {
+		log.Printf("清理阅读统计失败: %v", err)
 	}
 
 	rcache := cache.New(cfg.RedisAddr, cfg.RedisPassword, cfg.RedisDB)

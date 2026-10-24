@@ -1414,3 +1414,64 @@ func TestSEOEndpoints(t *testing.T) {
 		t.Fatalf("分享元信息不完整: %s", page)
 	}
 }
+
+func TestAdminDashboard(t *testing.T) {
+	s := newTestAPI(t)
+	ownerToken, _ := s.register(t, "dashboardowner")
+	readerToken, _ := s.register(t, "dashboardreader")
+	status, created := s.do(t, "POST", "/api/docs", ownerToken, map[string]any{
+		"kind": "article", "title": "看板测试文章", "content": "正文", "status": "published",
+	})
+	if status != http.StatusCreated {
+		t.Fatalf("创建看板测试文章失败: %d %v", status, created)
+	}
+	docID := uint(number(obj(created, "doc")["id"]))
+	status, _ = s.do(t, "GET", "/api/docs/"+itoa(docID), readerToken, nil)
+	if status != http.StatusOK {
+		t.Fatalf("读取文章失败: %d", status)
+	}
+
+	status, dashboard := s.do(t, "GET", "/api/admin/dashboard?range=7", ownerToken, nil)
+	if status != http.StatusOK {
+		t.Fatalf("读取数据看板失败: %d %v", status, dashboard)
+	}
+	trend := obj(dashboard, "trend")
+	dates := list(trend, "dates")
+	if len(dates) != 7 || len(list(trend, "views")) != 7 {
+		t.Fatalf("7 天趋势长度不正确: %v", trend)
+	}
+	if number(obj(dashboard, "summary")["views"]) < 1 {
+		t.Fatalf("阅读总量应至少为 1: %v", dashboard)
+	}
+	top := list(dashboard, "top")
+	if len(top) == 0 || top[0].(map[string]any)["id"] != float64(docID) {
+		t.Fatalf("热门内容不正确: %v", top)
+	}
+	if number(obj(dashboard, "system")["goroutines"]) <= 0 {
+		t.Fatalf("系统信息不正确: %v", dashboard["system"])
+	}
+
+	var daily int64
+	s.api.DB.Model(&models.DocDailyStat{}).Where("doc_id = ?", docID).Count(&daily)
+	if daily != 1 {
+		t.Fatalf("应写入一条每日阅读统计，实际 %d", daily)
+	}
+
+	status, dashboard = s.do(t, "GET", "/api/admin/dashboard?range=30", ownerToken, nil)
+	if status != http.StatusOK || len(list(obj(dashboard, "trend"), "dates")) != 30 {
+		t.Fatalf("30 天看板异常: %d %v", status, dashboard)
+	}
+	status, _ = s.do(t, "GET", "/api/admin/dashboard", readerToken, nil)
+	if status != http.StatusForbidden {
+		t.Fatalf("读者不应能查看看板，实际 %d", status)
+	}
+
+	status, _ = s.do(t, "DELETE", "/api/docs/"+itoa(docID), ownerToken, nil)
+	if status != http.StatusOK {
+		t.Fatalf("删除看板测试文章失败: %d", status)
+	}
+	s.api.DB.Model(&models.DocDailyStat{}).Where("doc_id = ?", docID).Count(&daily)
+	if daily != 0 {
+		t.Fatalf("删除内容后每日统计应一并清理，实际 %d", daily)
+	}
+}

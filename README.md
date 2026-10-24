@@ -54,7 +54,7 @@ folio/
 │   ├── db/                 # SQLite / MySQL / 内存数据库
 │   ├── cache/              # Redis：JWT 黑名单、浏览量去重
 │   ├── mail/               # SMTP 发信与本地调试邮件
-│   ├── models/             # 19 张表的模型
+│   ├── models/             # 20 张表的模型
 │   ├── art/                # 生成式封面与头像
 │   ├── storage/            # 本地磁盘 / 七牛云存储抽象
 │   ├── handlers/           # 路由、接口与集成测试
@@ -233,7 +233,7 @@ Go 服务会自动托管 `../web/dist`，访问 <http://localhost:8080> 即可�
 
 ## 数据模型
 
-只有 19 张表：
+只有 20 张表：
 
 | 表 | 用途 |
 | --- | --- |
@@ -251,6 +251,7 @@ Go 服务会自动托管 `../web/dist`，访问 <http://localhost:8080> 即可�
 | `notifications` | 点赞 / 评论 / 关注通知 |
 | `images` | 上传图片：文件名、存储提供方、对象键、URL、MIME、大小、内容哈希、上传者 |
 | `view_histories` | 登录用户的浏览历史（用户 + 内容唯一） |
+| `doc_daily_stats` | 内容每日阅读量（内容 + 日期唯一），用于数据看板 |
 | `email_codes` | 邮箱验证码：用途、HMAC 摘要、过期时间、尝试次数、消费时间 |
 | `site_settings` | 单行站点设置：名称、描述、维护者、注册开关、图形验证码 |
 | `operation_logs` | 操作日志：操作者、动作、对象、详情、IP、User-Agent |
@@ -411,6 +412,17 @@ FOLIO_SMTP_FROM=you@qq.com
 
 管理员在 `/admin` 的「全站通知」里发布公告，内容会显示在每个登录用户的「消息 → 通知」顶部，并计入顶栏未读徽标。公告支持一个站内或站外链接，已读状态按用户分别记录在 `notice_reads`。删除公告时会同时清理对应的已读记录。
 
+## 数据看板
+
+管理后台的「数据看板」提供 7 / 30 / 90 天视图：
+
+- 每日阅读、内容新增、读者新增、登录次数趋势；
+- 区间阅读、累计阅读、新增内容、新增读者、今日登录、图片存储概览；
+- 热门内容排行和最近管理动态；
+- 数据库、Redis、图片存储、Go 版本、goroutine、内存和运行时间。
+
+每日阅读写入 `doc_daily_stats`，同一篇内容同一天只保留一行；演示模式会在统计表为空时补一份近 30 天的展示数据，真实部署设置 `FOLIO_DEMO=0` 后只记录实际访问。登录趋势来自操作日志，因此从本版本开始累计。
+
 ## 站点设置与操作日志
 
 超级管理员进入 `/admin` 后有两个额外入口：
@@ -451,7 +463,7 @@ FOLIO_SITE_URL=https://your-domain.com
 - `/write`、`/write/:id` 编辑器：Markdown 分栏预览、图片上传/粘贴/拖拽、分类、自动封面预览、标签、评论开关、草稿/发布、文档树父级与排序（仅超级管理员和管理员）
 - `/messages` 私信与通知：会话列表、WebSocket 实时消息、图片与表情、轮询兜底、全站公告与通知已读
 - `/me` 我的空间：资料、密码、隐私与消息、最近登录记录、收藏夹、浏览历史；管理员额外看到自己的文章与文档
-- `/admin` 管理后台：概览、内容管理、分类管理、图片管理、全站通知；超级管理员额外拥有用户与权限、站点设置和操作日志
+- `/admin` 管理后台：概览、数据看板、内容管理、分类管理、图片管理、全站通知；超级管理员额外拥有用户与权限、站点设置和操作日志
 - `/login`、`/register` 登录注册：密码登录、邮箱验证码登录、QQ 登录、注册
 - `/forgot` 通过邮箱验证码重置密码
 
@@ -489,7 +501,7 @@ FOLIO_SITE_URL=https://your-domain.com
 | 视觉 | `GET /art/cover.svg`、`GET /art/cover.png`、`GET /art/avatar.svg` |
 | SEO | `GET /feed.xml`、`GET /sitemap.xml`、`GET /robots.txt` |
 | 系统 | `GET /health` |
-| 管理 | `GET /admin/stats`、`GET /admin/docs`、`GET /admin/users`、`DELETE /admin/users/:id`、`PUT /admin/users/:id/role`、`GET|PUT /admin/settings`、`GET /admin/logs`、`GET|POST /admin/notices`、`DELETE /admin/notices/:id` |
+| 管理 | `GET /admin/stats`、`GET /admin/dashboard`、`GET /admin/docs`、`GET /admin/users`、`DELETE /admin/users/:id`、`PUT /admin/users/:id/role`、`GET|PUT /admin/settings`、`GET /admin/logs`、`GET|POST /admin/notices`、`DELETE /admin/notices/:id` |
 
 ## 一些实现约定
 
