@@ -2086,7 +2086,7 @@ func TestAIHelpRetrievalAndModes(t *testing.T) {
 
 	calls = 0
 	status, answer = s.do(t, "POST", "/api/ai/ask", readerToken, map[string]any{
-		"question": "火星土壤的化学成分是什么？", "apiKey": "user-secret-key", "model": "claude-sonnet-5-5", "mode": "strict",
+		"question": "第一个问题：火星土壤的化学成分是什么？", "apiKey": "user-secret-key", "model": "claude-sonnet-5-5", "mode": "strict",
 	})
 	if status != http.StatusOK || calls != 0 {
 		t.Fatalf("严格模式无资料时不应调用上游: status=%d calls=%d %v", status, calls, answer)
@@ -2097,7 +2097,7 @@ func TestAIHelpRetrievalAndModes(t *testing.T) {
 
 	calls = 0
 	status, answer = s.do(t, "POST", "/api/ai/ask", readerToken, map[string]any{
-		"question": "火星土壤的化学成分是什么？", "apiKey": "user-secret-key", "model": "claude-sonnet-5-5", "mode": "expanded",
+		"question": "第一个问题：火星土壤的化学成分是什么？", "apiKey": "user-secret-key", "model": "claude-sonnet-5-5", "mode": "expanded",
 	})
 	if status != http.StatusOK || calls != 1 {
 		t.Fatalf("通用知识模式应调用上游: status=%d calls=%d %v", status, calls, answer)
@@ -2255,5 +2255,91 @@ func TestAIAskStreamOpenAICompatible(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Fatalf("兼容流式响应缺少 %q: %s", want, body)
 		}
+	}
+}
+
+func TestAccessSettings(t *testing.T) {
+	s := newTestAPI(t)
+	token, _ := s.register(t, "accessowner")
+
+	status, data := s.do(t, "GET", "/api/admin/access", token, nil)
+	if status != http.StatusOK {
+		t.Fatalf("读取注册设置失败: %d %v", status, data)
+	}
+	if data["allowRegister"] != true || data["qqLogin"] != false || data["qqConfigured"] != false {
+		t.Fatalf("默认注册设置不正确: %v", data)
+	}
+
+	status, data = s.do(t, "PUT", "/api/admin/access", token, map[string]any{
+		"allowRegister": false, "qqLogin": true,
+	})
+	if status != http.StatusBadRequest {
+		t.Fatalf("未配置凭据时不应允许开启 QQ 登录: %d %v", status, data)
+	}
+
+	status, data = s.do(t, "PUT", "/api/admin/access", token, map[string]any{
+		"allowRegister": false, "qqLogin": false,
+	})
+	if status != http.StatusOK || obj(data, "access")["allowRegister"] != false {
+		t.Fatalf("保存注册开关失败: %d %v", status, data)
+	}
+
+	// 保存其他站点设置时，不应把未提交的注册开关重置。
+	status, data = s.do(t, "PUT", "/api/admin/settings", token, map[string]any{
+		"siteName": "测试站", "siteDesc": "描述", "siteOwner": "tester", "loginCaptcha": false,
+	})
+	if status != http.StatusOK || obj(data, "settings")["allowRegister"] != false {
+		t.Fatalf("更新站点设置不应重置注册开关: %d %v", status, data)
+	}
+
+	status, _ = s.do(t, "POST", "/api/auth/register", "", map[string]string{
+		"username": "closedreader", "nickname": "closedreader", "email": "closed@example.com", "password": "password123",
+	})
+	if status != http.StatusForbidden {
+		t.Fatalf("关闭注册后新用户应被拒绝，实际 %d", status)
+	}
+}
+
+func TestQQLoginSwitch(t *testing.T) {
+	s := newTestAPI(t, func(cfg *config.Config) {
+		cfg.QQAppID = "qq-app"
+		cfg.QQAppKey = "qq-key"
+		cfg.QQRedirect = "http://example.com/api/auth/qq/callback"
+	})
+	token, _ := s.register(t, "qqswitch")
+
+	status, data := s.do(t, "GET", "/api/admin/access", token, nil)
+	if status != http.StatusOK || data["qqConfigured"] != true || data["qqLogin"] != true {
+		t.Fatalf("配置凭据后 QQ 登录应默认开启: %d %v", status, data)
+	}
+	status, data = s.do(t, "GET", "/api/auth/qq/status", "", nil)
+	if status != http.StatusOK || data["enabled"] != true {
+		t.Fatalf("QQ 登录状态应为开启: %d %v", status, data)
+	}
+
+	status, data = s.do(t, "PUT", "/api/admin/access", token, map[string]any{
+		"allowRegister": true, "qqLogin": false,
+	})
+	if status != http.StatusOK {
+		t.Fatalf("关闭 QQ 登录失败: %d %v", status, data)
+	}
+	status, data = s.do(t, "GET", "/api/auth/qq/status", "", nil)
+	if status != http.StatusOK || data["enabled"] != false {
+		t.Fatalf("QQ 登录状态应为关闭: %d %v", status, data)
+	}
+	status, _ = s.do(t, "GET", "/api/auth/qq/url", "", nil)
+	if status != http.StatusServiceUnavailable {
+		t.Fatalf("关闭后 QQ 授权入口应不可用，实际 %d", status)
+	}
+
+	status, data = s.do(t, "PUT", "/api/admin/access", token, map[string]any{
+		"allowRegister": true, "qqLogin": true,
+	})
+	if status != http.StatusOK {
+		t.Fatalf("重新开启 QQ 登录失败: %d %v", status, data)
+	}
+	status, data = s.do(t, "GET", "/api/auth/qq/status", "", nil)
+	if status != http.StatusOK || data["enabled"] != true {
+		t.Fatalf("QQ 登录状态应重新开启: %d %v", status, data)
 	}
 }

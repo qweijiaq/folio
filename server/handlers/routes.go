@@ -149,6 +149,8 @@ func (a *API) Routes(r *gin.Engine) {
 	admin.GET("/export", a.StaffOnly(), a.ExportContent)
 	admin.GET("/settings", a.SuperAdminOnly(), a.AdminSettings)
 	admin.PUT("/settings", a.SuperAdminOnly(), a.AdminSettingsUpdate)
+	admin.GET("/access", a.SuperAdminOnly(), a.AdminAccess)
+	admin.PUT("/access", a.SuperAdminOnly(), a.AdminAccessUpdate)
 	admin.GET("/storage", a.SuperAdminOnly(), a.AdminStorage)
 	admin.PUT("/storage", a.SuperAdminOnly(), a.AdminStorageUpdate)
 	admin.POST("/storage/test", a.SuperAdminOnly(), a.AdminStorageTest)

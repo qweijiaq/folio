@@ -230,14 +230,24 @@ func normalizeQAHistory(items []qaHistoryMessage) []qaHistoryMessage {
 	return out
 }
 
+func qaCleanSearchText(text string) string {
+	text = strings.TrimSpace(text)
+	for _, prefix := range []string{"第一个问题", "第二个问题", "第三个问题", "问个问题", "问一下", "我想问", "想请教", "请问", "帮我看看", "帮我"} {
+		if strings.HasPrefix(text, prefix) {
+			text = strings.TrimLeft(strings.TrimPrefix(text, prefix), "：:，,。.、 ")
+		}
+	}
+	return text
+}
+
 func qaSearchQuestion(question string, history []qaHistoryMessage) string {
-	parts := []string{question}
+	parts := []string{qaCleanSearchText(question)}
 	added := 0
 	for i := len(history) - 1; i >= 0 && added < 2; i -= 1 {
 		if history[i].Role != "user" {
 			continue
 		}
-		parts = append(parts, truncateRunes(history[i].Content, 220))
+		parts = append(parts, qaCleanSearchText(truncateRunes(history[i].Content, 220)))
 		added += 1
 	}
 	return strings.Join(parts, " ")

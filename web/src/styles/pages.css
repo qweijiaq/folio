@@ -4927,11 +4927,8 @@
   display: flex;
   flex-direction: column;
   gap: 22px;
-  max-height: 68vh;
   margin-top: 20px;
   padding-right: 6px;
-  overflow-y: auto;
-  scrollbar-width: thin;
 }
 
 .ask-message {
@@ -5045,4 +5042,24 @@
   width: 100%;
   max-width: 760px;
   margin-top: 6px;
+}
+
+.admin-user-tools--single {
+  grid-template-columns: 1fr;
+}
+
+.access-invite-card {
+  margin-top: 20px;
+}
+
+.access-flow-hint {
+  margin: 16px 0 8px;
+  padding: 10px 13px;
+  border-left: 2px solid var(--accent);
+  background: var(--surface-2);
+}
+
+.switch-row.is-disabled {
+  opacity: 0.62;
+  cursor: not-allowed;
 }

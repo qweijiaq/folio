@@ -37,6 +37,19 @@ func (a *API) loginCaptchaEnabled() bool {
 	return a.siteSetting().LoginCaptcha
 }
 
+// qqLoginEnabled 同时要求环境变量凭据完整，并且后台开关没有关闭。
+// 老库没有 qq_login 字段值时，沿用“配置了凭据就启用”的行为。
+func (a *API) qqLoginEnabled() bool {
+	if !a.Cfg.QQEnabled() {
+		return false
+	}
+	setting := a.siteSetting()
+	if setting.QQLogin == nil {
+		return true
+	}
+	return *setting.QQLogin
+}
+
 func (a *API) allowRegistration() bool {
 	return a.siteSetting().AllowRegister
 }
@@ -54,7 +67,51 @@ func (a *API) siteInfo() gin.H {
 
 func (a *API) AdminSettings(c *gin.Context) {
 	setting := a.siteSetting()
-	c.JSON(http.StatusOK, gin.H{"settings": setting})
+	c.JSON(http.StatusOK, gin.H{
+		"settings":     setting,
+		"qqConfigured": a.Cfg.QQEnabled(),
+		"qqLogin":      a.qqLoginEnabled(),
+	})
+}
+
+func (a *API) AdminAccess(c *gin.Context) {
+	setting := a.siteSetting()
+	c.JSON(http.StatusOK, gin.H{
+		"allowRegister": setting.AllowRegister,
+		"qqLogin":       a.qqLoginEnabled(),
+		"qqConfigured":  a.Cfg.QQEnabled(),
+	})
+}
+
+func (a *API) AdminAccessUpdate(c *gin.Context) {
+	var in struct {
+		AllowRegister bool `json:"allowRegister"`
+		QQLogin       bool `json:"qqLogin"`
+	}
+	if err := c.ShouldBindJSON(&in); err != nil {
+		bad(c, "请求格式错误")
+		return
+	}
+	if in.QQLogin && !a.Cfg.QQEnabled() {
+		bad(c, "请先在环境变量配置 QQ 互联凭据，再开启 QQ 登录")
+		return
+	}
+	setting := a.siteSetting()
+	setting.AllowRegister = in.AllowRegister
+	setting.QQLogin = &in.QQLogin
+	if err := a.DB.Save(&setting).Error; err != nil {
+		fail(c, http.StatusInternalServerError, "保存注册设置失败")
+		return
+	}
+	a.logAction(c, "更新注册设置", "site", setting.ID, "更新公开注册与 QQ 登录开关")
+	c.JSON(http.StatusOK, gin.H{
+		"access": gin.H{
+			"allowRegister": setting.AllowRegister,
+			"qqLogin":       a.qqLoginEnabled(),
+			"qqConfigured":  a.Cfg.QQEnabled(),
+		},
+		"site": a.siteInfo(),
+	})
 }
 
 func (a *API) AdminSettingsUpdate(c *gin.Context) {
@@ -62,7 +119,7 @@ func (a *API) AdminSettingsUpdate(c *gin.Context) {
 		SiteName      string `json:"siteName"`
 		SiteDesc      string `json:"siteDesc"`
 		SiteOwner     string `json:"siteOwner"`
-		AllowRegister bool   `json:"allowRegister"`
+		AllowRegister *bool  `json:"allowRegister"`
 		LoginCaptcha  bool   `json:"loginCaptcha"`
 	}
 	if err := c.ShouldBindJSON(&in); err != nil {
@@ -92,7 +149,9 @@ func (a *API) AdminSettingsUpdate(c *gin.Context) {
 	setting.SiteName = in.SiteName
 	setting.SiteDesc = in.SiteDesc
 	setting.SiteOwner = in.SiteOwner
-	setting.AllowRegister = in.AllowRegister
+	if in.AllowRegister != nil {
+		setting.AllowRegister = *in.AllowRegister
+	}
 	setting.LoginCaptcha = in.LoginCaptcha
 	if err := a.DB.Save(&setting).Error; err != nil {
 		fail(c, http.StatusInternalServerError, "保存站点设置失败")

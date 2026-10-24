@@ -43,7 +43,7 @@ type qqUserInfoResponse struct {
 }
 
 func (a *API) QQStatus(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"enabled": a.Cfg.QQEnabled()})
+	c.JSON(http.StatusOK, gin.H{"enabled": a.qqLoginEnabled()})
 }
 
 func (a *API) issueQQState() (string, error) {
@@ -87,7 +87,7 @@ func (a *API) parseQQClaims(raw, subject string) (*tokenClaims, bool) {
 }
 
 func (a *API) QQURL(c *gin.Context) {
-	if !a.Cfg.QQEnabled() {
+	if !a.qqLoginEnabled() {
 		fail(c, http.StatusServiceUnavailable, "QQ 登录未启用")
 		return
 	}
@@ -146,7 +146,7 @@ func fetchQQJSON(ctx context.Context, endpoint string, out any) error {
 }
 
 func (a *API) QQCallback(c *gin.Context) {
-	if !a.Cfg.QQEnabled() {
+	if !a.qqLoginEnabled() {
 		a.qqRedirectError(c, "QQ 登录未启用")
 		return
 	}

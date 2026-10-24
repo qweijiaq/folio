@@ -14,7 +14,7 @@
 - **邮箱能力**：配置 SMTP 后支持邮箱验证码注册、验证码登录、绑定/更换邮箱和自助找回密码。
 - **AI 问答**：登录用户可以使用自己的 API Key 向站内文章、文档和站点帮助提问，可选 Anthropic、DeepSeek、智谱 GLM、Kimi、通义千问；支持分块检索、严格/通用模式、多轮追问和流式回答，回答会带回引用，本站不提供、不保存 Key。
 - **关于页与站点帮助**：`/about` 按场景介绍全部功能，目录同时作为 AI 的站点帮助知识库；新增功能只需补充一条目录记录。
-- **站点设置与审计**：超级管理员可以在后台修改站点名称、描述、维护者、注册开关和登录图形验证码；登录、内容、分类、图片、角色等关键动作都会写入操作日志。
+- **站点设置与审计**：超级管理员可以在后台修改站点名称、描述、维护者和登录图形验证码；公开注册与 QQ 登录开关在「注册与邀请」；登录、内容、分类、图片、角色等关键动作都会写入操作日志。
 - **隐私与消息偏好**：每个人都可以决定是否公开关注/粉丝列表、是否接收私信和点赞/评论通知，并选择公开主页的封面样式。
 - **删繁就简**：去掉复杂的角色表、文档权限、文档密码与试看、审核流、Banner、Elasticsearch；只保留一个极简的三级角色字段。
 - **保留基本互动**：评论（两级）、评论点赞、内容点赞、收藏、关注/粉丝、私信、站内通知、管理后台；每篇文章或文档都可以单独关闭评论。私信支持图片、表情和 WebSocket 实时推送。管理员可以发布全站公告。
@@ -158,11 +158,14 @@ cd web && npm install && npm run dev
 
 规则很简单：站点只有一个超级管理员，通常是第一位注册用户；超级管理员在 `/admin` 的「用户与权限」里把读者设为管理员，或把管理员降回读者。管理员降级后不能继续发布，但已经发布的内容和互动会保留。
 
-关闭注册后，超级管理员仍然可以在「用户与权限」里：
+关闭注册后，超级管理员仍然可以在「注册与邀请」里：
 
+- 打开「允许公开注册」恢复公开注册，或保持关闭；
 - 生成一次性邀请链接，朋友通过 `/register?invite=...` 创建普通读者账号；
-- 直接创建用户，并指定是读者还是管理员；
-- 邀请码可设置 1 / 7 / 30 / 90 天有效期，使用后立即失效，未使用的可以撤销。
+- 邀请码可设置 1 / 7 / 30 / 90 天有效期，使用后立即失效，未使用的可以撤销；
+- 「用户与权限」里仍然可以直接创建用户，并指定是读者还是管理员。
+
+QQ 登录也由这里控制：没有配置 QQ 互联凭据时开关不可开启；配置后默认开启，可以随时关闭，关闭后登录页会隐藏 QQ 按钮。
 
 管理后台入口在登录后的顶栏齿轮图标、用户下拉菜单「管理后台」，以及「我的空间」侧栏。
 
@@ -230,7 +233,7 @@ Go 服务会自动托管 `../web/dist`，访问 <http://localhost:8080> 即可�
 | `FOLIO_MAIL_DEBUG` | `0` | 设为 `1` 时不发邮件，把验证码写进日志并在界面显示，仅用于自测 |
 | `FOLIO_LOGIN_CAPTCHA` | `0` | 设为 `1` 时，密码登录和发送邮箱验证码需要图形验证码 |
 | `FOLIO_CAPTCHA_DEBUG` | `0` | 设为 `1` 时接口返回图形验证码答案并在页面自动填入，**仅本地自测** |
-| `FOLIO_QQ_APP_ID` | 空 | QQ 互联应用 ID；三项都填才启用 QQ 登录 |
+| `FOLIO_QQ_APP_ID` | 空 | QQ 互联应用 ID；三项都填后可在「注册与邀请」开启 QQ 登录 |
 | `FOLIO_QQ_APP_KEY` | 空 | QQ 互联应用密钥 |
 | `FOLIO_QQ_REDIRECT` | 空 | QQ 回调地址，例如 `http://localhost:8080/api/auth/qq/callback` |
 | `FOLIO_QQ_API_BASE` | `https://graph.qq.com` | QQ 接口地址，一般无需修改 |
@@ -268,7 +271,7 @@ Go 服务会自动托管 `../web/dist`，访问 <http://localhost:8080> 即可�
 | `invite_codes` | 一次性邀请码：备注、有效期、创建者、使用者和使用时间 |
 | `document_revisions` | 内容历史版本：标题、摘要、正文、标签、状态、编辑者与时间 |
 | `email_codes` | 邮箱验证码：用途、HMAC 摘要、过期时间、尝试次数、消费时间 |
-| `site_settings` | 单行站点设置：名称、描述、维护者、注册开关、图形验证码 |
+| `site_settings` | 单行站点设置：名称、描述、维护者、注册开关、QQ 登录开关、图形验证码 |
 | `storage_settings` | 单行图片存储设置：提供方、加密后的七牛密钥、空间、域名、区域与对象前缀 |
 | `operation_logs` | 操作日志：操作者、动作、对象、详情、IP、User-Agent |
 | `global_notices` | 全站公告：标题、内容、链接、发布者 |
@@ -389,6 +392,8 @@ FOLIO_QQ_REDIRECT=http://localhost:8080/api/auth/qq/callback
 ```
 
 回调地址必须与 QQ 互联后台的「回调地址」完全一致。第一次用 QQ 登录会自动创建账号（用户名形如 `qq_ab12cd34`，昵称取 QQ 昵称，密码随机），之后用同一个 QQ 号会回到同一账号。QQ 用户可以在「账号安全」里绑定邮箱，再用邮箱验证码设置密码。
+
+配置好凭据并重启后，QQ 登录默认开启；超级管理员可以在「管理后台 → 注册与邀请」随时关闭或重新开启。还没有申请 QQ 互联应用时保持关闭即可。
 
 流程是服务端回调：QQ 授权后跳回 `/api/auth/qq/callback`，服务端校验签名与 state，再用 5 分钟有效的一次性票据把浏览器送回 `/login` 并换取登录 token，token 不出现在 URL 里。本地 Vite 开发时把 `FOLIO_WEB_URL` 设为 `http://localhost:5173`；Docker 或同源部署留空即可。
 
@@ -543,7 +548,7 @@ FOLIO_SITE_URL=https://your-domain.com
 - `/messages` 私信与通知：会话列表、WebSocket 实时消息、图片与表情、轮询兜底、全站公告与通知已读
 - `/ask` 问 AI：用户自带 API Key（Anthropic、DeepSeek、智谱 GLM、Kimi、通义千问），检索已发布内容与站点帮助，支持严格/通用模式、多轮追问和流式回答
 - `/me` 我的空间：资料、密码、隐私与消息、最近登录记录、收藏夹、浏览历史；管理员额外看到自己的文章与文档，并可以把一篇文章置顶到公开主页
-- `/admin` 管理后台：概览、数据看板、内容管理、分类管理、图片管理、全站通知；内容管理支持导出全部 Markdown；超级管理员额外拥有用户与权限、邀请注册、存储设置、站点设置和操作日志
+- `/admin` 管理后台：概览、数据看板、内容管理、分类管理、图片管理、全站通知；内容管理支持导出全部 Markdown；超级管理员额外拥有用户与权限、注册与邀请、存储设置、站点设置和操作日志
 - `/login`、`/register` 登录注册：密码登录、邮箱验证码登录、QQ 登录、注册；关闭注册后可通过一次性邀请链接注册
 - `/forgot` 通过邮箱验证码重置密码
 
@@ -582,7 +587,7 @@ FOLIO_SITE_URL=https://your-domain.com
 | 站点 | `GET /site`、`GET /site/features`（公开的功能目录，关于页使用） |
 | SEO | `GET /feed.xml`、`GET /sitemap.xml`、`GET /robots.txt` |
 | 系统 | `GET /health` |
-| 管理 | `GET /admin/stats`、`GET /admin/dashboard`、`GET /admin/docs`、`GET /admin/users`、`POST /admin/users`、`DELETE /admin/users/:id`、`PUT /admin/users/:id/role`、`GET|POST /admin/invites`、`DELETE /admin/invites/:id`、`GET|PUT /admin/settings`、`GET|PUT /admin/storage`、`POST /admin/storage/test`、`GET /admin/logs`、`GET|POST /admin/notices`、`DELETE /admin/notices/:id`、`GET /admin/export` |
+| 管理 | `GET /admin/stats`、`GET /admin/dashboard`、`GET /admin/docs`、`GET /admin/users`、`POST /admin/users`、`DELETE /admin/users/:id`、`PUT /admin/users/:id/role`、`GET|POST /admin/invites`、`DELETE /admin/invites/:id`、`GET|PUT /admin/access`、`GET|PUT /admin/settings`、`GET|PUT /admin/storage`、`POST /admin/storage/test`、`GET /admin/logs`、`GET|POST /admin/notices`、`DELETE /admin/notices/:id`、`GET /admin/export` |
 
 ## 一些实现约定
 

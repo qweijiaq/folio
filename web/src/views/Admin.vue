@@ -53,9 +53,16 @@ const settingsForm = reactive({
   siteName: '',
   siteDesc: '',
   siteOwner: '',
-  allowRegister: true,
   loginCaptcha: false
 })
+const accessForm = reactive({
+  allowRegister: true,
+  qqLogin: false
+})
+const accessInfo = reactive({
+  qqConfigured: false
+})
+const savingAccess = ref(false)
 const storageForm = reactive({
   provider: 'local',
   qiniuAccessKey: '',
@@ -108,6 +115,7 @@ const tabs = computed(() => {
   if (isSuper.value) {
     list.push(
       { key: 'users', label: '用户与权限', icon: 'user' },
+      { key: 'access', label: '注册与邀请', icon: 'follow' },
       { key: 'storage', label: '存储设置', icon: 'cloud' },
       { key: 'settings', label: '站点设置', icon: 'settings' },
       { key: 'logs', label: '操作日志', icon: 'clock' }
@@ -368,7 +376,6 @@ async function loadSettings() {
     settingsForm.siteName = setting.siteName || ''
     settingsForm.siteDesc = setting.siteDesc || ''
     settingsForm.siteOwner = setting.siteOwner || ''
-    settingsForm.allowRegister = Boolean(setting.allowRegister)
     settingsForm.loginCaptcha = Boolean(setting.loginCaptcha)
   } catch (err) {
     toastError(err)
@@ -387,7 +394,6 @@ async function saveSettings() {
       siteName: name,
       siteDesc: settingsForm.siteDesc.trim(),
       siteOwner: settingsForm.siteOwner.trim(),
-      allowRegister: settingsForm.allowRegister,
       loginCaptcha: settingsForm.loginCaptcha
     })
     if (data.site) mergeSite(data.site)
@@ -396,6 +402,36 @@ async function saveSettings() {
     toastError(err)
   } finally {
     savingSettings.value = false
+  }
+}
+
+async function loadAccess() {
+  try {
+    const data = await api.get('/admin/access')
+    accessForm.allowRegister = Boolean(data.allowRegister)
+    accessForm.qqLogin = Boolean(data.qqLogin)
+    accessInfo.qqConfigured = Boolean(data.qqConfigured)
+  } catch (err) {
+    toastError(err)
+  }
+}
+
+async function saveAccess() {
+  savingAccess.value = true
+  try {
+    const data = await api.put('/admin/access', {
+      allowRegister: accessForm.allowRegister,
+      qqLogin: accessForm.qqLogin
+    })
+    accessForm.allowRegister = Boolean(data.access?.allowRegister)
+    accessForm.qqLogin = Boolean(data.access?.qqLogin)
+    accessInfo.qqConfigured = Boolean(data.access?.qqConfigured)
+    if (data.site) mergeSite(data.site)
+    toast('注册设置已保存')
+  } catch (err) {
+    toastError(err)
+  } finally {
+    savingAccess.value = false
   }
 }
 
@@ -653,7 +689,14 @@ async function loadTab() {
         tab.value = 'overview'
         await loadStats()
       } else {
-        await Promise.all([loadUsers(), loadInvites()])
+        await loadUsers()
+      }
+    } else if (tab.value === 'access') {
+      if (!isSuper.value) {
+        tab.value = 'overview'
+        await loadStats()
+      } else {
+        await Promise.all([loadAccess(), loadInvites()])
       }
     } else if (tab.value === 'settings') {
       if (!isSuper.value) {
@@ -1155,44 +1198,7 @@ onMounted(async () => {
             </form>
           </header>
 
-          <div class="admin-user-tools">
-            <section class="admin-tool-card">
-              <header class="admin-tool-head">
-                <div>
-                  <h3>邀请注册</h3>
-                  <p>生成一次性邀请链接。适合关闭注册后只邀请朋友加入。</p>
-                </div>
-              </header>
-              <form class="invite-form" @submit.prevent="createInvite">
-                <input v-model="inviteNote" maxlength="100" placeholder="备注，例如「给阿林」" />
-                <select v-model.number="inviteDays" aria-label="有效期">
-                  <option :value="1">1 天</option>
-                  <option :value="7">7 天</option>
-                  <option :value="30">30 天</option>
-                  <option :value="90">90 天</option>
-                </select>
-                <button class="btn btn-primary btn-sm" type="submit" :disabled="creatingInvite">
-                  {{ creatingInvite ? '生成中…' : '生成邀请' }}
-                </button>
-              </form>
-              <p v-if="!invites.length" class="hint">还没有邀请码。</p>
-              <div v-else class="invite-list">
-                <div v-for="invite in invites" :key="invite.id" class="invite-row">
-                  <span class="badge" :class="invite.status === 'active' ? 'badge-live' : ''">{{ inviteStatusLabel(invite.status) }}</span>
-                  <span class="invite-main">
-                    <strong>{{ invite.note || '邀请注册' }}</strong>
-                    <small v-if="invite.status === 'active'">{{ inviteLink(invite.code) }}</small>
-                    <small v-else-if="invite.status === 'used'">{{ shortDate(invite.usedAt) }} 已使用 · 由 {{ invite.createdByName }}</small>
-                    <small v-else>{{ shortDate(invite.expiresAt) }} 过期 · 由 {{ invite.createdByName }}</small>
-                  </span>
-                  <template v-if="invite.status === 'active'">
-                    <button class="text-link" type="button" @click="copyInvite(invite)">复制链接</button>
-                    <button class="text-link danger" type="button" @click="removeInvite(invite)">撤销</button>
-                  </template>
-                </div>
-              </div>
-            </section>
-
+          <div class="admin-user-tools admin-user-tools--single">
             <section class="admin-tool-card">
               <header class="admin-tool-head">
                 <div>
@@ -1335,7 +1341,7 @@ onMounted(async () => {
         <div v-else-if="tab === 'settings' && isSuper" class="panel">
           <header class="panel-head">
             <h2>站点设置</h2>
-            <p>站点名称、描述与维护者会立即显示在页头、页脚和首页；注册开关对访客生效。</p>
+            <p>站点名称、描述与维护者会立即显示在页头、页脚和首页。公开注册与 QQ 登录开关在「注册与邀请」里。</p>
           </header>
 
           <p v-if="tabLoading" class="muted loading-line">正在加载…</p>
@@ -1358,13 +1364,6 @@ onMounted(async () => {
 
             <div class="settings-switches">
               <label class="switch-row">
-                <input v-model="settingsForm.allowRegister" type="checkbox" />
-                <span>
-                  <strong>开放注册</strong>
-                  <small>关闭后登录页不再显示注册入口，注册接口会返回 403。已有账号不受影响。</small>
-                </span>
-              </label>
-              <label class="switch-row">
                 <input v-model="settingsForm.loginCaptcha" type="checkbox" />
                 <span>
                   <strong>登录图形验证码</strong>
@@ -1379,6 +1378,80 @@ onMounted(async () => {
               </button>
             </div>
           </form>
+        </div>
+
+        <div v-else-if="tab === 'access' && isSuper" class="panel">
+          <header class="panel-head">
+            <h2>注册与邀请</h2>
+            <p>控制谁能注册、是否显示 QQ 登录，并为特定的人生成一次性邀请链接。</p>
+          </header>
+
+          <p v-if="tabLoading" class="muted loading-line">正在加载注册设置…</p>
+          <template v-else>
+            <form class="settings-form" @submit.prevent="saveAccess">
+              <div class="settings-switches">
+                <label class="switch-row">
+                  <input v-model="accessForm.allowRegister" type="checkbox" />
+                  <span>
+                    <strong>允许公开注册</strong>
+                    <small>关闭后注册页不再接受任何人直接注册；现有用户不受影响，邀请链接和管理员直接创建用户仍然可用。</small>
+                  </span>
+                </label>
+                <label class="switch-row" :class="{ 'is-disabled': !accessInfo.qqConfigured }">
+                  <input v-model="accessForm.qqLogin" type="checkbox" :disabled="!accessInfo.qqConfigured" />
+                  <span>
+                    <strong>显示 QQ 登录</strong>
+                    <small v-if="accessInfo.qqConfigured">配置好 QQ 互联凭据后，可以在这里随时关闭或重新开启；关闭后登录页会隐藏 QQ 登录按钮。</small>
+                    <small v-else>尚未配置 QQ 互联凭据，暂时无法开启。申请并配置 FOLIO_QQ_APP_ID、FOLIO_QQ_APP_KEY、FOLIO_QQ_REDIRECT 后重启服务即可。</small>
+                  </span>
+                </label>
+              </div>
+              <div class="form-actions">
+                <button class="btn btn-primary btn-sm" type="submit" :disabled="savingAccess">
+                  {{ savingAccess ? '保存中…' : '保存开关' }}
+                </button>
+              </div>
+            </form>
+
+            <p class="hint access-flow-hint">邀请流程：关闭公开注册 → 生成邀请码 → 复制链接发给对方。邀请码只能使用一次，过期后自动失效。</p>
+            <section class="admin-tool-card access-invite-card">
+              <header class="admin-tool-head">
+                <div>
+                  <h3>生成邀请链接</h3>
+                  <p>生成一次性邀请链接。适合关闭注册后只邀请朋友加入。</p>
+                </div>
+              </header>
+              <form class="invite-form" @submit.prevent="createInvite">
+                <input v-model="inviteNote" maxlength="100" placeholder="备注，例如「给阿林」" />
+                <select v-model.number="inviteDays" aria-label="有效期">
+                  <option :value="1">1 天</option>
+                  <option :value="7">7 天</option>
+                  <option :value="30">30 天</option>
+                  <option :value="90">90 天</option>
+                </select>
+                <button class="btn btn-primary btn-sm" type="submit" :disabled="creatingInvite">
+                  {{ creatingInvite ? '生成中…' : '生成邀请' }}
+                </button>
+              </form>
+              <p v-if="!invites.length" class="hint">还没有邀请码。</p>
+              <div v-else class="invite-list">
+                <div v-for="invite in invites" :key="invite.id" class="invite-row">
+                  <span class="badge" :class="invite.status === 'active' ? 'badge-live' : ''">{{ inviteStatusLabel(invite.status) }}</span>
+                  <span class="invite-main">
+                    <strong>{{ invite.note || '邀请注册' }}</strong>
+                    <small v-if="invite.status === 'active'">{{ inviteLink(invite.code) }}</small>
+                    <small v-else-if="invite.status === 'used'">{{ shortDate(invite.usedAt) }} 已使用 · 由 {{ invite.createdByName }}</small>
+                    <small v-else>{{ shortDate(invite.expiresAt) }} 过期 · 由 {{ invite.createdByName }}</small>
+                  </span>
+                  <template v-if="invite.status === 'active'">
+                    <button class="text-link" type="button" @click="copyInvite(invite)">复制链接</button>
+                    <button class="text-link danger" type="button" @click="removeInvite(invite)">撤销</button>
+                  </template>
+                </div>
+              </div>
+            </section>
+
+          </template>
         </div>
 
         <div v-else-if="tab === 'storage' && isSuper" class="panel">
