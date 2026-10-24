@@ -20,7 +20,7 @@ const query = ref('')
 const searchInput = ref(null)
 let inboxTimer = null
 
-const unreadTotal = computed(() => (auth.unread.messages || 0) + (auth.unread.notifications || 0))
+const unreadTotal = computed(() => (auth.unread.messages || 0) + (auth.unread.notifications || 0) + (auth.unread.notices || 0))
 const staff = computed(() => ['super_admin', 'admin'].includes(auth.user?.role))
 const writeTarget = computed(() => (auth.user ? '/write' : { path: '/login', query: { redirect: '/write' } }))
 const today = new Date().getFullYear()

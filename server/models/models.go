@@ -186,6 +186,23 @@ type SiteSetting struct {
 	LoginCaptcha  bool   `json:"loginCaptcha"`
 }
 
+// GlobalNotice 是管理员发给全站用户的公告，展示在通知页顶部。
+type GlobalNotice struct {
+	Base
+	Title         string `gorm:"size:120;not null" json:"title"`
+	Content       string `gorm:"size:1000" json:"content"`
+	Link          string `gorm:"size:255" json:"link"`
+	CreatedBy     uint   `json:"createdBy"`
+	CreatedByName string `gorm:"size:32" json:"createdByName"`
+}
+
+// NoticeRead 记录某个用户读过某条全站公告。
+type NoticeRead struct {
+	Base
+	NoticeID uint `gorm:"uniqueIndex:idx_notice_read" json:"noticeID"`
+	UserID   uint `gorm:"uniqueIndex:idx_notice_read" json:"userID"`
+}
+
 // OperationLog 记录登录、内容与后台管理动作，供超级管理员审计。
 type OperationLog struct {
 	Base

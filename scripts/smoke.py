@@ -156,6 +156,16 @@ def main():
     _, login_records = request("GET", "/api/me/login-records", admin_token, expect=200)
     check("个人登录记录", any(item["action"] == "登录" for item in login_records["items"]), login_records)
 
+    notice_id = 0
+    _, notice_data = request(
+        "POST",
+        "/api/admin/notices",
+        admin_token,
+        {"title": f"冒烟公告 {SUFFIX}", "content": "这是一条自动清理的测试公告。", "link": "/articles"},
+        expect=201,
+    )
+    notice_id = notice_data["notice"]["id"]
+
     _, registered = request(
         "POST",
         "/api/auth/register",
@@ -169,6 +179,12 @@ def main():
     )
     peer_id = registered["user"]["id"]
     peer_token = login(PEER, PEER_PASSWORD)
+
+    _, peer_notices = request("GET", "/api/notices", peer_token, expect=200)
+    check("全站公告", peer_notices["unread"] >= 1 and any(item["id"] == notice_id for item in peer_notices["items"]))
+    request("POST", "/api/notices/read", peer_token, expect=200)
+    _, peer_notices = request("GET", "/api/notices", peer_token, expect=200)
+    check("公告已读", peer_notices["unread"] == 0)
 
     _, peer_settings = request("GET", "/api/me/settings", peer_token, expect=200)
     check("默认隐私设置", peer_settings["settings"]["openFans"] is True and peer_settings["settings"]["homeStyle"] == "cover")
@@ -421,6 +437,8 @@ def main():
             request("DELETE", f"/api/images/{image_id}", admin_token)
         if peer_image_id:
             request("DELETE", f"/api/images/{peer_image_id}", admin_token)
+        if notice_id:
+            request("DELETE", f"/api/admin/notices/{notice_id}", admin_token)
         if comment_doc_id:
             request("DELETE", f"/api/docs/{comment_doc_id}", admin_token)
         if category_id:

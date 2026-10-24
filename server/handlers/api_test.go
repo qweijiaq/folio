@@ -1245,3 +1245,56 @@ func TestCaptchaDebugMode(t *testing.T) {
 		t.Fatalf("调试答案应能通过图形验证码，实际 %d", status)
 	}
 }
+
+func TestGlobalNotices(t *testing.T) {
+	s := newTestAPI(t)
+	adminToken, _ := s.register(t, "noticeadmin")
+	userToken, _ := s.register(t, "noticeuser")
+
+	status, created := s.do(t, "POST", "/api/admin/notices", adminToken, map[string]string{
+		"title": "站点维护", "content": "今晚十点进行例行维护。", "link": "/articles",
+	})
+	if status != http.StatusCreated {
+		t.Fatalf("发布公告失败: %d %v", status, created)
+	}
+	noticeID := uint(number(obj(created, "notice")["id"]))
+
+	status, notices := s.do(t, "GET", "/api/notices", userToken, nil)
+	if status != http.StatusOK || len(list(notices, "items")) != 1 || notices["unread"] != float64(1) {
+		t.Fatalf("公告列表不正确: %d %v", status, notices)
+	}
+	if list(notices, "items")[0].(map[string]any)["read"] != false {
+		t.Fatalf("公告初始应为未读: %v", notices)
+	}
+	_, inbox := s.do(t, "GET", "/api/inbox", userToken, nil)
+	if inbox["notices"] != float64(1) {
+		t.Fatalf("收件箱应包含公告未读数: %v", inbox)
+	}
+	status, notificationData := s.do(t, "GET", "/api/notifications", userToken, nil)
+	if status != http.StatusOK || len(list(notificationData, "notices")) != 1 || notificationData["noticeUnread"] != float64(1) {
+		t.Fatalf("通知页应包含公告: %d %v", status, notificationData)
+	}
+
+	request := s.do
+	status, _ = request(t, "POST", "/api/notices/read", userToken, nil)
+	if status != http.StatusOK {
+		t.Fatalf("标记公告已读失败: %d", status)
+	}
+	_, notices = s.do(t, "GET", "/api/notices", userToken, nil)
+	if notices["unread"] != float64(0) || list(notices, "items")[0].(map[string]any)["read"] != true {
+		t.Fatalf("公告已读状态不正确: %v", notices)
+	}
+
+	status, _ = s.do(t, "POST", "/api/admin/notices", userToken, map[string]string{"title": "越权", "content": "x"})
+	if status != http.StatusForbidden {
+		t.Fatalf("读者不应能发布公告，实际 %d", status)
+	}
+	status, _ = s.do(t, "DELETE", "/api/admin/notices/"+itoa(noticeID), adminToken, nil)
+	if status != http.StatusOK {
+		t.Fatalf("删除公告失败: %d", status)
+	}
+	_, notices = s.do(t, "GET", "/api/notices", userToken, nil)
+	if len(list(notices, "items")) != 0 {
+		t.Fatalf("删除后公告仍存在: %v", notices)
+	}
+}

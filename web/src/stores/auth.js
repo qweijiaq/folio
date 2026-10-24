@@ -4,7 +4,7 @@ import { api, getToken, setToken } from '../api/client'
 export const auth = reactive({
   user: null,
   ready: false,
-  unread: { messages: 0, notifications: 0 }
+  unread: { messages: 0, notifications: 0, notices: 0 }
 })
 
 export function loggedIn() {
@@ -83,5 +83,5 @@ export async function logout() {
 export function logoutLocal() {
   setToken('')
   auth.user = null
-  auth.unread = { messages: 0, notifications: 0 }
+  auth.unread = { messages: 0, notifications: 0, notices: 0 }
 }

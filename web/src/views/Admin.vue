@@ -31,6 +31,9 @@ const imageInput = ref(null)
 const newCategory = ref({ name: '', sort: 0 })
 const editingCategory = ref({ id: 0, name: '', sort: 0 })
 const savingSettings = ref(false)
+const notices = ref([])
+const newNotice = reactive({ title: '', content: '', link: '' })
+const creatingNotice = ref(false)
 const settingsForm = reactive({
   siteName: '',
   siteDesc: '',
@@ -52,7 +55,8 @@ const tabs = computed(() => {
     { key: 'overview', label: '概览', icon: 'home' },
     { key: 'content', label: '内容管理', icon: 'edit' },
     { key: 'categories', label: '分类管理', icon: 'tag' },
-    { key: 'images', label: '图片管理', icon: 'image' }
+    { key: 'images', label: '图片管理', icon: 'image' },
+    { key: 'notices', label: '全站通知', icon: 'bell' }
   ]
   if (isSuper.value) {
     list.push(
@@ -107,6 +111,48 @@ async function loadImages() {
       pageSize: 50
     })
     images.value = data.items
+  } catch (err) {
+    toastError(err)
+  }
+}
+
+async function loadNotices() {
+  try {
+    const data = await api.get('/admin/notices')
+    notices.value = data.items
+  } catch (err) {
+    toastError(err)
+  }
+}
+
+async function createNotice() {
+  const title = newNotice.title.trim()
+  const content = newNotice.content.trim()
+  if (!title || !content) {
+    toast('请填写公告标题和内容')
+    return
+  }
+  creatingNotice.value = true
+  try {
+    await api.post('/admin/notices', { title, content, link: newNotice.link.trim() })
+    newNotice.title = ''
+    newNotice.content = ''
+    newNotice.link = ''
+    await loadNotices()
+    toast('公告已发布')
+  } catch (err) {
+    toastError(err)
+  } finally {
+    creatingNotice.value = false
+  }
+}
+
+async function removeNotice(notice) {
+  if (!window.confirm(`删除公告「${notice.title}」？`)) return
+  try {
+    await api.del(`/admin/notices/${notice.id}`)
+    await loadNotices()
+    toast('公告已删除')
   } catch (err) {
     toastError(err)
   }
@@ -298,6 +344,7 @@ async function loadTab() {
     else if (tab.value === 'content') await loadDocs()
     else if (tab.value === 'categories') await loadCategories()
     else if (tab.value === 'images') await loadImages()
+    else if (tab.value === 'notices') await loadNotices()
     else if (tab.value === 'users') {
       if (!isSuper.value) {
         tab.value = 'overview'
@@ -715,6 +762,48 @@ onMounted(async () => {
               </button>
               <span v-else class="hint">当前站点所有者</span>
             </div>
+          </div>
+        </div>
+
+        <div v-else-if="tab === 'notices'" class="panel">
+          <header class="panel-head">
+            <h2>全站通知</h2>
+            <p>公告会显示在所有用户的「消息 → 通知」顶部，并计入未读提醒。</p>
+          </header>
+
+          <form class="settings-form notice-form" @submit.prevent="createNotice">
+            <div class="field">
+              <label for="notice-title">标题</label>
+              <input id="notice-title" v-model="newNotice.title" maxlength="80" placeholder="例如：站点维护通知" />
+            </div>
+            <div class="field">
+              <label for="notice-content">内容</label>
+              <textarea id="notice-content" v-model="newNotice.content" rows="3" maxlength="1000" placeholder="写清楚发生了什么、什么时候、需要读者做什么。"></textarea>
+            </div>
+            <div class="field">
+              <label for="notice-link">链接 <span class="hint">可选</span></label>
+              <input id="notice-link" v-model="newNotice.link" maxlength="255" placeholder="/articles 或 https://…" />
+            </div>
+            <div class="form-actions">
+              <button class="btn btn-primary btn-sm" type="submit" :disabled="creatingNotice">
+                {{ creatingNotice ? '发布中…' : '发布公告' }}
+              </button>
+            </div>
+          </form>
+
+          <p v-if="tabLoading" class="muted loading-line">正在加载…</p>
+          <EmptyState v-else-if="!notices.length" icon="bell" title="还没有全站通知" description="发布后，所有登录用户都会在通知页看到它。" />
+          <div v-else class="notice-admin-list">
+            <article v-for="notice in notices" :key="notice.id" class="notice-admin-item">
+              <div>
+                <strong>{{ notice.title }}</strong>
+                <p>{{ notice.content }}</p>
+                <span>{{ shortDate(notice.createdAt) }} · {{ notice.createdByName }}<template v-if="notice.link"> · {{ notice.link }}</template></span>
+              </div>
+              <button class="icon-btn danger" type="button" aria-label="删除公告" @click="removeNotice(notice)">
+                <Icon name="trash" :size="16" />
+              </button>
+            </article>
           </div>
         </div>
 

@@ -178,7 +178,11 @@ func (a *API) Inbox(c *gin.Context) {
 	var messages, notifications int64
 	a.DB.Model(&models.Message{}).Where("receiver_id = ? AND read_at IS NULL", me.ID).Count(&messages)
 	a.DB.Model(&models.Notification{}).Where("user_id = ? AND `read` = ?", me.ID, false).Count(&notifications)
-	c.JSON(http.StatusOK, gin.H{"messages": messages, "notifications": notifications})
+	c.JSON(http.StatusOK, gin.H{
+		"messages":      messages,
+		"notifications": notifications,
+		"notices":       a.unreadNoticeCount(me.ID),
+	})
 }
 
 func (a *API) Notifications(c *gin.Context) {
@@ -189,7 +193,13 @@ func (a *API) Notifications(c *gin.Context) {
 	}).Where("user_id = ?", me.ID).Order("id DESC").Limit(60).Find(&items)
 	var unread int64
 	a.DB.Model(&models.Notification{}).Where("user_id = ? AND `read` = ?", me.ID, false).Count(&unread)
-	c.JSON(http.StatusOK, gin.H{"items": items, "unread": unread})
+	notices, noticeUnread := a.noticesFor(me.ID, 5)
+	c.JSON(http.StatusOK, gin.H{
+		"items":        items,
+		"unread":       unread,
+		"notices":      notices,
+		"noticeUnread": noticeUnread,
+	})
 }
 
 func (a *API) NotificationsRead(c *gin.Context) {

@@ -45,6 +45,8 @@ func migrate(gdb *gorm.DB) error {
 		&models.ViewHistory{},
 		&models.EmailCode{},
 		&models.UserSetting{},
+		&models.GlobalNotice{},
+		&models.NoticeRead{},
 		&models.SiteSetting{},
 		&models.OperationLog{},
 	); err != nil {

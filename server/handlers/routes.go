@@ -113,6 +113,8 @@ func (a *API) Routes(r *gin.Engine) {
 
 	authed.GET("/notifications", a.Notifications)
 	authed.POST("/notifications/read", a.NotificationsRead)
+	authed.GET("/notices", a.Notices)
+	authed.POST("/notices/read", a.NoticesRead)
 
 	authed.GET("/messages/conversations", a.Conversations)
 	authed.GET("/messages/with/:username", a.MessageThread)
@@ -124,6 +126,9 @@ func (a *API) Routes(r *gin.Engine) {
 	admin.GET("/settings", a.SuperAdminOnly(), a.AdminSettings)
 	admin.PUT("/settings", a.SuperAdminOnly(), a.AdminSettingsUpdate)
 	admin.GET("/logs", a.SuperAdminOnly(), a.AdminLogs)
+	admin.GET("/notices", a.StaffOnly(), a.AdminNotices)
+	admin.POST("/notices", a.StaffOnly(), a.AdminNoticeCreate)
+	admin.DELETE("/notices/:id", a.StaffOnly(), a.AdminNoticeDelete)
 	admin.GET("/docs", a.StaffOnly(), a.AdminDocs)
 	admin.GET("/users", a.SuperAdminOnly(), a.AdminUsers)
 	admin.DELETE("/users/:id", a.SuperAdminOnly(), a.AdminDeleteUser)

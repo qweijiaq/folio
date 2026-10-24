@@ -17,6 +17,7 @@ const withUser = computed(() => String(route.query.with || ''))
 
 const conversations = ref([])
 const notifications = ref([])
+const notices = ref([])
 const notifUnread = ref(0)
 const messages = ref([])
 const peer = ref(null)
@@ -86,10 +87,12 @@ async function loadNotifications(markRead = false) {
   try {
     const data = await api.get('/notifications')
     notifications.value = data.items
-    notifUnread.value = data.unread
-    if (markRead && data.unread > 0) {
-      await api.post('/notifications/read')
+    notices.value = data.notices || []
+    notifUnread.value = (data.unread || 0) + (data.noticeUnread || 0)
+    if (markRead && notifUnread.value > 0) {
+      await Promise.all([api.post('/notifications/read'), api.post('/notices/read')])
       notifications.value = data.items.map((item) => ({ ...item, read: true }))
+      notices.value = notices.value.map((item) => ({ ...item, read: true }))
       notifUnread.value = 0
       await refreshInbox()
     }
@@ -444,12 +447,33 @@ onBeforeUnmount(() => {
           <template v-else>
             <header class="thread-head thread-head--simple">
               <strong>通知</strong>
-              <button v-if="notifications.some((item) => !item.read)" class="text-link" type="button" @click="loadNotifications(true)">
+              <button
+                v-if="notifications.some((item) => !item.read) || notices.some((item) => !item.read)"
+                class="text-link"
+                type="button"
+                @click="loadNotifications(true)"
+              >
                 全部标为已读
               </button>
             </header>
+            <div class="notice-list">
+              <article v-for="notice in notices" :key="notice.id" class="notice-item" :class="{ unread: !notice.read }">
+                <header class="notice-head">
+                  <span class="notice-tag">全站通知</span>
+                  <strong>{{ notice.title }}</strong>
+                  <time>{{ shortDate(notice.createdAt) }}</time>
+                </header>
+                <p>{{ notice.content }}</p>
+                <div class="notice-foot">
+                  <span>由 {{ notice.createdByName }} 发布</span>
+                  <RouterLink v-if="notice.link?.startsWith('/')" :to="notice.link" class="text-link">查看详情</RouterLink>
+                  <a v-else-if="notice.link" :href="notice.link" target="_blank" rel="noopener" class="text-link">查看详情</a>
+                </div>
+              </article>
+            </div>
+
             <div class="notif-list">
-              <p v-if="!notifications.length" class="empty-inline">还没有新的通知。</p>
+              <p v-if="!notifications.length && !notices.length" class="empty-inline">还没有新的通知。</p>
               <RouterLink
                 v-for="item in notifications"
                 :key="item.id"

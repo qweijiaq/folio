@@ -15,7 +15,7 @@
 - **站点设置与审计**：超级管理员可以在后台修改站点名称、描述、维护者、注册开关和登录图形验证码；登录、内容、分类、图片、角色等关键动作都会写入操作日志。
 - **隐私与消息偏好**：每个人都可以决定是否公开关注/粉丝列表、是否接收私信和点赞/评论通知，并选择公开主页的封面样式。
 - **删繁就简**：去掉复杂的角色表、文档权限、文档密码与试看、审核流、Banner、Elasticsearch；只保留一个极简的三级角色字段。
-- **保留基本互动**：评论（两级）、评论点赞、内容点赞、收藏、关注/粉丝、私信、站内通知、管理后台；每篇文章或文档都可以单独关闭评论。私信支持图片、表情和 WebSocket 实时推送。
+- **保留基本互动**：评论（两级）、评论点赞、内容点赞、收藏、关注/粉丝、私信、站内通知、管理后台；每篇文章或文档都可以单独关闭评论。私信支持图片、表情和 WebSocket 实时推送。管理员可以发布全站公告。
 - **个人站点权限**：只有超级管理员和管理员可以发布文章与文档；普通读者可以评论、点赞、收藏、关注和私信。超级管理员可以在管理后台把读者设为管理员。
 
 ## 三种运行模式
@@ -52,7 +52,7 @@ folio/
 │   ├── db/                 # SQLite / MySQL / 内存数据库
 │   ├── cache/              # Redis：JWT 黑名单、浏览量去重
 │   ├── mail/               # SMTP 发信与本地调试邮件
-│   ├── models/             # 17 张表的模型
+│   ├── models/             # 19 张表的模型
 │   ├── art/                # 生成式封面与头像
 │   ├── handlers/           # 路由、接口与集成测试
 │   └── seed/               # 演示数据
@@ -222,7 +222,7 @@ Go 服务会自动托管 `../web/dist`，访问 <http://localhost:8080> 即可�
 
 ## 数据模型
 
-只有 17 张表：
+只有 19 张表：
 
 | 表 | 用途 |
 | --- | --- |
@@ -243,6 +243,8 @@ Go 服务会自动托管 `../web/dist`，访问 <http://localhost:8080> 即可�
 | `email_codes` | 邮箱验证码：用途、HMAC 摘要、过期时间、尝试次数、消费时间 |
 | `site_settings` | 单行站点设置：名称、描述、维护者、注册开关、图形验证码 |
 | `operation_logs` | 操作日志：操作者、动作、对象、详情、IP、User-Agent |
+| `global_notices` | 全站公告：标题、内容、链接、发布者 |
+| `notice_reads` | 每个用户对全站公告的已读记录（公告 + 用户唯一） |
 
 `documents.status` 只有 `draft` 与 `published`。草稿只有作者本人和超级管理员可见。分类只作用于文章，文档仍然使用 `parent_id` 目录树。
 
@@ -375,6 +377,10 @@ FOLIO_SMTP_PASSWORD=你的 SMTP 授权码
 FOLIO_SMTP_FROM=you@qq.com
 ```
 
+## 全站通知
+
+管理员在 `/admin` 的「全站通知」里发布公告，内容会显示在每个登录用户的「消息 → 通知」顶部，并计入顶栏未读徽标。公告支持一个站内或站外链接，已读状态按用户分别记录在 `notice_reads`。删除公告时会同时清理对应的已读记录。
+
 ## 站点设置与操作日志
 
 超级管理员进入 `/admin` 后有两个额外入口：
@@ -394,9 +400,9 @@ FOLIO_SMTP_FROM=you@qq.com
 - `/search` 全站搜索：关键词搜索；点击任意标签进入该标签的全站聚合
 - `/u/:username` 公开主页：文章、文档、关注、粉丝；可按隐私设置隐藏关注/粉丝，并支持封面、紧凑、纯文字三种头部样式
 - `/write`、`/write/:id` 编辑器：Markdown 分栏预览、图片上传/粘贴/拖拽、分类、自动封面预览、标签、评论开关、草稿/发布、文档树父级与排序（仅超级管理员和管理员）
-- `/messages` 私信与通知：会话列表、WebSocket 实时消息、图片与表情、轮询兜底、通知已读
+- `/messages` 私信与通知：会话列表、WebSocket 实时消息、图片与表情、轮询兜底、全站公告与通知已读
 - `/me` 我的空间：资料、密码、隐私与消息、最近登录记录、收藏夹、浏览历史；管理员额外看到自己的文章与文档
-- `/admin` 管理后台：概览、内容管理、分类管理、图片管理；超级管理员额外拥有用户与权限、站点设置和操作日志
+- `/admin` 管理后台：概览、内容管理、分类管理、图片管理、全站通知；超级管理员额外拥有用户与权限、站点设置和操作日志
 - `/login`、`/register` 登录注册：密码登录、邮箱验证码登录、QQ 登录、注册
 - `/forgot` 通过邮箱验证码重置密码
 
@@ -421,11 +427,11 @@ FOLIO_SMTP_FROM=you@qq.com
 | 图片 | `POST /images`、`GET /images`、`DELETE /images/:id`，文件通过 `/uploads/*` 访问 |
 | AI | `GET /ai/status`、`POST /ai/analyze`（仅管理员） |
 | 互动 | `POST /docs/:id/like`、`POST /docs/:id/favorite`、`GET|POST /docs/:id/comments`、`POST /comments/:id/like` |
-| 消息 | `GET /messages/conversations`、`GET|POST /messages/with/:username`、`GET /notifications`、`GET /ws`（WebSocket，token 查询参数） |
+| 消息 | `GET /messages/conversations`、`GET|POST /messages/with/:username`、`GET /notifications`、`GET /notices`、`POST /notices/read`、`GET /ws`（WebSocket，token 查询参数） |
 | 我的 | `GET /me/docs`、`GET /me/favorites`、`GET|DELETE /me/history`、`GET|POST /favorite-folders`、`PUT|DELETE /favorite-folders/:id`、`PUT /me`、`PUT /me/password`、`GET|PUT /me/settings`、`GET /me/login-records`、`GET /inbox` |
 | 视觉 | `GET /art/cover.svg`、`GET /art/avatar.svg` |
 | 系统 | `GET /health` |
-| 管理 | `GET /admin/stats`、`GET /admin/docs`、`GET /admin/users`、`DELETE /admin/users/:id`、`PUT /admin/users/:id/role`、`GET|PUT /admin/settings`、`GET /admin/logs` |
+| 管理 | `GET /admin/stats`、`GET /admin/docs`、`GET /admin/users`、`DELETE /admin/users/:id`、`PUT /admin/users/:id/role`、`GET|PUT /admin/settings`、`GET /admin/logs`、`GET|POST /admin/notices`、`DELETE /admin/notices/:id` |
 
 ## 一些实现约定
 
