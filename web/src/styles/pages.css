@@ -5220,3 +5220,175 @@
   color: var(--accent);
   font-family: var(--hand);
 }
+
+/* ---------- 私密阅读申请 ---------- */
+
+.private-access-page {
+  padding-top: 48px;
+  padding-bottom: 80px;
+}
+
+.private-access-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 14px;
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 34px 32px 30px;
+  border: 1.2px dashed var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+}
+
+.private-access-icon {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border: 1.2px solid var(--accent);
+  border-radius: 46% 54% 48% 52% / 52% 48% 54% 46%;
+  color: var(--accent);
+}
+
+.private-access-card h1 {
+  font-size: clamp(1.6rem, 4vw, 2.2rem);
+  line-height: 1.3;
+}
+
+.private-access-owner,
+.private-access-lede {
+  color: var(--ink-soft);
+  font-size: 13.5px;
+  line-height: 1.8;
+}
+
+.private-access-owner a {
+  color: var(--accent);
+}
+
+.private-access-status {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1.2px dashed var(--line-strong);
+  border-radius: var(--sketch-sm);
+  background: var(--surface-2);
+  color: var(--ink-soft);
+  font-size: 12.5px;
+}
+
+.private-access-status strong {
+  color: var(--ink);
+  font-family: var(--hand);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.private-access-status.is-approved {
+  border-color: color-mix(in srgb, var(--success) 55%, var(--line));
+  color: var(--success);
+}
+
+.private-access-denied {
+  padding: 9px 12px;
+  border-left: 2px solid var(--danger);
+  background: color-mix(in srgb, var(--danger) 6%, transparent);
+  color: var(--danger);
+  font-size: 12.5px;
+}
+
+.private-access-note {
+  width: 100%;
+}
+
+.private-access-note > span {
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+
+.private-access-note small {
+  color: var(--ink-faint);
+  font-size: 11px;
+}
+
+.private-access-back {
+  margin-top: 4px;
+  font-size: 12px;
+}
+
+.access-request-list {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--line);
+}
+
+.access-request-row {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 14px 4px;
+  border-bottom: 1px dashed var(--line);
+}
+
+.access-request-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.access-request-line {
+  color: var(--ink-soft);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.access-request-line strong {
+  color: var(--ink);
+}
+
+.access-request-line > span {
+  color: var(--ink-faint);
+  font-size: 11px;
+}
+
+.access-request-note {
+  padding-left: 9px;
+  border-left: 2px solid var(--line-strong);
+  color: var(--ink-faint);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.access-request-time {
+  color: var(--ink-faint);
+  font-size: 10.5px;
+}
+
+.access-request-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 6px;
+}
+
+.access-badge-denied {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+@media (max-width: 680px) {
+  .access-request-row {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  .access-request-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}

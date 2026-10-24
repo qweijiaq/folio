@@ -56,7 +56,7 @@ folio/
 │   ├── db/                 # SQLite / MySQL / 内存数据库
 │   ├── cache/              # Redis：JWT 黑名单、浏览量去重
 │   ├── mail/               # SMTP 发信与本地调试邮件
-│   ├── models/             # 24 张表的模型
+│   ├── models/             # 25 张表的模型
 │   ├── art/                # 生成式封面与头像
 │   ├── storage/            # 本地磁盘 / 七牛云存储抽象
 │   ├── handlers/           # 路由、接口与集成测试
@@ -178,6 +178,10 @@ QQ 登录也由这里控制：没有配置 QQ 互联凭据时开关不可开启�
 - 子文档设为私密不会影响父文档，父文档可以继续保持公开；
 - 私密文档不写入公开阅读统计，也不出现在公开标签和首页统计中；
 - 私密状态会随历史版本保存和恢复。
+- 没有权限的登录读者打开私密文档链接时，可以填写说明申请阅读；
+- 作者会在「管理后台 → 阅读申请」看到申请，也可以从站内通知进入；
+- 通过后申请人可以阅读该私密范围及其所有子文档，拒绝后可补充说明重新申请；
+- 作者改为拒绝会立即撤销已经通过的访问权限。
 
 ## 自测
 
@@ -259,7 +263,7 @@ Go 服务会自动托管 `../web/dist`，访问 <http://localhost:8080> 即可�
 
 ## 数据模型
 
-只有 24 张表：
+只有 25 张表：
 
 | 表 | 用途 |
 | --- | --- |
@@ -280,7 +284,8 @@ Go 服务会自动托管 `../web/dist`，访问 <http://localhost:8080> 即可�
 | `view_histories` | 登录用户的浏览历史（用户 + 内容唯一） |
 | `doc_daily_stats` | 内容每日阅读量（内容 + 日期唯一），用于数据看板 |
 | `invite_codes` | 一次性邀请码：备注、有效期、创建者、使用者和使用时间 |
-| `document_revisions` | 内容历史版本：标题、摘要、正文、标签、状态、编辑者与时间 |
+| `document_revisions` | 内容历史版本：标题、摘要、正文、标签、状态、私密标记、编辑者与时间 |
+| `doc_access_requests` | 私密文档阅读申请：私密范围、申请人、所有者、说明、状态与处理时间 |
 | `email_codes` | 邮箱验证码：用途、HMAC 摘要、过期时间、尝试次数、消费时间 |
 | `site_settings` | 单行站点设置：名称、描述、维护者、注册开关、QQ 登录开关、图形验证码 |
 | `storage_settings` | 单行图片存储设置：提供方、加密后的七牛密钥、空间、域名、区域与对象前缀 |
@@ -560,7 +565,7 @@ FOLIO_SITE_URL=https://your-domain.com
 - `/messages` 私信与通知：会话列表、WebSocket 实时消息、图片与表情、轮询兜底、全站公告与通知已读
 - `/ask` 问 AI：用户自带 API Key（Anthropic、DeepSeek、智谱 GLM、Kimi、通义千问），检索已发布内容与站点帮助，支持严格/通用模式、多轮追问和流式回答
 - `/me` 我的空间：资料、密码、隐私与消息、最近登录记录、收藏夹、浏览历史；管理员额外看到自己的文章与文档，并可以把一篇文章置顶到公开主页
-- `/admin` 管理后台：概览、数据看板、内容管理、分类管理、图片管理、全站通知；内容管理支持导出全部 Markdown；超级管理员额外拥有用户与权限、注册与邀请、存储设置、站点设置和操作日志
+- `/admin` 管理后台：概览、数据看板、内容管理、分类管理、图片管理、阅读申请、全站通知；内容管理支持导出全部 Markdown；超级管理员额外拥有用户与权限、注册与邀请、存储设置、站点设置和操作日志
 - `/login`、`/register` 登录注册：密码登录、邮箱验证码登录、QQ 登录、注册；关闭注册后可通过一次性邀请链接注册
 - `/forgot` 通过邮箱验证码重置密码
 
@@ -588,18 +593,18 @@ FOLIO_SITE_URL=https://your-domain.com
 | --- | --- |
 | 认证 | `POST /auth/register`、`POST /auth/login`、`POST /auth/email/login`、`POST /auth/password/reset`、`POST /auth/email/code`、`GET /auth/email/status`、`GET /auth/captcha`、`GET /auth/qq/status`、`GET /auth/qq/url`、`GET /auth/qq/callback`、`POST /auth/qq/exchange`、`POST /auth/logout`、`GET /me`、`PUT /me/email` |
 | 用户 | `GET /users/:username`、`POST|DELETE /users/:username/follow`、`GET /users/:username/followers|following`、`GET /users/:username/favorite-folders`、`GET /users/:username/favorites` |
-| 内容 | `GET /docs`、`GET /docs/:id`、`GET /docs/:id/related`、`GET /docs/:id/revisions`、`GET /docs/:id/revisions/:revisionID`、`POST /docs/:id/revisions/:revisionID/restore`、`POST /docs`、`PUT /docs/:id`、`DELETE /docs/:id`、`GET /doc-tree` |
+| 内容 | `GET /docs`、`GET /docs/:id`、`GET /docs/:id/access`、`POST /docs/:id/access-requests`、`GET /docs/:id/related`、`GET /docs/:id/revisions`、`GET /docs/:id/revisions/:revisionID`、`POST /docs/:id/revisions/:revisionID/restore`、`POST /docs`、`PUT /docs/:id`、`DELETE /docs/:id`、`GET /doc-tree` |
 | 分类 | `GET /categories`、`POST /categories`、`PUT /categories/:id`、`DELETE /categories/:id` |
 | 图片 | `POST /images`、`GET /images`、`DELETE /images/:id`；本地模式通过 `/uploads/*` 访问，七牛模式返回云存储 URL |
 | AI | `GET /ai/status`、`POST /ai/analyze`（仅管理员）、`GET /ai/providers`、`GET /ai/meta`、`GET|PUT /ai/keys`、`DELETE /ai/keys/:provider`、`POST /ai/ask`、`POST /ai/ask/stream`（SSE，登录用户需自带 Key） |
 | 互动 | `POST /docs/:id/like`、`POST /docs/:id/favorite`、`GET|POST /docs/:id/comments`、`POST /comments/:id/like` |
 | 消息 | `GET /messages/conversations`、`GET|POST /messages/with/:username`、`GET /notifications`、`GET /notices`、`POST /notices/read`、`GET /ws`（WebSocket，token 查询参数） |
-| 我的 | `GET /me/docs`、`GET /me/favorites`、`GET|DELETE /me/history`、`GET|POST /favorite-folders`、`PUT|DELETE /favorite-folders/:id`、`PUT /me`、`PUT /me/password`、`GET|PUT /me/settings`、`PUT /me/featured-doc`、`GET /me/login-records`、`GET /inbox` |
+| 我的 | `GET /me/docs`、`GET /me/favorites`、`GET|DELETE /me/history`、`GET /me/access-requests`、`GET|POST /favorite-folders`、`PUT|DELETE /favorite-folders/:id`、`PUT /me`、`PUT /me/password`、`GET|PUT /me/settings`、`PUT /me/featured-doc`、`GET /me/login-records`、`GET /inbox` |
 | 视觉 | `GET /art/cover.svg`、`GET /art/cover.png`、`GET /art/avatar.svg` |
 | 站点 | `GET /site`、`GET /site/features`（公开的功能目录，关于页使用） |
 | SEO | `GET /feed.xml`、`GET /sitemap.xml`、`GET /robots.txt` |
 | 系统 | `GET /health` |
-| 管理 | `GET /admin/stats`、`GET /admin/dashboard`、`GET /admin/docs`、`GET /admin/users`、`POST /admin/users`、`DELETE /admin/users/:id`、`PUT /admin/users/:id/role`、`GET|POST /admin/invites`、`DELETE /admin/invites/:id`、`GET|PUT /admin/access`、`GET|PUT /admin/settings`、`GET|PUT /admin/storage`、`POST /admin/storage/test`、`GET /admin/logs`、`GET|POST /admin/notices`、`DELETE /admin/notices/:id`、`GET /admin/export` |
+| 管理 | `PUT /access-requests/:id`、`GET /admin/stats`、`GET /admin/dashboard`、`GET /admin/docs`、`GET /admin/users`、`POST /admin/users`、`DELETE /admin/users/:id`、`PUT /admin/users/:id/role`、`GET|POST /admin/invites`、`DELETE /admin/invites/:id`、`GET|PUT /admin/access`、`GET|PUT /admin/settings`、`GET|PUT /admin/storage`、`POST /admin/storage/test`、`GET /admin/logs`、`GET|POST /admin/notices`、`DELETE /admin/notices/:id`、`GET /admin/export` |
 
 ## 一些实现约定
 

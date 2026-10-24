@@ -13,9 +13,15 @@ const (
 	RoleAdmin      = "admin"
 	RoleUser       = "user"
 
-	NotifyLike    = "like"
-	NotifyComment = "comment"
-	NotifyFollow  = "follow"
+	NotifyLike          = "like"
+	NotifyComment       = "comment"
+	NotifyFollow        = "follow"
+	NotifyAccessRequest = "access_request"
+	NotifyAccessResult  = "access_result"
+
+	AccessPending  = "pending"
+	AccessApproved = "approved"
+	AccessDenied   = "denied"
 
 	MessageText  = "text"
 	MessageImage = "image"
@@ -281,6 +287,20 @@ type OperationLog struct {
 	Detail     string `gorm:"size:500" json:"detail"`
 	IP         string `gorm:"size:64" json:"ip"`
 	UserAgent  string `gorm:"size:255" json:"userAgent"`
+}
+
+// DocAccessRequest 是读者对私密文档（或其私密父级范围）发起的阅读申请。
+// DocID 指向该私密范围的最高父级，审批通过后整个子树对该读者可见。
+type DocAccessRequest struct {
+	Base
+	DocID       uint       `gorm:"uniqueIndex:idx_access_doc_user;not null;index" json:"docID"`
+	Doc         Document   `gorm:"foreignKey:DocID" json:"doc"`
+	RequesterID uint       `gorm:"uniqueIndex:idx_access_doc_user;not null;index" json:"requesterID"`
+	Requester   User       `gorm:"foreignKey:RequesterID" json:"requester"`
+	OwnerID     uint       `gorm:"index" json:"ownerID"`
+	Status      string     `gorm:"size:16;index;default:pending" json:"status"`
+	Note        string     `gorm:"size:300" json:"note"`
+	HandledAt   *time.Time `json:"handledAt"`
 }
 
 // ViewHistory 记录登录用户最近打开过的内容，用于「浏览历史」。

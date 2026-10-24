@@ -28,6 +28,8 @@ const dashboardMetric = ref('views')
 const docs = ref([])
 const users = ref([])
 const invites = ref([])
+const accessRequests = ref([])
+const handlingRequest = ref(0)
 const inviteNote = ref('')
 const inviteDays = ref(7)
 const creatingInvite = ref(false)
@@ -102,6 +104,7 @@ const storageSourceLabel = computed(() => ({
   none: '未配置'
 }[storageInfo.source] || '未配置'))
 const storageActiveLabel = computed(() => (storageInfo.active === 'qiniu' ? '七牛云' : '本地磁盘'))
+const pendingAccess = computed(() => accessRequests.value.filter((item) => item.status === 'pending').length)
 
 const tabs = computed(() => {
   const list = [
@@ -110,6 +113,7 @@ const tabs = computed(() => {
     { key: 'content', label: '内容管理', icon: 'edit' },
     { key: 'categories', label: '分类管理', icon: 'tag' },
     { key: 'images', label: '图片管理', icon: 'image' },
+    { key: 'requests', label: '阅读申请', icon: 'lock' },
     { key: 'notices', label: '全站通知', icon: 'bell' }
   ]
   if (isSuper.value) {
@@ -435,6 +439,34 @@ async function saveAccess() {
   }
 }
 
+async function loadAccessRequests() {
+  try {
+    const data = await api.get('/me/access-requests')
+    accessRequests.value = data.items || []
+  } catch (err) {
+    toastError(err)
+  }
+}
+
+function accessRequestStatusLabel(status) {
+  return { pending: '待处理', approved: '已通过', denied: '已拒绝' }[status] || status
+}
+
+async function handleAccessRequest(item, action) {
+  const verb = action === 'approve' ? '通过' : '拒绝'
+  if (!window.confirm(`${verb}「${item.requester?.nickname || '读者'}」阅读《${item.doc?.title || '私密文档'}》的申请？`)) return
+  handlingRequest.value = item.id
+  try {
+    await api.put(`/access-requests/${item.id}`, { action })
+    await loadAccessRequests()
+    toast(action === 'approve' ? '已通过阅读申请' : '已拒绝阅读申请')
+  } catch (err) {
+    toastError(err)
+  } finally {
+    handlingRequest.value = 0
+  }
+}
+
 function applyStorageInfo(storage = {}) {
   Object.assign(storageInfo, {
     provider: storage.provider || 'local',
@@ -681,6 +713,7 @@ async function loadTab() {
     if (tab.value === 'overview') await loadStats()
     else if (tab.value === 'dashboard') await loadDashboard()
     else if (tab.value === 'content') await loadDocs()
+    else if (tab.value === 'requests') await loadAccessRequests()
     else if (tab.value === 'categories') await loadCategories()
     else if (tab.value === 'images') await loadImages()
     else if (tab.value === 'notices') await loadNotices()
@@ -804,6 +837,7 @@ onMounted(async () => {
   }
   normalizeTab()
   await loadTab()
+  if (tab.value !== 'requests') loadAccessRequests()
   loading.value = false
 })
 </script>
@@ -846,6 +880,7 @@ onMounted(async () => {
           >
             <Icon :name="item.icon" :size="16" />
             <span>{{ item.label }}</span>
+            <span v-if="item.key === 'requests' && pendingAccess" class="me-nav-count">{{ pendingAccess }}</span>
           </button>
         </nav>
       </aside>
@@ -1181,6 +1216,43 @@ onMounted(async () => {
                 <button class="icon-btn danger" type="button" aria-label="删除图片" @click="removeImage(image)">
                   <Icon name="trash" :size="16" />
                 </button>
+              </div>
+            </article>
+          </div>
+        </div>
+
+        <div v-else-if="tab === 'requests'" class="panel">
+          <header class="panel-head">
+            <h2>阅读申请</h2>
+            <p>读者申请阅读你的私密文档时会出现在这里。通过后，该读者可以阅读这篇文档及其私密范围下的子文档。</p>
+          </header>
+
+          <p v-if="tabLoading" class="muted loading-line">正在加载阅读申请…</p>
+          <EmptyState
+            v-else-if="!accessRequests.length"
+            icon="lock"
+            title="还没有阅读申请"
+            description="当有人申请阅读你的私密文档时，会在这里显示，并发送一条站内通知。"
+          />
+          <div v-else class="access-request-list">
+            <article v-for="item in accessRequests" :key="item.id" class="access-request-row" :class="`is-${item.status}`">
+              <UserAvatar :username="item.requester?.username" :nickname="item.requester?.nickname" :size="38" />
+              <div class="access-request-main">
+                <p class="access-request-line">
+                  <strong>{{ item.requester?.nickname }}</strong>
+                  <span>@{{ item.requester?.username }}</span>
+                  申请阅读
+                  <RouterLink :to="`/docs/${item.doc?.id}`" class="text-link">《{{ item.doc?.title || '私密文档' }}》</RouterLink>
+                </p>
+                <p v-if="item.note" class="access-request-note">{{ item.note }}</p>
+                <span class="access-request-time">{{ shortDate(item.createdAt) }}<template v-if="item.handledAt"> · 处理于 {{ shortDate(item.handledAt) }}</template></span>
+              </div>
+              <span class="badge" :class="item.status === 'approved' ? 'badge-live' : item.status === 'denied' ? 'access-badge-denied' : ''">
+                {{ accessRequestStatusLabel(item.status) }}
+              </span>
+              <div v-if="item.status === 'pending'" class="access-request-actions">
+                <button class="btn btn-primary btn-sm" type="button" :disabled="handlingRequest === item.id" @click="handleAccessRequest(item, 'approve')">通过</button>
+                <button class="btn btn-ghost btn-sm" type="button" :disabled="handlingRequest === item.id" @click="handleAccessRequest(item, 'deny')">拒绝</button>
               </div>
             </article>
           </div>

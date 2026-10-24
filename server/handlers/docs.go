@@ -292,7 +292,11 @@ func (a *API) DocDetail(c *gin.Context) {
 		return
 	}
 	if !a.canViewDocument(viewer, &doc) {
-		fail(c, http.StatusNotFound, "内容不存在")
+		if doc.Kind == models.KindDoc && a.docIsPrivate(doc.ID) {
+			fail(c, http.StatusForbidden, "这是一篇私密文档，需要申请阅读")
+		} else {
+			fail(c, http.StatusNotFound, "内容不存在")
+		}
 		return
 	}
 	privateDoc := doc.Kind == models.KindDoc && a.docIsPrivate(doc.ID)
@@ -561,6 +565,7 @@ func deleteDocumentsTx(tx *gorm.DB, ids []uint) error {
 	tx.Where("doc_id IN ?", ids).Delete(&models.Notification{})
 	tx.Where("doc_id IN ?", ids).Delete(&models.DocDailyStat{})
 	tx.Where("doc_id IN ?", ids).Delete(&models.DocumentRevision{})
+	tx.Where("doc_id IN ?", ids).Delete(&models.DocAccessRequest{})
 	return tx.Where("id IN ?", ids).Delete(&models.Document{}).Error
 }
 

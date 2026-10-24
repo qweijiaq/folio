@@ -62,6 +62,7 @@ func (a *API) Routes(r *gin.Engine) {
 	// 内容（统一文档表）。只有超级管理员和管理员可以创作。
 	g.GET("/docs", a.OptionalAuth(), a.DocList)
 	g.GET("/docs/:id", a.OptionalAuth(), a.DocDetail)
+	g.GET("/docs/:id/access", a.OptionalAuth(), a.docAccessInfo)
 	g.GET("/docs/:id/related", a.RelatedDocs)
 	authedDocs := g.Group("")
 	authedDocs.Use(a.Auth())
@@ -117,6 +118,9 @@ func (a *API) Routes(r *gin.Engine) {
 	authed.GET("/me/docs", a.MyDocs)
 	authed.GET("/me/favorites", a.MyFavorites)
 	authed.GET("/me/history", a.MyHistory)
+	authed.GET("/me/access-requests", a.myAccessRequests)
+	authed.POST("/docs/:id/access-requests", a.docAccessRequest)
+	authed.PUT("/access-requests/:id", a.handleAccessRequest)
 	authed.DELETE("/me/history", a.ClearHistory)
 	authed.GET("/favorite-folders", a.FavoriteFolderList)
 	authed.POST("/favorite-folders", a.FavoriteFolderCreate)

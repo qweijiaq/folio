@@ -33,6 +33,10 @@ const liked = ref(false)
 const favorited = ref(false)
 const loading = ref(true)
 const notFound = ref(false)
+const privateBlocked = ref(false)
+const accessInfo = ref(null)
+const accessNote = ref('')
+const requestingAccess = ref(false)
 const sideOpen = ref(false)
 const shareOpen = ref(false)
 const { progress, activeId, refresh: refreshReading } = useReadingProgress()
@@ -114,6 +118,8 @@ usePageMeta(() => {
 async function load() {
   loading.value = true
   notFound.value = false
+  privateBlocked.value = false
+  accessInfo.value = null
   try {
     const [docData, treeData] = await Promise.all([
       api.get(`/docs/${route.params.id}`),
@@ -130,11 +136,41 @@ async function load() {
     tree.value = buildTree(treeData.items)
     flat.value = flattenTree(tree.value)
   } catch (err) {
-    if (err.status === 404) notFound.value = true
-    else toastError(err)
+    if (err.status === 403) {
+      privateBlocked.value = true
+      await loadAccessInfo()
+    } else if (err.status === 404) {
+      notFound.value = true
+    } else {
+      toastError(err)
+    }
   } finally {
     loading.value = false
     nextTick(refreshReading)
+  }
+}
+
+async function loadAccessInfo() {
+  try {
+    accessInfo.value = await api.get(`/docs/${route.params.id}/access`)
+  } catch (err) {
+    accessInfo.value = { private: true, canView: false, status: 'none' }
+    toastError(err)
+  }
+}
+
+async function requestAccess() {
+  if (!requireLogin()) return
+  requestingAccess.value = true
+  try {
+    const data = await api.post(`/docs/${route.params.id}/access-requests`, { note: accessNote.value.trim() })
+    accessInfo.value = { ...(accessInfo.value || {}), status: data.status || 'pending', canView: false }
+    accessNote.value = ''
+    toast('申请已提交，等待作者处理')
+  } catch (err) {
+    toastError(err)
+  } finally {
+    requestingAccess.value = false
   }
 }
 
@@ -197,6 +233,48 @@ watch(
       <EmptyState icon="info" title="这篇文档不存在" description="它可能被删除，或者还没有公开。">
         <RouterLink to="/docs" class="btn btn-ghost btn-sm">返回知识库</RouterLink>
       </EmptyState>
+    </div>
+
+    <div v-else-if="privateBlocked" class="container page-loading private-access-page">
+      <section class="private-access-card">
+        <span class="private-access-icon"><Icon name="lock" :size="24" /></span>
+        <p class="eyebrow">私密阅读</p>
+        <h1>这篇文档仅作者可见</h1>
+        <p class="private-access-owner" v-if="accessInfo?.owner">
+          作者：<RouterLink :to="`/u/${accessInfo.owner.username}`">{{ accessInfo.owner.nickname }}</RouterLink>
+        </p>
+        <p class="private-access-lede">如果你需要阅读，可以向作者申请访问权限。作者通过后，这篇文档及其私密范围下的子文档会对你开放。</p>
+
+        <p v-if="!accessInfo" class="muted loading-line">正在检查阅读权限…</p>
+        <template v-else-if="!auth.user">
+          <RouterLink :to="{ path: '/login', query: { redirect: route.fullPath } }" class="btn btn-primary btn-sm">登录后申请</RouterLink>
+        </template>
+        <template v-else-if="accessInfo.status === 'pending'">
+          <div class="private-access-status">
+            <strong>申请已提交</strong>
+            <span>请等待作者处理，处理结果会出现在「消息 → 通知」里。</span>
+          </div>
+        </template>
+        <template v-else-if="accessInfo.status === 'approved'">
+          <div class="private-access-status is-approved">
+            <strong>已通过申请</strong>
+            <span>刷新页面即可开始阅读。</span>
+          </div>
+          <button class="btn btn-primary btn-sm" type="button" @click="load">刷新阅读</button>
+        </template>
+        <template v-else>
+          <p v-if="accessInfo.status === 'denied'" class="private-access-denied">上次申请未通过，可以补充说明后重新申请。</p>
+          <label class="field private-access-note">
+            <span>申请说明 <small>可选，最多 200 字</small></span>
+            <textarea v-model="accessNote" rows="3" maxlength="200" placeholder="简单说明你为什么需要阅读这篇文档。"></textarea>
+          </label>
+          <button class="btn btn-primary btn-sm" type="button" :disabled="requestingAccess" @click="requestAccess">
+            {{ requestingAccess ? '提交中…' : '申请阅读' }}
+          </button>
+        </template>
+
+        <RouterLink to="/docs" class="text-link private-access-back">返回知识库</RouterLink>
+      </section>
     </div>
 
     <template v-else-if="doc">

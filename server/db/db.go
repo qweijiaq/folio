@@ -44,6 +44,7 @@ func migrate(gdb *gorm.DB) error {
 		&models.Notification{},
 		&models.Image{},
 		&models.AIProviderKey{},
+		&models.DocAccessRequest{},
 		&models.ViewHistory{},
 		&models.DocDailyStat{},
 		&models.InviteCode{},

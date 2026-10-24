@@ -2508,8 +2508,8 @@ func TestPrivateDocuments(t *testing.T) {
 
 	for _, id := range []uint{privateRoot, publicChild, privateChild} {
 		status, _ := s.do(t, "GET", fmt.Sprintf("/api/docs/%d", id), readerToken, nil)
-		if status != http.StatusNotFound {
-			t.Fatalf("读者访问私密文档 %d 应返回 404，实际 %d", id, status)
+		if status != http.StatusForbidden {
+			t.Fatalf("读者访问私密文档 %d 应返回 403 并提供申请入口，实际 %d", id, status)
 		}
 	}
 	status, _ := s.do(t, "GET", fmt.Sprintf("/api/docs/%d", privateRoot), ownerToken, nil)
@@ -2559,5 +2559,103 @@ func TestPrivateDocuments(t *testing.T) {
 	})
 	if status != http.StatusOK || len(list(data, "sources")) != 0 {
 		t.Fatalf("AI 检索不应返回私密文档: %d %v", status, data)
+	}
+}
+
+func TestPrivateAccessRequests(t *testing.T) {
+	s := newTestAPI(t)
+	ownerToken, _ := s.register(t, "accessowner2")
+	readerToken, readerID := s.register(t, "accessreader2")
+
+	status, created := s.do(t, "POST", "/api/docs", ownerToken, map[string]any{
+		"kind": "doc", "title": "私密申请测试根", "content": "私密根内容。", "status": "published", "private": true,
+	})
+	if status != http.StatusCreated {
+		t.Fatalf("创建私密根文档失败: %d %v", status, created)
+	}
+	rootID := uint(number(obj(created, "doc")["id"]))
+	status, childCreated := s.do(t, "POST", "/api/docs", ownerToken, map[string]any{
+		"kind": "doc", "title": "私密根下的测试子文档", "content": "子文档内容。", "status": "published", "parentID": rootID,
+	})
+	if status != http.StatusCreated {
+		t.Fatalf("创建私密子文档失败: %d %v", status, childCreated)
+	}
+	childID := uint(number(obj(childCreated, "doc")["id"]))
+
+	status, _ = s.do(t, "GET", fmt.Sprintf("/api/docs/%d", rootID), readerToken, nil)
+	if status != http.StatusForbidden {
+		t.Fatalf("读者访问私密文档应返回 403，实际 %d", status)
+	}
+	status, info := s.do(t, "GET", fmt.Sprintf("/api/docs/%d/access", rootID), readerToken, nil)
+	if status != http.StatusOK || info["private"] != true || info["canView"] != false || info["status"] != "none" {
+		t.Fatalf("阅读申请信息不正确: %d %v", status, info)
+	}
+	if obj(info, "owner")["username"] != "accessowner2" {
+		t.Fatalf("申请人信息不正确: %v", info)
+	}
+
+	status, req := s.do(t, "POST", fmt.Sprintf("/api/docs/%d/access-requests", childID), readerToken, map[string]string{
+		"note": "想学习这部分内容",
+	})
+	if status != http.StatusOK || req["status"] != "pending" {
+		t.Fatalf("提交阅读申请失败: %d %v", status, req)
+	}
+	var notice models.Notification
+	if err := s.api.DB.Where("type = ?", models.NotifyAccessRequest).Order("id DESC").First(&notice).Error; err != nil {
+		t.Fatalf("作者没有收到阅读申请通知: %v", err)
+	}
+	if notice.DocID == nil || *notice.DocID != rootID {
+		t.Fatalf("阅读申请通知应指向私密范围根文档: %v", notice)
+	}
+
+	status, listData := s.do(t, "GET", "/api/me/access-requests", ownerToken, nil)
+	if status != http.StatusOK || len(list(listData, "items")) != 1 {
+		t.Fatalf("作者阅读申请列表不正确: %d %v", status, listData)
+	}
+	requestID := uint(number(list(listData, "items")[0].(map[string]any)["id"]))
+	status, _ = s.do(t, "PUT", fmt.Sprintf("/api/access-requests/%d", requestID), readerToken, map[string]string{"action": "approve"})
+	if status != http.StatusForbidden {
+		t.Fatalf("非作者不应处理阅读申请，实际 %d", status)
+	}
+	status, result := s.do(t, "PUT", fmt.Sprintf("/api/access-requests/%d", requestID), ownerToken, map[string]string{"action": "approve"})
+	if status != http.StatusOK || result["status"] != models.AccessApproved {
+		t.Fatalf("通过阅读申请失败: %d %v", status, result)
+	}
+	for _, id := range []uint{rootID, childID} {
+		status, _ = s.do(t, "GET", fmt.Sprintf("/api/docs/%d", id), readerToken, nil)
+		if status != http.StatusOK {
+			t.Fatalf("通过后应能访问私密范围 %d，实际 %d", id, status)
+		}
+	}
+	status, info = s.do(t, "GET", fmt.Sprintf("/api/docs/%d/access", rootID), readerToken, nil)
+	if status != http.StatusOK || info["canView"] != true {
+		t.Fatalf("通过后 access 信息不正确: %d %v", status, info)
+	}
+	status, _ = s.do(t, "POST", fmt.Sprintf("/api/docs/%d/access-requests", rootID), readerToken, map[string]string{})
+	if status != http.StatusBadRequest {
+		t.Fatalf("已有权限后重复申请应拒绝，实际 %d", status)
+	}
+
+	var resultNotice models.Notification
+	if err := s.api.DB.Where("type = ? AND user_id = ?", models.NotifyAccessResult, readerID).Order("id DESC").First(&resultNotice).Error; err != nil {
+		var all []models.Notification
+		s.api.DB.Order("id DESC").Limit(10).Find(&all)
+		t.Fatalf("申请人没有收到处理结果通知: %v; notifications=%v", err, all)
+	}
+	if resultNotice.DocID == nil || *resultNotice.DocID != rootID {
+		t.Fatalf("通过通知应带回私密范围链接: %v", resultNotice)
+	}
+
+	status, result = s.do(t, "PUT", fmt.Sprintf("/api/access-requests/%d", requestID), ownerToken, map[string]string{"action": "deny"})
+	if status != http.StatusOK || result["status"] != models.AccessDenied {
+		t.Fatalf("拒绝阅读申请失败: %d %v", status, result)
+	}
+	status, _ = s.do(t, "GET", fmt.Sprintf("/api/docs/%d", rootID), readerToken, nil)
+	if status != http.StatusForbidden {
+		t.Fatalf("拒绝后应撤销访问权限，实际 %d", status)
+	}
+	status, req = s.do(t, "POST", fmt.Sprintf("/api/docs/%d/access-requests", rootID), readerToken, map[string]string{"note": "再申请一次"})
+	if status != http.StatusOK || req["status"] != models.AccessPending {
+		t.Fatalf("被拒后应允许重新申请: %d %v", status, req)
 	}
 }

@@ -252,6 +252,10 @@ func (a *API) purgeUser(userID uint) error {
 		tx.Where("follower_id = ? OR followee_id = ?", userID, userID).Delete(&models.Follow{})
 		tx.Where("sender_id = ? OR receiver_id = ?", userID, userID).Delete(&models.Message{})
 		tx.Where("user_id = ? OR actor_id = ?", userID, userID).Delete(&models.Notification{})
+		tx.Where("requester_id = ? OR owner_id = ?", userID, userID).Delete(&models.DocAccessRequest{})
+		if len(docIDs) > 0 {
+			tx.Where("doc_id IN ?", docIDs).Delete(&models.DocAccessRequest{})
+		}
 		tx.Where("user_id = ?", userID).Delete(&models.FavoriteFolder{})
 		tx.Where("user_id = ?", userID).Delete(&models.ViewHistory{})
 		tx.Where("user_id = ?", userID).Delete(&models.UserSetting{})
