@@ -51,7 +51,8 @@ let autoSaveTimer = null
 const editingId = computed(() => (route.params.id ? Number(route.params.id) : 0))
 const isEdit = computed(() => Boolean(editingId.value))
 const wordCount = computed(() => (form.content || '').replace(/\s/g, '').length)
-const coverSeed = computed(() => editingId.value || form.title || '新的内容')
+const coverSeed = computed(() => editingId.value || `new-${form.kind}`)
+const coverCategory = computed(() => categories.value.find((item) => String(item.id) === String(form.categoryID))?.name || '')
 
 function snapshot() {
   return JSON.stringify({
@@ -635,9 +636,16 @@ onBeforeUnmount(() => {
           <div class="editor-cover">
             <div class="editor-cover-head">
               自动封面
-              <span>由标题与编号确定，永远保持一致</span>
+              <span>由标题、摘要、标签与分类生成，随内容更新</span>
             </div>
-            <CoverImage :seed="coverSeed" :title="form.title" :kind="form.kind" />
+            <CoverImage
+              :seed="coverSeed"
+              :title="form.title"
+              :abstract="form.abstract"
+              :tags="form.tags"
+              :category="coverCategory"
+              :kind="form.kind"
+            />
           </div>
 
           <div class="editor-toolbar">

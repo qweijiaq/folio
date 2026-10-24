@@ -7,6 +7,9 @@ const props = defineProps({
   doc: { type: Object, default: null },
   seed: { type: [String, Number], default: '' },
   title: { type: String, default: '' },
+  abstract: { type: String, default: '' },
+  tags: { type: Array, default: () => [] },
+  category: { type: String, default: '' },
   kind: { type: String, default: 'article' },
   alt: { type: String, default: '' }
 })
@@ -24,6 +27,15 @@ const kind = computed(() => props.doc?.kind || props.kind || 'article')
 
 const label = computed(() => props.doc?.title || props.title || '')
 
+const abstractText = computed(() => props.doc?.abstract || props.abstract || '')
+
+const coverTags = computed(() => {
+  const value = props.doc?.tags ?? props.tags
+  return Array.isArray(value) ? value : []
+})
+
+const categoryName = computed(() => props.doc?.category?.name || props.category || '')
+
 const alt = computed(() => {
   if (props.alt) return props.alt
   const title = props.doc?.title || props.title
@@ -34,7 +46,10 @@ function render() {
   drawCover(canvas.value, {
     seed: seed.value,
     kind: kind.value,
-    label: label.value
+    label: label.value,
+    abstract: abstractText.value,
+    tags: coverTags.value,
+    category: categoryName.value
   })
 }
 
@@ -51,7 +66,7 @@ onBeforeUnmount(() => {
 })
 
 watch(
-  () => [seed.value, kind.value, label.value, ui.theme],
+  () => [seed.value, kind.value, label.value, abstractText.value, coverTags.value.join('|'), categoryName.value, ui.theme],
   () => nextTick(render)
 )
 </script>

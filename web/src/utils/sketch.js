@@ -118,8 +118,234 @@ function drawGrain(ctx, width, height, colors, random) {
   ctx.restore()
 }
 
-// 手绘封面：纸面底色、柔和色块、颗粒，再叠一组不对称线稿；标题首字做成小印章。
-export function drawCover(canvas, { seed = 'folio', kind = 'article', label = '' } = {}) {
+function cleanCoverText(value) {
+  return String(value ?? '')
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/[`*_>#~]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function ellipsizeLines(ctx, lines, maxWidth) {
+  const last = lines[lines.length - 1] || ''
+  const chars = Array.from(last)
+  while (chars.length && ctx.measureText(chars.join('') + '…').width > maxWidth) chars.pop()
+  lines[lines.length - 1] = chars.join('') + '…'
+  return lines
+}
+
+function wrapCanvasText(ctx, text, maxWidth, maxLines) {
+  const chars = Array.from(text)
+  const lines = []
+  let line = ''
+  for (let i = 0; i < chars.length; i += 1) {
+    const test = line + chars[i]
+    if (line && ctx.measureText(test).width > maxWidth) {
+      lines.push(line)
+      line = chars[i]
+      if (lines.length === maxLines) return ellipsizeLines(ctx, lines, maxWidth)
+    } else {
+      line = test
+    }
+  }
+  if (line) lines.push(line)
+  if (lines.length > maxLines) {
+    lines.length = maxLines
+    return ellipsizeLines(ctx, lines, maxWidth)
+  }
+  return lines
+}
+
+function truncateCanvasText(ctx, text, maxWidth) {
+  if (ctx.measureText(text).width <= maxWidth) return text
+  const chars = Array.from(text)
+  while (chars.length && ctx.measureText(chars.join('') + '…').width > maxWidth) chars.pop()
+  return chars.join('') + '…'
+}
+
+function coverMotif(tags, category, title, h) {
+  const text = `${tags.join(' ')} ${category} ${title}`.toLowerCase()
+  const rules = [
+    [/(代码|编程|开发|技术|架构|工程|go|css|javascript|typescript|api)/i, 3],
+    [/(知识|写作|阅读|读书|笔记|文档|整理|管理)/i, 2],
+    [/(设计|排版|美学|艺术|视觉|色彩|界面|ui|ux)/i, 4],
+    [/(ai|模型|智能|问答|数据|算法|claude|deepseek|kimi|glm)/i, 0],
+    [/(旅行|山|自然|生活|城市|散步|季节)/i, 1],
+    [/(情绪|时间|留白|思考|随想|关系|记忆)/i, 5]
+  ]
+  for (const [pattern, motif] of rules) {
+    if (pattern.test(text)) return motif
+  }
+  return h % 6
+}
+
+function drawMotifOrbit(rc, box, s) {
+  const { x, y, w, h } = box
+  const cx = x + w * 0.5
+  const cy = y + h * 0.47
+  const d = Math.min(w, h) * 0.62
+  rc.circle(cx, cy, d, s.ink())
+  rc.circle(cx + d * 0.14, cy + d * 0.12, d * 0.62, s.fine())
+  rc.line(x + w * 0.08, y + h * 0.84, x + w * 0.4, y + h * 0.83, s.ink())
+  for (let i = 0; i < 3; i += 1) {
+    rc.line(x + w * (0.4 + i * 0.03), y + h * 0.78, x + w * (0.4 + i * 0.03), y + h * 0.88, s.fine())
+  }
+  rc.line(x + w * 0.86, y + h * 0.13, x + w * 0.86, y + h * 0.87, s.fine())
+  for (let i = 0; i < 4; i += 1) {
+    rc.line(x + w * 0.83, y + h * (0.2 + i * 0.17), x + w * 0.89, y + h * (0.2 + i * 0.17), s.fine())
+  }
+  rc.circle(x + w * 0.9, y + h * 0.15, d * 0.13, s.solid())
+  rc.curve(
+    [[x + w * 0.1, y + h * 0.22], [x + w * 0.18, y + h * 0.14], [x + w * 0.26, y + h * 0.24]],
+    s.accent({ strokeWidth: s.fineWidth })
+  )
+}
+
+function drawMotifRidge(rc, box, s) {
+  const { x, y, w, h } = box
+  const d = Math.min(w, h) * 0.3
+  const sunX = x + w * 0.72
+  const sunY = y + h * 0.28
+  rc.circle(sunX, sunY, d, s.accent())
+  rc.circle(sunX + d * 0.12, sunY + d * 0.08, d * 0.72, s.fine())
+  for (let i = 0; i < 4; i += 1) {
+    rc.line(sunX - d * 0.28 + i * d * 0.12, sunY - d * 0.2, sunX - d * 0.34 + i * d * 0.12, sunY + d * 0.2, s.fine())
+  }
+  rc.linearPath(
+    [
+      [x + w * 0.02, y + h * 0.72],
+      [x + w * 0.2, y + h * 0.42],
+      [x + w * 0.36, y + h * 0.62],
+      [x + w * 0.52, y + h * 0.34],
+      [x + w * 0.7, y + h * 0.66],
+      [x + w * 0.85, y + h * 0.48],
+      [x + w * 0.98, y + h * 0.72]
+    ],
+    false,
+    s.ink()
+  )
+  rc.linearPath(
+    [
+      [x + w * 0.02, y + h * 0.82],
+      [x + w * 0.26, y + h * 0.66],
+      [x + w * 0.48, y + h * 0.78],
+      [x + w * 0.66, y + h * 0.62],
+      [x + w * 0.82, y + h * 0.76],
+      [x + w * 0.98, y + h * 0.82]
+    ],
+    false,
+    s.fine()
+  )
+  rc.line(x + w * 0.04, y + h * 0.9, x + w * 0.96, y + h * 0.89, s.fine())
+  rc.circle(x + w * 0.14, y + h * 0.16, d * 0.12, s.solid())
+}
+
+function drawMotifStack(rc, box, s) {
+  const { x, y, w, h } = box
+  const pages = [
+    [[x + w * 0.18, y + h * 0.12], [x + w * 0.9, y + h * 0.07], [x + w * 0.94, y + h * 0.72], [x + w * 0.22, y + h * 0.78]],
+    [[x + w * 0.12, y + h * 0.2], [x + w * 0.84, y + h * 0.15], [x + w * 0.88, y + h * 0.8], [x + w * 0.16, y + h * 0.86]],
+    [[x + w * 0.06, y + h * 0.28], [x + w * 0.78, y + h * 0.23], [x + w * 0.82, y + h * 0.88], [x + w * 0.1, y + h * 0.94]]
+  ]
+  pages.forEach((points, index) => {
+    rc.linearPath(
+      points,
+      true,
+      s.ink({
+        strokeWidth: index === 2 ? s.strokeWidth : s.fineWidth,
+        fill: s.colors.surface,
+        fillStyle: 'solid'
+      })
+    )
+  })
+  rc.line(x + w * 0.16, y + h * 0.48, x + w * 0.62, y + h * 0.45, s.fine())
+  rc.line(x + w * 0.16, y + h * 0.57, x + w * 0.54, y + h * 0.54, s.fine())
+  rc.line(x + w * 0.16, y + h * 0.66, x + w * 0.58, y + h * 0.63, s.fine())
+  rc.line(x + w * 0.04, y + h * 0.72, x + w * 0.4, y + h * 0.2, s.accent())
+  rc.circle(x + w * 0.9, y + h * 0.14, 22, s.solid())
+}
+
+function drawMotifGrid(rc, box, s) {
+  const { x, y, w, h } = box
+  const gx = x + w * 0.1
+  const gy = y + h * 0.1
+  const gap = w * 0.04
+  const cell = (w * 0.8 - gap * 2) / 3
+  for (let row = 0; row < 2; row += 1) {
+    for (let column = 0; column < 3; column += 1) {
+      const filled = row === 0 && column === 2
+      const left = gx + column * (cell + gap)
+      const top = gy + row * (cell + gap)
+      rc.rectangle(
+        left,
+        top,
+        cell,
+        cell,
+        filled ? s.accent({ fill: s.colors.accentSoft, fillStyle: 'solid' }) : s.fine()
+      )
+      if (filled) rc.circle(left + cell / 2, top + cell / 2, 22, s.solid())
+    }
+  }
+  rc.line(x + w * 0.12, y + h * 0.86, x + w * 0.48, y + h * 0.74, s.ink())
+  rc.line(x + w * 0.6, y + h * 0.84, x + w * 0.64, y + h * 0.84, s.accent())
+  rc.line(x + w * 0.62, y + h * 0.8, x + w * 0.62, y + h * 0.88, s.accent())
+}
+
+function drawMotifArch(rc, box, s) {
+  const { x, y, w, h } = box
+  const cx = x + w * 0.5
+  const base = y + h * 0.86
+  rc.line(x + w * 0.06, base, x + w * 0.94, base, s.fine())
+  rc.circle(cx, y + h * 1.02, w * 0.72, s.ink())
+  rc.circle(cx, y + h * 1.02, w * 0.54, s.fine())
+  rc.circle(cx, y + h * 1.02, w * 0.34, s.accent({ strokeWidth: s.fineWidth }))
+  rc.line(cx, y + h * 0.14, cx, y + h * 0.6, s.ink())
+  rc.circle(cx, y + h * 0.1, 16, s.solid())
+  rc.circle(x + w * 0.12, y + h * 0.72, 24, s.solid())
+  for (let i = 0; i < 3; i += 1) {
+    rc.line(x + w * 0.1, y + h * (0.34 + i * 0.09), x + w * 0.3, y + h * (0.33 + i * 0.09), s.fine())
+  }
+}
+
+function drawMotifBotanical(rc, box, s) {
+  const { x, y, w, h } = box
+  const moonD = Math.min(w, h) * 0.32
+  rc.circle(x + w * 0.74, y + h * 0.26, moonD, s.ink())
+  rc.circle(x + w * 0.78, y + h * 0.3, moonD * 0.72, s.fine())
+  rc.curve(
+    [[x + w * 0.16, y + h * 0.95], [x + w * 0.2, y + h * 0.7], [x + w * 0.18, y + h * 0.5], [x + w * 0.24, y + h * 0.3]],
+    s.ink()
+  )
+  rc.curve(
+    [[x + w * 0.26, y + h * 0.95], [x + w * 0.3, y + h * 0.74], [x + w * 0.28, y + h * 0.55], [x + w * 0.34, y + h * 0.42]],
+    s.fine()
+  )
+  const leaves = [
+    [[x + w * 0.2, y + h * 0.7], [x + w * 0.12, y + h * 0.66], [x + w * 0.1, y + h * 0.58], [x + w * 0.17, y + h * 0.6]],
+    [[x + w * 0.18, y + h * 0.5], [x + w * 0.1, y + h * 0.46], [x + w * 0.09, y + h * 0.38], [x + w * 0.16, y + h * 0.4]],
+    [[x + w * 0.3, y + h * 0.74], [x + w * 0.38, y + h * 0.7], [x + w * 0.4, y + h * 0.62], [x + w * 0.33, y + h * 0.64]],
+    [[x + w * 0.28, y + h * 0.55], [x + w * 0.2, y + h * 0.51], [x + w * 0.19, y + h * 0.43], [x + w * 0.26, y + h * 0.45]]
+  ]
+  leaves.forEach((points, index) => {
+    rc.curve(points, index === 1 ? s.accent({ strokeWidth: s.fineWidth }) : s.fine())
+  })
+  rc.circle(x + w * 0.24, y + h * 0.28, 16, s.solid())
+  rc.line(x + w * 0.04, y + h * 0.96, x + w * 0.96, y + h * 0.95, s.fine())
+}
+
+const coverHandFont = '"Hannotate SC", "HanziPen SC", "Kaiti SC", "STKaiti", "KaiTi", "Songti SC", Georgia, serif'
+
+
+// 文章封面：把标题、摘要、标签与分类排成一张手绘索引卡，再按内容关键词配一组线稿。
+export function drawCover(canvas, {
+  seed = 'folio',
+  kind = 'article',
+  label = '',
+  abstract = '',
+  tags = [],
+  category = ''
+} = {}) {
   if (!canvas) return
   const ctx = canvas.getContext('2d')
   const width = canvas.width
@@ -137,7 +363,6 @@ export function drawCover(canvas, { seed = 'folio', kind = 'article', label = ''
 
   fillWash(ctx, colors.accentSoft, 0.46, [width * 0.84, height * 0.12, 300 + (h % 3) * 26, 220 + (h % 4) * 18, -0.2])
   fillWash(ctx, colors.tints[(h + 2) % colors.tints.length], 0.6, [width * 0.11, height * 0.94, 250, 170, 0.18])
-  drawGrain(ctx, width, height, colors, random)
 
   const rc = rough.canvas(canvas)
   let lineSeed = (h % 90000) + 1
@@ -161,6 +386,7 @@ export function drawCover(canvas, { seed = 'folio', kind = 'article', label = ''
   const solidAccent = (extra = {}) => accent({ fill: colors.accent, fillStyle: 'solid', ...extra })
 
   if (kind === 'user') {
+    drawGrain(ctx, width, height, colors, random)
     rc.circle(width * 0.78, height * 1.16, height * 1.25, ink())
     rc.circle(width * 0.78, height * 1.16, height * 0.9, fine())
     rc.line(78, 336, 410, 332, ink())
@@ -169,156 +395,165 @@ export function drawCover(canvas, { seed = 'folio', kind = 'article', label = ''
     return
   }
 
-  switch (h % 8) {
-    case 0: {
-      rc.circle(790, 220, 240, ink())
-      rc.circle(835, 250, 160, fine())
-      rc.line(100, 338, 430, 334, ink())
-      for (let i = 0; i < 3; i += 1) rc.line(430 + i * 24, 316, 430 + i * 24, 352, fine())
-      rc.line(980, 90, 980, 380, fine())
-      for (let i = 0; i < 4; i += 1) rc.line(968, 120 + i * 62, 992, 120 + i * 62, fine())
-      rc.circle(1050, 110, 34, solidAccent())
-      rc.curve([[120, 150], [190, 110], [250, 170]], accent({ strokeWidth: fineWidth }))
-      break
-    }
-    case 1: {
-      rc.circle(900, 145, 150, accent())
-      rc.circle(925, 160, 110, fine())
-      for (let i = 0; i < 4; i += 1) rc.line(870 + i * 16, 120, 855 + i * 16, 170, fine())
-      rc.linearPath(
-        [[60, 365], [250, 225], [380, 315], [530, 180], [690, 330], [830, 245], [1140, 365]],
-        false,
-        ink()
-      )
-      rc.linearPath(
-        [[60, 400], [300, 290], [480, 360], [650, 260], [820, 355], [1000, 300], [1140, 400]],
-        false,
-        fine()
-      )
-      rc.line(60, 410, 1140, 408, fine())
-      rc.circle(160, 130, 22, solidAccent())
-      break
-    }
-    case 2: {
-      const pages = [
-        [[700, 112], [1044, 96], [1058, 350], [714, 366]],
-        [[668, 134], [1012, 118], [1026, 372], [682, 388]],
-        [[636, 156], [980, 140], [994, 394], [650, 410]]
-      ]
-      pages.forEach((points, index) => {
-        rc.linearPath(points, true, ink({
-          strokeWidth: index === 2 ? strokeWidth : fineWidth,
-          fill: colors.surface,
-          fillStyle: 'solid'
-        }))
-      })
-      rc.line(690, 222, 900, 212, fine())
-      rc.line(690, 262, 846, 254, fine())
-      rc.line(690, 302, 884, 294, fine())
-      rc.line(110, 380, 560, 122, ink())
-      rc.circle(320, 250, 60, fine())
-      rc.circle(1040, 90, 26, solidAccent())
-      for (let i = 0; i < 3; i += 1) rc.line(110, 170 + i * 42, 300 - i * 26, 168 + i * 42, fine())
-      break
-    }
-    case 3: {
-      const wave = (y, amp, options, phase) => {
-        const points = []
-        for (let i = 0; i <= 6; i += 1) points.push([70 + i * 176, y + Math.sin(i * 0.95 + phase) * amp])
-        rc.curve(points, options)
-      }
-      wave(150, 16, fine(), 0.2)
-      wave(215, 22, ink(), 1.1)
-      wave(285, 18, accent(), 2)
-      wave(345, 14, fine(), 0.7)
-      rc.circle(1010, 135, 84, ink())
-      rc.circle(1060, 250, 26, solidAccent())
-      for (let i = 0; i < 4; i += 1) rc.line(90, 120 + i * 70, 126, 118 + i * 70, fine())
-      break
-    }
-    case 4: {
-      rc.line(80, 420, 1120, 418, fine())
-      rc.circle(820, 480, 420, ink())
-      rc.circle(820, 480, 300, fine())
-      rc.circle(820, 480, 180, accent({ strokeWidth: fineWidth }))
-      rc.line(820, 80, 820, 300, ink())
-      rc.circle(820, 70, 18, solidAccent())
-      rc.circle(300, 330, 28, solidAccent())
-      for (let i = 0; i < 3; i += 1) rc.line(100, 190 + i * 44, 280 - i * 30, 188 + i * 44, fine())
-      break
-    }
-    case 5: {
-      const gx = 680
-      const gy = 105
-      const cell = 112
-      const gap = 18
-      for (let row = 0; row < 2; row += 1) {
-        for (let column = 0; column < 3; column += 1) {
-          const x = gx + column * (cell + gap)
-          const y = gy + row * (cell + gap)
-          const filled = row === 0 && column === 2
-          rc.rectangle(
-            x,
-            y,
-            cell,
-            cell,
-            filled
-              ? accent({ fill: colors.accentSoft, fillStyle: 'solid' })
-              : fine()
-          )
-          if (filled) rc.circle(x + cell / 2, y + cell / 2, 26, solidAccent())
-        }
-      }
-      rc.line(110, 380, 560, 118, ink())
-      for (let i = 0; i < 3; i += 1) rc.circle(170 + i * 90, 330 - i * 55, 10, fine())
-      rc.circle(260, 210, 70, fine())
-      rc.line(470, 330, 520, 330, accent())
-      rc.line(495, 305, 495, 355, accent())
-      break
-    }
-    case 6: {
-      rc.circle(930, 150, 160, ink())
-      rc.circle(955, 170, 120, fine())
-      rc.curve([[180, 420], [210, 330], [195, 240], [235, 150]], ink())
-      rc.curve([[270, 420], [300, 340], [280, 260], [315, 190]], fine())
-      const leaves = [
-        [[210, 330], [170, 315], [160, 280], [195, 285]],
-        [[195, 240], [155, 228], [150, 195], [185, 200]],
-        [[300, 340], [340, 325], [350, 290], [315, 295]],
-        [[280, 260], [245, 248], [238, 218], [270, 222]]
-      ]
-      leaves.forEach((points, index) => {
-        rc.curve(points, index === 1 ? accent({ strokeWidth: fineWidth }) : fine())
-      })
-      rc.circle(235, 150, 18, solidAccent())
-      rc.line(90, 420, 1100, 418, fine())
-      break
-    }
-    default: {
-      rc.rectangle(610, 90, 400, 300, ink())
-      rc.rectangle(640, 120, 340, 240, fine())
-      const glyph = sealGlyph(label)
-      if (glyph) {
-        ctx.save()
-        ctx.globalAlpha = 0.16
-        ctx.fillStyle = colors.ink
-        ctx.font = '600 190px "Songti SC", "STSong", "Noto Serif CJK SC", Georgia, serif'
-        ctx.textAlign = 'center'
-        ctx.textBaseline = 'middle'
-        ctx.fillText(glyph, 810, 244)
-        ctx.restore()
-      } else {
-        rc.circle(810, 245, 100, fine())
-      }
-      for (let i = 0; i < 4; i += 1) {
-        rc.line(100, 180 + i * 50, 360 - i * 38, 178 + i * 50, i === 0 ? ink() : fine())
-      }
-      rc.line(100, 390, 330, 388, accent())
-      rc.circle(1010, 130, 24, solidAccent())
-    }
+  const titleText = cleanCoverText(label)
+  const displayTitle = titleText || (kind === 'doc' ? '未命名文档' : '未命名文章')
+  const abstractText = cleanCoverText(abstract)
+  const tagList = (Array.isArray(tags) ? tags : [])
+    .map(cleanCoverText)
+    .filter(Boolean)
+    .slice(0, 4)
+  const categoryText = cleanCoverText(category)
+  const typeLabel = kind === 'doc' ? '文档' : '文章'
+  const eyebrow = categoryText ? `${categoryText} · ${typeLabel}` : typeLabel
+
+  const panelW = 566
+  const panelH = 372
+  const panelY = 54
+  const pad = 32
+  const textOnRight = h % 2 === 1
+  const panelX = textOnRight ? width - panelW - 54 : 54
+  const textX = panelX + pad
+  const textW = panelW - pad * 2
+  const artBox = textOnRight
+    ? { x: 52, y: 60, w: 500, h: 360 }
+    : { x: 648, y: 60, w: 500, h: 360 }
+
+  ctx.save()
+  ctx.globalAlpha = 0.72
+  rc.rectangle(panelX, panelY, panelW, panelH, {
+    stroke: colors.line,
+    strokeWidth: fineWidth,
+    roughness: 1.8,
+    bowing: 0.8,
+    fill: colors.surface,
+    fillStyle: 'solid',
+    seed: (h % 90000) + 3
+  })
+  ctx.restore()
+
+  const dividerX = textOnRight ? panelX - 26 : panelX + panelW + 26
+  ctx.save()
+  ctx.globalAlpha = 0.5
+  rc.line(dividerX, 90, dividerX, 390, fine())
+  ctx.restore()
+
+  drawGrain(ctx, width, height, colors, random)
+
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'alphabetic'
+
+  rc.line(textX, 96, textX + 22, 96, accent({ strokeWidth: fineWidth * 1.2 }))
+  ctx.font = `18px ${coverHandFont}`
+  ctx.fillStyle = colors.inkSoft
+  ctx.fillText(truncateCanvasText(ctx, eyebrow, textW - 34), textX + 32, 102)
+
+  const titleChars = Array.from(displayTitle).length
+  let titleSize = 64
+  if (titleChars > 10) titleSize = 58
+  if (titleChars > 16) titleSize = 52
+  if (titleChars > 24) titleSize = 47
+  if (titleChars > 32) titleSize = 43
+  ctx.font = `600 ${titleSize}px ${coverHandFont}`
+  ctx.fillStyle = colors.ink
+  const titleLines = wrapCanvasText(ctx, displayTitle, textW, 2)
+  const titleStart = 172
+  const titleLineHeight = titleSize * 1.2
+  titleLines.forEach((line, index) => {
+    ctx.fillText(line, textX, titleStart + index * titleLineHeight)
+  })
+  const lastTitleBaseline = titleStart + (titleLines.length - 1) * titleLineHeight
+  const lastTitleWidth = ctx.measureText(titleLines[titleLines.length - 1] || '').width
+  rc.line(
+    textX,
+    lastTitleBaseline + 16,
+    textX + Math.min(110, Math.max(48, lastTitleWidth * 0.32)),
+    lastTitleBaseline + 16,
+    accent({ strokeWidth: fineWidth * 1.2 })
+  )
+
+  if (abstractText) {
+    ctx.font = `19px ${coverHandFont}`
+    const abstractLines = wrapCanvasText(ctx, abstractText, textW - 18, 2)
+    const abstractStart = lastTitleBaseline + 52
+    ctx.save()
+    ctx.globalAlpha = 0.7
+    ctx.fillStyle = colors.accent
+    ctx.fillRect(textX, abstractStart - 19, 3, abstractLines.length * 27 + 3)
+    ctx.restore()
+    ctx.save()
+    ctx.globalAlpha = 0.86
+    ctx.fillStyle = colors.inkSoft
+    abstractLines.forEach((line, index) => {
+      ctx.fillText(line, textX + 16, abstractStart + index * 27)
+    })
+    ctx.restore()
   }
 
-  drawSeal(ctx, rc, 1082, 400, 58, sealGlyph(label), colors, (h % 90000) + 501)
+  const tagY = panelY + panelH - 36
+  ctx.font = `17px ${coverHandFont}`
+  let tagCursor = textX
+  let shownTags = 0
+  for (const tag of tagList) {
+    const tagText = `#${tag}`
+    const boxWidth = ctx.measureText(tagText).width + 24
+    if (shownTags >= 3 || tagCursor + boxWidth > textX + textW) break
+    rc.rectangle(tagCursor, tagY - 22, boxWidth, 30, {
+      stroke: colors.line,
+      strokeWidth: fineWidth,
+      roughness: 1.2,
+      bowing: 0.7,
+      seed: (lineSeed += 11)
+    })
+    ctx.fillStyle = colors.inkSoft
+    ctx.fillText(tagText, tagCursor + 12, tagY)
+    tagCursor += boxWidth + 9
+    shownTags += 1
+  }
+  if (!tagList.length) {
+    rc.line(textX, tagY - 7, textX + 84, tagY - 7, accent({ strokeWidth: fineWidth }))
+  }
+
+  const style = {
+    rc,
+    colors,
+    ink,
+    fine,
+    accent,
+    solid: solidAccent,
+    strokeWidth,
+    fineWidth
+  }
+  switch (coverMotif(tagList, categoryText, titleText, h)) {
+    case 0:
+      drawMotifOrbit(rc, artBox, style)
+      break
+    case 1:
+      drawMotifRidge(rc, artBox, style)
+      break
+    case 2:
+      drawMotifStack(rc, artBox, style)
+      break
+    case 3:
+      drawMotifGrid(rc, artBox, style)
+      break
+    case 4:
+      drawMotifArch(rc, artBox, style)
+      break
+    default:
+      drawMotifBotanical(rc, artBox, style)
+  }
+
+  const sealX = textOnRight ? 110 : width - 110
+  drawSeal(
+    ctx,
+    rc,
+    sealX,
+    400,
+    56,
+    sealGlyph(tagList[0] || categoryText || displayTitle),
+    colors,
+    (h % 90000) + 501
+  )
 }
 
 // 极简头像：一个手绘圆 + 一个字。
