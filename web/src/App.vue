@@ -115,20 +115,12 @@ onBeforeUnmount(() => {
           <RouterLink
             to="/articles"
             class="nav-link"
-            :class="{ 'is-active': route.path.startsWith('/articles') && !(route.path === '/articles' && route.query.sort === 'popular') }"
+            :class="{ 'is-active': route.path.startsWith('/articles') }"
             @click="onNavClick('/articles')"
           >
             文章
           </RouterLink>
           <RouterLink to="/docs" class="nav-link" active-class="is-active" @click="onNavClick('/docs')">文档</RouterLink>
-          <RouterLink
-            to="/articles?sort=popular"
-            class="nav-link"
-            :class="{ 'is-active': route.path === '/articles' && route.query.sort === 'popular' }"
-            @click="onNavClick('/articles')"
-          >
-            热门
-          </RouterLink>
           <RouterLink to="/about" class="nav-link" active-class="is-active" @click="onNavClick('/about')">关于</RouterLink>
           <RouterLink v-if="auth.user" to="/ask" class="nav-link" active-class="is-active">问 AI</RouterLink>
         </nav>
@@ -200,7 +192,6 @@ onBeforeUnmount(() => {
           <div class="container">
             <RouterLink to="/articles" class="mobile-link">文章</RouterLink>
             <RouterLink to="/docs" class="mobile-link">文档</RouterLink>
-            <RouterLink to="/articles?sort=popular" class="mobile-link">热门</RouterLink>
             <RouterLink to="/about" class="mobile-link">关于</RouterLink>
             <RouterLink v-if="staff" to="/admin" class="mobile-link">管理后台</RouterLink>
             <RouterLink v-if="auth.user" to="/messages" class="mobile-link">消息</RouterLink>
