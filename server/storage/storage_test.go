@@ -103,3 +103,25 @@ func TestQiniuUploadWithFakeEndpoint(t *testing.T) {
 		t.Fatalf("七牛上传结果不正确: uploads=%d object=%#v", uploads, object)
 	}
 }
+
+func TestManagerRuntimeConfigure(t *testing.T) {
+	manager := New(config.Config{UploadDir: t.TempDir(), StorageProvider: "local"})
+	if manager.Provider() != "local" {
+		t.Fatalf("默认应为本地存储: %s", manager.Provider())
+	}
+	manager.Configure(config.Config{
+		UploadDir:       t.TempDir(),
+		StorageProvider: "qiniu",
+		QiniuAccessKey:  "ak",
+		QiniuSecretKey:  "sk",
+		QiniuBucket:     "bucket",
+		QiniuDomain:     "https://cdn.example.com",
+	})
+	if manager.Provider() != "qiniu" || !manager.QiniuConfigured() {
+		t.Fatalf("运行时切换七牛失败: %s", manager.Provider())
+	}
+	manager.Configure(config.Config{StorageProvider: "local"})
+	if manager.Provider() != "local" {
+		t.Fatalf("运行时切回本地失败: %s", manager.Provider())
+	}
+}

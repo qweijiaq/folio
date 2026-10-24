@@ -228,6 +228,18 @@ type SiteSetting struct {
 	LoginCaptcha  bool   `json:"loginCaptcha"`
 }
 
+// StorageSetting 是单行图片存储设置。密钥加密后保存，接口不会回显。
+type StorageSetting struct {
+	Base
+	Provider       string `gorm:"size:16" json:"provider"`
+	QiniuAccessKey string `gorm:"size:512" json:"-"`
+	QiniuSecretKey string `gorm:"size:512" json:"-"`
+	QiniuBucket    string `gorm:"size:128" json:"qiniuBucket"`
+	QiniuDomain    string `gorm:"size:255" json:"qiniuDomain"`
+	QiniuRegion    string `gorm:"size:32" json:"qiniuRegion"`
+	QiniuPrefix    string `gorm:"size:64" json:"qiniuPrefix"`
+}
+
 // GlobalNotice 是管理员发给全站用户的公告，展示在通知页顶部。
 type GlobalNotice struct {
 	Base

@@ -33,6 +33,7 @@ type Storage interface {
 
 // Manager 始终保留本地存储，用于读取/删除旧图片；active 决定新图片写到哪里。
 type Manager struct {
+	mu     sync.RWMutex
 	active string
 	local  *Local
 	qiniu  *Qiniu
@@ -40,20 +41,44 @@ type Manager struct {
 
 func New(cfg config.Config) *Manager {
 	manager := &Manager{active: "local", local: NewLocal(cfg.UploadDir)}
-	if cfg.QiniuEnabled() {
-		manager.qiniu = NewQiniu(cfg)
-	}
-	if cfg.StorageProvider == "qiniu" && manager.qiniu != nil {
-		manager.active = "qiniu"
-	}
+	manager.configure(cfg)
 	return manager
 }
 
-func (m *Manager) Provider() string { return m.active }
+// Configure 在后台保存存储设置后立即切换新图片的写入位置。
+func (m *Manager) Configure(cfg config.Config) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.configure(cfg)
+}
 
-func (m *Manager) QiniuConfigured() bool { return m.qiniu != nil }
+func (m *Manager) configure(cfg config.Config) {
+	m.active = "local"
+	if cfg.QiniuEnabled() {
+		m.qiniu = NewQiniu(cfg)
+	} else {
+		m.qiniu = nil
+	}
+	if cfg.StorageProvider == "qiniu" && m.qiniu != nil {
+		m.active = "qiniu"
+	}
+}
+
+func (m *Manager) Provider() string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.active
+}
+
+func (m *Manager) QiniuConfigured() bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.qiniu != nil
+}
 
 func (m *Manager) For(provider string) Storage {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	if provider == "qiniu" && m.qiniu != nil {
 		return m.qiniu
 	}
@@ -61,7 +86,13 @@ func (m *Manager) For(provider string) Storage {
 }
 
 func (m *Manager) Put(ctx context.Context, key string, data []byte, mime string) (Object, error) {
-	return m.For(m.active).Put(ctx, key, data, mime)
+	m.mu.RLock()
+	target := Storage(m.local)
+	if m.active == "qiniu" && m.qiniu != nil {
+		target = m.qiniu
+	}
+	m.mu.RUnlock()
+	return target.Put(ctx, key, data, mime)
 }
 
 // Local 把图片写到 FOLIO_UPLOAD_DIR，通过 /uploads 静态访问。
@@ -210,6 +241,19 @@ func (q *Qiniu) Put(ctx context.Context, key string, data []byte, mime string) (
 		return Object{}, fmt.Errorf("上传到七牛失败: %w", err)
 	}
 	return Object{Provider: "qiniu", Key: objectKey, URL: q.URL(objectKey)}, nil
+}
+
+// Probe 上传并删除一个临时文件，验证密钥、空间和写入权限。
+func (q *Qiniu) Probe(ctx context.Context) error {
+	key := fmt.Sprintf(".folio-probe-%d.txt", time.Now().UnixNano())
+	object, err := q.Put(ctx, key, []byte("folio storage probe"), "text/plain")
+	if err != nil {
+		return err
+	}
+	if err := q.Delete(ctx, object.Key); err != nil {
+		return fmt.Errorf("测试文件上传成功但清理失败: %w", err)
+	}
+	return nil
 }
 
 func (q *Qiniu) Delete(ctx context.Context, key string) error {

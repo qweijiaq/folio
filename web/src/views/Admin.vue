@@ -56,6 +56,31 @@ const settingsForm = reactive({
   allowRegister: true,
   loginCaptcha: false
 })
+const storageForm = reactive({
+  provider: 'local',
+  qiniuAccessKey: '',
+  qiniuSecretKey: '',
+  qiniuBucket: '',
+  qiniuDomain: '',
+  qiniuRegion: '',
+  qiniuPrefix: 'folio'
+})
+const storageInfo = reactive({
+  provider: 'local',
+  active: 'local',
+  source: 'none',
+  configured: false,
+  hasAccessKey: false,
+  hasSecretKey: false,
+  qiniuBucket: '',
+  qiniuDomain: '',
+  qiniuRegion: '',
+  qiniuPrefix: 'folio',
+  localUploadDir: ''
+})
+const savingStorage = ref(false)
+const testingStorage = ref(false)
+const storageTestResult = ref({ ok: null, message: '' })
 const logs = ref([])
 const logTotal = ref(0)
 const logPage = ref(1)
@@ -64,6 +89,12 @@ const logPageSize = 30
 
 const isSuper = computed(() => auth.user?.role === 'super_admin')
 const staff = computed(() => ['super_admin', 'admin'].includes(auth.user?.role))
+const storageSourceLabel = computed(() => ({
+  env: '环境变量',
+  database: '网页设置',
+  none: '未配置'
+}[storageInfo.source] || '未配置'))
+const storageActiveLabel = computed(() => (storageInfo.active === 'qiniu' ? '七牛云' : '本地磁盘'))
 
 const tabs = computed(() => {
   const list = [
@@ -77,6 +108,7 @@ const tabs = computed(() => {
   if (isSuper.value) {
     list.push(
       { key: 'users', label: '用户与权限', icon: 'user' },
+      { key: 'storage', label: '存储设置', icon: 'cloud' },
       { key: 'settings', label: '站点设置', icon: 'settings' },
       { key: 'logs', label: '操作日志', icon: 'clock' }
     )
@@ -367,6 +399,105 @@ async function saveSettings() {
   }
 }
 
+function applyStorageInfo(storage = {}) {
+  Object.assign(storageInfo, {
+    provider: storage.provider || 'local',
+    active: storage.active || 'local',
+    source: storage.source || 'none',
+    configured: Boolean(storage.configured),
+    hasAccessKey: Boolean(storage.hasAccessKey),
+    hasSecretKey: Boolean(storage.hasSecretKey),
+    qiniuBucket: storage.qiniuBucket || '',
+    qiniuDomain: storage.qiniuDomain || '',
+    qiniuRegion: storage.qiniuRegion || '',
+    qiniuPrefix: storage.qiniuPrefix || 'folio',
+    localUploadDir: storage.localUploadDir || ''
+  })
+  storageForm.provider = storageInfo.provider
+  storageForm.qiniuBucket = storageInfo.qiniuBucket
+  storageForm.qiniuDomain = storageInfo.qiniuDomain
+  storageForm.qiniuRegion = storageInfo.qiniuRegion
+  storageForm.qiniuPrefix = storageInfo.qiniuPrefix
+  storageForm.qiniuAccessKey = ''
+  storageForm.qiniuSecretKey = ''
+}
+
+async function loadStorage() {
+  storageTestResult.value = { ok: null, message: '' }
+  try {
+    const data = await api.get('/admin/storage')
+    applyStorageInfo(data.storage)
+  } catch (err) {
+    toastError(err)
+  }
+}
+
+function storagePayload() {
+  return {
+    provider: storageForm.provider,
+    qiniuAccessKey: storageForm.qiniuAccessKey,
+    qiniuSecretKey: storageForm.qiniuSecretKey,
+    qiniuBucket: storageForm.qiniuBucket,
+    qiniuDomain: storageForm.qiniuDomain,
+    qiniuRegion: storageForm.qiniuRegion,
+    qiniuPrefix: storageForm.qiniuPrefix
+  }
+}
+
+function validateStorageForm() {
+  if (storageForm.provider !== 'qiniu') return true
+  if (!storageForm.qiniuAccessKey.trim() && !storageInfo.hasAccessKey) {
+    toast('请填写七牛 AccessKey')
+    return false
+  }
+  if (!storageForm.qiniuSecretKey.trim() && !storageInfo.hasSecretKey) {
+    toast('请填写七牛 SecretKey')
+    return false
+  }
+  if (!storageForm.qiniuBucket.trim()) {
+    toast('请填写七牛空间名')
+    return false
+  }
+  if (!storageForm.qiniuDomain.trim()) {
+    toast('请填写七牛绑定域名')
+    return false
+  }
+  return true
+}
+
+async function saveStorage() {
+  if (!validateStorageForm()) return
+  savingStorage.value = true
+  try {
+    const data = await api.put('/admin/storage', storagePayload())
+    applyStorageInfo(data.storage)
+    storageTestResult.value = { ok: null, message: '' }
+    toast(storageInfo.provider === 'qiniu' ? '已切换到七牛云存储' : '已切换到本地存储')
+  } catch (err) {
+    toastError(err)
+  } finally {
+    savingStorage.value = false
+  }
+}
+
+async function testStorage() {
+  if (!validateStorageForm()) return
+  testingStorage.value = true
+  storageTestResult.value = { ok: null, message: '' }
+  try {
+    const data = await api.post('/admin/storage/test', storagePayload())
+    storageTestResult.value = { ok: true, message: data.message || '连接成功' }
+  } catch (err) {
+    storageTestResult.value = { ok: false, message: err.message || '连接失败' }
+  } finally {
+    testingStorage.value = false
+  }
+}
+
+watch(storageForm, () => {
+  if (storageTestResult.value.message) storageTestResult.value = { ok: null, message: '' }
+}, { deep: true })
+
 async function loadLogs(page = logPage.value) {
   logPage.value = page
   try {
@@ -530,6 +661,13 @@ async function loadTab() {
         await loadStats()
       } else {
         await loadSettings()
+      }
+    } else if (tab.value === 'storage') {
+      if (!isSuper.value) {
+        tab.value = 'overview'
+        await loadStats()
+      } else {
+        await loadStorage()
       }
     } else if (tab.value === 'logs') {
       if (!isSuper.value) {
@@ -1238,6 +1376,115 @@ onMounted(async () => {
             <div class="form-actions">
               <button class="btn btn-primary btn-sm" type="submit" :disabled="savingSettings">
                 {{ savingSettings ? '保存中…' : '保存设置' }}
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <div v-else-if="tab === 'storage' && isSuper" class="panel">
+          <header class="panel-head">
+            <h2>图片存储</h2>
+            <p>新上传的图片可以写入本地磁盘或七牛云。切换只影响之后的图片，历史图片仍按各自记录的方式访问。</p>
+          </header>
+
+          <p v-if="tabLoading" class="muted loading-line">正在加载存储设置…</p>
+          <form v-else class="settings-form" @submit.prevent="saveStorage">
+            <div class="storage-current">
+              <span class="badge">{{ storageActiveLabel }}生效中</span>
+              <span>配置来源：{{ storageSourceLabel }}</span>
+              <span v-if="storageInfo.source === 'env'" class="hint">保存后会以网页设置为准，环境变量仅作为首次启动的默认值。</span>
+            </div>
+
+            <div class="field">
+              <label for="storage-provider">新图片存放位置</label>
+              <select id="storage-provider" v-model="storageForm.provider">
+                <option value="local">本地磁盘</option>
+                <option value="qiniu">七牛云对象存储</option>
+              </select>
+            </div>
+
+            <template v-if="storageForm.provider === 'qiniu'">
+              <div class="form-row">
+                <div class="field">
+                  <label for="storage-access">AccessKey</label>
+                  <PasswordInput
+                    id="storage-access"
+                    v-model="storageForm.qiniuAccessKey"
+                    autocomplete="off"
+                    :placeholder="storageInfo.hasAccessKey ? '已配置，留空保持不变' : '七牛 AccessKey'"
+                  />
+                </div>
+                <div class="field">
+                  <label for="storage-secret">SecretKey</label>
+                  <PasswordInput
+                    id="storage-secret"
+                    v-model="storageForm.qiniuSecretKey"
+                    autocomplete="off"
+                    :placeholder="storageInfo.hasSecretKey ? '已配置，留空保持不变' : '七牛 SecretKey'"
+                  />
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="field">
+                  <label for="storage-bucket">空间名</label>
+                  <input id="storage-bucket" v-model="storageForm.qiniuBucket" maxlength="128" placeholder="your-bucket" />
+                </div>
+                <div class="field">
+                  <label for="storage-domain">绑定域名</label>
+                  <input id="storage-domain" v-model="storageForm.qiniuDomain" maxlength="255" placeholder="https://image.example.com" />
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="field">
+                  <label for="storage-region">区域</label>
+                  <select id="storage-region" v-model="storageForm.qiniuRegion">
+                    <option value="">自动识别</option>
+                    <option value="z0">z0 · 华东</option>
+                    <option value="cn-east-2">cn-east-2 · 浙江</option>
+                    <option value="z1">z1 · 华北</option>
+                    <option value="z2">z2 · 华南</option>
+                    <option value="na0">na0 · 北美</option>
+                    <option value="as0">as0 · 新加坡</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="storage-prefix">对象前缀</label>
+                  <input id="storage-prefix" v-model="storageForm.qiniuPrefix" maxlength="64" placeholder="folio" />
+                </div>
+              </div>
+
+              <p class="hint">
+                密钥会使用站点 <code>FOLIO_SECRET</code> 加密后保存，接口不会回显。Bucket 需要是公开读空间；域名只填主机名，可以带 <code>https://</code>。
+              </p>
+              <div
+                v-if="storageTestResult.message"
+                class="storage-test-result"
+                :class="storageTestResult.ok ? 'is-ok' : 'is-error'"
+              >
+                {{ storageTestResult.message }}
+              </div>
+            </template>
+            <template v-else>
+              <div class="storage-local-note">
+                <strong>本地磁盘</strong>
+                <span>新图片保存到 <code>{{ storageInfo.localUploadDir || 'FOLIO_UPLOAD_DIR' }}</code>，通过 <code>/uploads/*</code> 访问。</span>
+              </div>
+            </template>
+
+            <div class="form-actions">
+              <button
+                v-if="storageForm.provider === 'qiniu'"
+                class="btn btn-ghost btn-sm"
+                type="button"
+                :disabled="testingStorage"
+                @click="testStorage"
+              >
+                {{ testingStorage ? '测试中…' : '测试连接' }}
+              </button>
+              <button class="btn btn-primary btn-sm" type="submit" :disabled="savingStorage">
+                {{ savingStorage ? '保存中…' : '保存并切换' }}
               </button>
             </div>
           </form>

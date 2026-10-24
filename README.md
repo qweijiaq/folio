@@ -55,7 +55,7 @@ folio/
 │   ├── db/                 # SQLite / MySQL / 内存数据库
 │   ├── cache/              # Redis：JWT 黑名单、浏览量去重
 │   ├── mail/               # SMTP 发信与本地调试邮件
-│   ├── models/             # 22 张表的模型
+│   ├── models/             # 23 张表的模型
 │   ├── art/                # 生成式封面与头像
 │   ├── storage/            # 本地磁盘 / 七牛云存储抽象
 │   ├── handlers/           # 路由、接口与集成测试
@@ -195,7 +195,7 @@ Go 服务会自动托管 `../web/dist`，访问 <http://localhost:8080> 即可�
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
 | `FOLIO_ADDR` | `:8080` | 监听地址 |
-| `FOLIO_SECRET` | 开发用默认值 | JWT 签名密钥，**部署时必须修改** |
+| `FOLIO_SECRET` | 开发用默认值 | JWT 签名密钥，同时用于加密后台保存的七牛密钥；**部署时必须修改，修改后需重新填写七牛密钥** |
 | `FOLIO_DB_DRIVER` | `sqlite` | `sqlite` / `mysql` / `memory` |
 | `FOLIO_DB` | `./data/folio.db` | SQLite 文件路径 |
 | `FOLIO_MYSQL_DSN` | 空 | MySQL DSN，例如 `folio:folio_pass@tcp(127.0.0.1:3306)/folio?charset=utf8mb4&parseTime=True&loc=Local` |
@@ -203,10 +203,10 @@ Go 服务会自动托管 `../web/dist`，访问 <http://localhost:8080> 即可�
 | `FOLIO_REDIS_ADDR` | 空 | Redis 地址，留空则关闭 Redis 功能 |
 | `FOLIO_REDIS_PASSWORD` | 空 | Redis 密码 |
 | `FOLIO_REDIS_DB` | `0` | Redis 库编号 |
-| `FOLIO_STORAGE` | `local` | 图片存储：`local`（本地磁盘）或 `qiniu`（七牛云） |
+| `FOLIO_STORAGE` | `local` | 图片存储默认值：`local` 或 `qiniu`；后台保存过存储设置后以网页配置为准 |
 | `FOLIO_UPLOAD_DIR` | `./data/uploads` | 本地模式的正文图片保存目录 |
-| `FOLIO_QINIU_ACCESS_KEY` | 空 | 七牛 AccessKey |
-| `FOLIO_QINIU_SECRET_KEY` | 空 | 七牛 SecretKey |
+| `FOLIO_QINIU_ACCESS_KEY` | 空 | 七牛 AccessKey 的初始值；后台保存后以网页配置为准 |
+| `FOLIO_QINIU_SECRET_KEY` | 空 | 七牛 SecretKey 的初始值；后台保存后以网页配置为准 |
 | `FOLIO_QINIU_BUCKET` | 空 | 七牛空间名 |
 | `FOLIO_QINIU_DOMAIN` | 空 | 七牛绑定域名，例如 `https://image.example.com` |
 | `FOLIO_QINIU_REGION` | 空 | 空间区域；留空自动查询 |
@@ -245,7 +245,7 @@ Go 服务会自动托管 `../web/dist`，访问 <http://localhost:8080> 即可�
 
 ## 数据模型
 
-只有 22 张表：
+只有 23 张表：
 
 | 表 | 用途 |
 | --- | --- |
@@ -268,6 +268,7 @@ Go 服务会自动托管 `../web/dist`，访问 <http://localhost:8080> 即可�
 | `document_revisions` | 内容历史版本：标题、摘要、正文、标签、状态、编辑者与时间 |
 | `email_codes` | 邮箱验证码：用途、HMAC 摘要、过期时间、尝试次数、消费时间 |
 | `site_settings` | 单行站点设置：名称、描述、维护者、注册开关、图形验证码 |
+| `storage_settings` | 单行图片存储设置：提供方、加密后的七牛密钥、空间、域名、区域与对象前缀 |
 | `operation_logs` | 操作日志：操作者、动作、对象、详情、IP、User-Agent |
 | `global_notices` | 全站公告：标题、内容、链接、发布者 |
 | `notice_reads` | 每个用户对全站公告的已读记录（公告 + 用户唯一） |
@@ -316,15 +317,30 @@ MySQL 与 SQLite 共用同一套模型和迁移代码；Redis 不保存业务数
 
 ## 图片与对象存储
 
-默认使用本地磁盘；也可以把新图片切换到七牛云。两种模式共用同一个上传接口、去重逻辑和管理后台图库：
+默认使用本地磁盘，也可以把新图片切换到七牛云。两种模式共用同一个上传接口、去重逻辑和管理后台图库。
 
-- `FOLIO_STORAGE=local`（默认）：文件写到 `FOLIO_UPLOAD_DIR`，通过 `/uploads/*` 访问；
-- `FOLIO_STORAGE=qiniu`：文件由服务端上传到七牛，返回 `FOLIO_QINIU_DOMAIN` 下的 URL；
+### 在网页里配置（推荐）
+
+超级管理员进入「管理后台 → 存储设置」，可以直接：
+
+- 在本地磁盘和七牛云之间切换，保存后立即生效，不需要重启；
+- 填写 AccessKey、SecretKey、空间名、绑定域名、区域和对象前缀；
+- 点「测试连接」会上传一个临时文件并立即删除，用来验证密钥、空间和写入权限；
+- 密钥不会回显：读取接口只返回「是否已配置」，留空表示保持原密钥；
+- 七牛密钥用 `FOLIO_SECRET` 派生出的 AES-GCM 密钥加密后写入数据库；如果更换了 `FOLIO_SECRET`，需要在后台重新填写七牛密钥；
+- 后台保存过配置后，数据库配置优先于环境变量；环境变量只作为首次启动或未保存过配置时的默认值。
+
+两种模式的行为：
+
+- 本地模式：文件写到 `FOLIO_UPLOAD_DIR`，通过 `/uploads/*` 访问；
+- 七牛模式：文件由服务端上传到七牛，返回绑定域名下的 URL；
 - 已存在的图片继续按各自记录的存储方式访问和删除，切换模式不会丢历史图片；
 - 删除图片时会先检查是否还有其他记录引用同一个对象，没有引用才删除七牛或本地文件；
 - 目前面向公开读取的 Bucket；私有 Bucket 需要额外的签名代理，暂未启用。
 
-七牛配置示例：
+### 用环境变量提供初始配置
+
+不经过网页时，也可以在 `.env` 里提供初始值；后台保存后会以网页配置为准。
 
 ```bash
 FOLIO_STORAGE=qiniu
@@ -520,7 +536,7 @@ FOLIO_SITE_URL=https://your-domain.com
 - `/messages` 私信与通知：会话列表、WebSocket 实时消息、图片与表情、轮询兜底、全站公告与通知已读
 - `/ask` 问 AI：用户自带 API Key（Anthropic、DeepSeek、智谱 GLM、Kimi、通义千问），检索站内资料后回答并给出引用
 - `/me` 我的空间：资料、密码、隐私与消息、最近登录记录、收藏夹、浏览历史；管理员额外看到自己的文章与文档，并可以把一篇文章置顶到公开主页
-- `/admin` 管理后台：概览、数据看板、内容管理、分类管理、图片管理、全站通知；内容管理支持导出全部 Markdown；超级管理员额外拥有用户与权限、邀请注册、站点设置和操作日志
+- `/admin` 管理后台：概览、数据看板、内容管理、分类管理、图片管理、全站通知；内容管理支持导出全部 Markdown；超级管理员额外拥有用户与权限、邀请注册、存储设置、站点设置和操作日志
 - `/login`、`/register` 登录注册：密码登录、邮箱验证码登录、QQ 登录、注册；关闭注册后可通过一次性邀请链接注册
 - `/forgot` 通过邮箱验证码重置密码
 
@@ -558,14 +574,14 @@ FOLIO_SITE_URL=https://your-domain.com
 | 视觉 | `GET /art/cover.svg`、`GET /art/cover.png`、`GET /art/avatar.svg` |
 | SEO | `GET /feed.xml`、`GET /sitemap.xml`、`GET /robots.txt` |
 | 系统 | `GET /health` |
-| 管理 | `GET /admin/stats`、`GET /admin/dashboard`、`GET /admin/docs`、`GET /admin/users`、`POST /admin/users`、`DELETE /admin/users/:id`、`PUT /admin/users/:id/role`、`GET|POST /admin/invites`、`DELETE /admin/invites/:id`、`GET|PUT /admin/settings`、`GET /admin/logs`、`GET|POST /admin/notices`、`DELETE /admin/notices/:id`、`GET /admin/export` |
+| 管理 | `GET /admin/stats`、`GET /admin/dashboard`、`GET /admin/docs`、`GET /admin/users`、`POST /admin/users`、`DELETE /admin/users/:id`、`PUT /admin/users/:id/role`、`GET|POST /admin/invites`、`DELETE /admin/invites/:id`、`GET|PUT /admin/settings`、`GET|PUT /admin/storage`、`POST /admin/storage/test`、`GET /admin/logs`、`GET|POST /admin/notices`、`DELETE /admin/notices/:id`、`GET /admin/export` |
 
 ## 一些实现约定
 
 - **摘要**：不填时自动从 Markdown 正文提取前 120 字。
 - **计数**：点赞、收藏、评论写入后重新 `COUNT(*)` 回写，避免增量漂移。
 - **删除**：删除文档会递归删除子文档及其评论、点赞、收藏、通知；删除根评论会连同回复一起删除；删除用户会清理其全部内容、互动、图片和浏览历史。
-- **图片**：支持上传、粘贴与拖拽；默认保存在 `FOLIO_UPLOAD_DIR`，设置 `FOLIO_STORAGE=qiniu` 后新图上传到七牛；封面与头像仍然是自动生成，不能上传。
+- **图片**：支持上传、粘贴与拖拽；默认保存在 `FOLIO_UPLOAD_DIR`，可以在管理后台「存储设置」切换到七牛，也可以用环境变量提供初始配置；封面与头像仍然是自动生成，不能上传。
 - **备份**：SQLite 可用 `sqlite3 folio.db ".backup 'backup.db'"`；MySQL 使用 `mysqldump`；本地图片目录/`uploads-data` 卷需要一起备份，七牛图片由对象存储侧负责备份与生命周期。
 - **主题**：默认跟随系统明暗偏好，切换后记住选择。
 

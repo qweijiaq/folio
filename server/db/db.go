@@ -51,6 +51,7 @@ func migrate(gdb *gorm.DB) error {
 		&models.GlobalNotice{},
 		&models.NoticeRead{},
 		&models.SiteSetting{},
+		&models.StorageSetting{},
 		&models.OperationLog{},
 	); err != nil {
 		return err

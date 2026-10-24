@@ -51,7 +51,7 @@ func New(db *gorm.DB, cfg config.Config, rc *cache.Cache) *API {
 		client := anthropic.NewClient(options...)
 		aiClient = &client
 	}
-	return &API{
+	api := &API{
 		DB:      db,
 		Cfg:     cfg,
 		Cache:   rc,
@@ -61,6 +61,8 @@ func New(db *gorm.DB, cfg config.Config, rc *cache.Cache) *API {
 		Hub:     newWSHub(),
 		Storage: storage.New(cfg),
 	}
+	api.loadStorageSetting()
+	return api
 }
 
 func fail(c *gin.Context, status int, msg string) {

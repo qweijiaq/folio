@@ -22,6 +22,7 @@ import (
 	"folio/server/db"
 	"folio/server/handlers"
 	"folio/server/models"
+	"folio/server/secure"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -1867,5 +1868,162 @@ func TestAIAskOpenAICompatibleProviders(t *testing.T) {
 	})
 	if status != http.StatusBadRequest || calls != 0 {
 		t.Fatalf("未提供用户 Key 时不应调用上游，实际 %d calls=%d", status, calls)
+	}
+}
+
+func TestAdminStorageSettings(t *testing.T) {
+	s := newTestAPI(t)
+	adminToken, _ := s.register(t, "storageadmin")
+
+	status, data := s.do(t, "GET", "/api/admin/storage", adminToken, nil)
+	if status != http.StatusOK {
+		t.Fatalf("读取存储设置失败: %d %v", status, data)
+	}
+	storage := obj(data, "storage")
+	if storage["provider"] != "local" || storage["active"] != "local" || storage["source"] != "none" {
+		t.Fatalf("默认存储状态不正确: %v", storage)
+	}
+
+	payload := map[string]any{
+		"provider":       "qiniu",
+		"qiniuAccessKey": "storage-access",
+		"qiniuSecretKey": "storage-secret",
+		"qiniuBucket":    "bucket-one",
+		"qiniuDomain":    "cdn.example.com",
+		"qiniuRegion":    "z0",
+		"qiniuPrefix":    "folio",
+	}
+	status, data = s.do(t, "PUT", "/api/admin/storage", adminToken, payload)
+	if status != http.StatusOK {
+		t.Fatalf("保存七牛配置失败: %d %v", status, data)
+	}
+	storage = obj(data, "storage")
+	if storage["provider"] != "qiniu" || storage["active"] != "qiniu" || storage["source"] != "database" {
+		t.Fatalf("七牛配置未生效: %v", storage)
+	}
+	if storage["hasAccessKey"] != true || storage["hasSecretKey"] != true {
+		t.Fatalf("应显示密钥已配置: %v", storage)
+	}
+	encoded, _ := json.Marshal(data)
+	if strings.Contains(string(encoded), "storage-access") || strings.Contains(string(encoded), "storage-secret") {
+		t.Fatalf("接口不应回显密钥: %s", encoded)
+	}
+
+	var row models.StorageSetting
+	if err := s.api.DB.First(&row, 1).Error; err != nil {
+		t.Fatalf("读取存储设置记录失败: %v", err)
+	}
+	if !strings.HasPrefix(row.QiniuAccessKey, "enc:v1:") || strings.Contains(row.QiniuAccessKey, "storage-access") {
+		t.Fatalf("AccessKey 应加密保存: %s", row.QiniuAccessKey)
+	}
+	access, err := secure.Decrypt("test-secret", row.QiniuAccessKey)
+	if err != nil || access != "storage-access" {
+		t.Fatalf("AccessKey 解密不正确: %q %v", access, err)
+	}
+
+	// 留空密钥表示保持不变。
+	status, data = s.do(t, "PUT", "/api/admin/storage", adminToken, map[string]any{
+		"provider":    "qiniu",
+		"qiniuBucket": "bucket-two",
+		"qiniuDomain": "https://cdn2.example.com",
+		"qiniuRegion": "z0",
+		"qiniuPrefix": "folio",
+	})
+	if status != http.StatusOK {
+		t.Fatalf("留空密钥更新失败: %d %v", status, data)
+	}
+	row = models.StorageSetting{}
+	if err := s.api.DB.First(&row, 1).Error; err != nil {
+		t.Fatalf("读取更新后的存储设置失败: %v", err)
+	}
+	access, err = secure.Decrypt("test-secret", row.QiniuAccessKey)
+	if err != nil || access != "storage-access" || row.QiniuBucket != "bucket-two" {
+		t.Fatalf("留空密钥时应保留原密钥: access=%q bucket=%q err=%v", access, row.QiniuBucket, err)
+	}
+
+	status, data = s.do(t, "PUT", "/api/admin/storage", adminToken, map[string]any{
+		"provider":    "local",
+		"qiniuBucket": "bucket-two",
+		"qiniuDomain": "https://cdn2.example.com",
+		"qiniuRegion": "z0",
+		"qiniuPrefix": "folio",
+	})
+	if status != http.StatusOK || obj(data, "storage")["active"] != "local" {
+		t.Fatalf("切回本地失败: %d %v", status, data)
+	}
+	if obj(data, "storage")["hasAccessKey"] != true {
+		t.Fatalf("切回本地后应保留七牛密钥: %v", data)
+	}
+
+	status, data = s.do(t, "PUT", "/api/admin/storage", adminToken, map[string]any{
+		"provider":    "qiniu",
+		"qiniuBucket": "bucket-three",
+		"qiniuDomain": "cdn3.example.com",
+		"qiniuRegion": "z0",
+		"qiniuPrefix": "folio",
+	})
+	if status != http.StatusOK || obj(data, "storage")["active"] != "qiniu" {
+		t.Fatalf("用已保存密钥切回七牛失败: %d %v", status, data)
+	}
+
+	status, _ = s.do(t, "POST", "/api/admin/storage/test", adminToken, map[string]any{"provider": "local"})
+	if status != http.StatusBadRequest {
+		t.Fatalf("本地存储不应做云连接测试，实际 %d", status)
+	}
+
+	status, _ = s.do(t, "PUT", "/api/admin/storage", adminToken, map[string]any{"provider": "s3"})
+	if status != http.StatusBadRequest {
+		t.Fatalf("未知存储类型应拒绝，实际 %d", status)
+	}
+
+	readerToken, _ := s.register(t, "storagereader")
+	status, _ = s.do(t, "GET", "/api/admin/storage", readerToken, nil)
+	if status != http.StatusForbidden {
+		t.Fatalf("普通用户不应读取存储设置，实际 %d", status)
+	}
+}
+
+func TestStorageSettingsEnvFallback(t *testing.T) {
+	s := newTestAPI(t, func(cfg *config.Config) {
+		cfg.StorageProvider = "qiniu"
+		cfg.QiniuAccessKey = "env-access"
+		cfg.QiniuSecretKey = "env-secret"
+		cfg.QiniuBucket = "env-bucket"
+		cfg.QiniuDomain = "cdn.env.example.com"
+		cfg.QiniuPrefix = "env"
+	})
+	token, _ := s.register(t, "envstorage")
+	status, data := s.do(t, "GET", "/api/admin/storage", token, nil)
+	if status != http.StatusOK {
+		t.Fatalf("读取环境变量存储配置失败: %d %v", status, data)
+	}
+	storage := obj(data, "storage")
+	if storage["source"] != "env" || storage["active"] != "qiniu" || storage["hasAccessKey"] != true {
+		t.Fatalf("环境变量配置未正确显示: %v", storage)
+	}
+	status, data = s.do(t, "PUT", "/api/admin/storage", token, map[string]any{
+		"provider":    "local",
+		"qiniuBucket": "env-bucket",
+		"qiniuDomain": "https://cdn.env.example.com",
+		"qiniuPrefix": "env",
+	})
+	if status != http.StatusOK || obj(data, "storage")["active"] != "local" {
+		t.Fatalf("从环境变量切换本地失败: %d %v", status, data)
+	}
+	if obj(data, "storage")["source"] != "database" {
+		t.Fatalf("保存后应以数据库配置为准: %v", data)
+	}
+}
+
+func TestStorageSettingsRejectsIncomplete(t *testing.T) {
+	s := newTestAPI(t)
+	token, _ := s.register(t, "incompletestorage")
+	status, _ := s.do(t, "PUT", "/api/admin/storage", token, map[string]any{
+		"provider":    "qiniu",
+		"qiniuBucket": "bucket",
+		"qiniuDomain": "cdn.example.com",
+	})
+	if status != http.StatusBadRequest {
+		t.Fatalf("缺少七牛密钥时应拒绝，实际 %d", status)
 	}
 }

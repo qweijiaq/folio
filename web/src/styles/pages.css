@@ -3439,6 +3439,63 @@
   gap: 12px;
 }
 
+.storage-current {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1.2px dashed var(--line-strong);
+  border-radius: var(--sketch-sm);
+  background: var(--surface-2);
+  color: var(--ink-soft);
+  font-size: 12.5px;
+}
+
+.storage-current .hint {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+.storage-local-note {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  border: 1.2px dashed var(--line-strong);
+  border-radius: var(--sketch-sm);
+  background: var(--surface-2);
+  color: var(--ink-soft);
+  font-size: 12.5px;
+}
+
+.storage-local-note strong {
+  color: var(--ink);
+  font-family: var(--hand);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.storage-test-result {
+  padding: 10px 14px;
+  border: 1.2px dashed var(--line-strong);
+  border-radius: var(--sketch-sm);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.storage-test-result.is-ok {
+  border-color: color-mix(in srgb, var(--success) 55%, var(--line));
+  background: color-mix(in srgb, var(--success) 8%, transparent);
+  color: var(--success);
+}
+
+.storage-test-result.is-error {
+  border-color: color-mix(in srgb, var(--danger) 55%, var(--line));
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+  color: var(--danger);
+}
+
 .switch-row {
   display: flex;
   align-items: flex-start;
