@@ -20,6 +20,7 @@ import (
 	"folio/server/config"
 	"folio/server/db"
 	"folio/server/handlers"
+	"folio/server/models"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -309,6 +310,13 @@ func TestUnifiedDocumentFlow(t *testing.T) {
 	status, _ = s.do(t, "GET", "/api/users/bob", "", nil)
 	if status != http.StatusNotFound {
 		t.Fatalf("删除用户后应返回 404，实际 %d", status)
+	}
+	for _, model := range []any{&models.FavoriteFolder{}, &models.ViewHistory{}, &models.UserSetting{}, &models.NoticeRead{}} {
+		var remaining int64
+		s.api.DB.Model(model).Where("user_id = ?", bobID).Count(&remaining)
+		if remaining != 0 {
+			t.Fatalf("删除用户后仍残留 %T: %d", model, remaining)
+		}
 	}
 }
 

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"strings"
 
 	"folio/server/models"
 
@@ -246,10 +247,19 @@ func (a *API) purgeUser(userID uint) error {
 			return err
 		}
 
-		// 关注、私信、通知
+		// 关注、私信、通知、收藏夹、浏览历史与偏好
 		tx.Where("follower_id = ? OR followee_id = ?", userID, userID).Delete(&models.Follow{})
 		tx.Where("sender_id = ? OR receiver_id = ?", userID, userID).Delete(&models.Message{})
 		tx.Where("user_id = ? OR actor_id = ?", userID, userID).Delete(&models.Notification{})
+		tx.Where("user_id = ?", userID).Delete(&models.FavoriteFolder{})
+		tx.Where("user_id = ?", userID).Delete(&models.ViewHistory{})
+		tx.Where("user_id = ?", userID).Delete(&models.UserSetting{})
+		tx.Where("user_id = ?", userID).Delete(&models.NoticeRead{})
+		var email string
+		tx.Model(&models.User{}).Where("id = ?", userID).Pluck("email", &email)
+		if email != "" {
+			tx.Where("email = ?", strings.ToLower(email)).Delete(&models.EmailCode{})
+		}
 
 		// 重新计算受影响文档的计数
 		for docID := range affectedDocs {
