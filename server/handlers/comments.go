@@ -104,6 +104,10 @@ func (a *API) CommentCreate(c *gin.Context) {
 	if !ok {
 		return
 	}
+	if !doc.OpenComment {
+		fail(c, http.StatusForbidden, "这篇内容已关闭评论")
+		return
+	}
 	var in struct {
 		Content  string `json:"content"`
 		ParentID *uint  `json:"parentID"`

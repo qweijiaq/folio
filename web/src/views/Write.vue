@@ -21,6 +21,7 @@ const form = reactive({
   parentID: route.query.parent ? Number(route.query.parent) : null,
   categoryID: null,
   pinned: false,
+  openComment: true,
   sort: 0
 })
 
@@ -91,6 +92,7 @@ async function load() {
       form.parentID = data.doc.parentID ?? null
       form.categoryID = data.doc.categoryID ?? null
       form.pinned = data.doc.pinned
+      form.openComment = data.doc.openComment !== false
       form.sort = data.doc.sort || 0
     }
   } catch (err) {
@@ -285,6 +287,7 @@ async function save(status = 'draft') {
     parentID: form.kind === 'doc' && form.parentID ? Number(form.parentID) : null,
     categoryID: form.kind === 'article' && form.categoryID ? Number(form.categoryID) : null,
     pinned: form.pinned,
+    openComment: form.openComment,
     sort: Number(form.sort) || 0
   }
   try {
@@ -432,6 +435,11 @@ onBeforeUnmount(() => {
           <label v-else class="checkbox">
             <input v-model="form.pinned" type="checkbox" />
             在列表中置顶
+          </label>
+
+          <label class="checkbox">
+            <input v-model="form.openComment" type="checkbox" />
+            允许读者评论
           </label>
 
           <div class="editor-note">

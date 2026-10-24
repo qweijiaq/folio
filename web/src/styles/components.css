@@ -699,3 +699,12 @@
     border-bottom: 1.2px dashed var(--line-strong);
   }
 }
+
+.comment-closed {
+  padding: 14px 18px;
+  border: 1.2px dashed var(--line-strong);
+  border-radius: var(--sketch-sm);
+  color: var(--ink-faint);
+  font-size: 13px;
+  line-height: 1.7;
+}

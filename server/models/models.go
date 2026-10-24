@@ -51,6 +51,7 @@ type Document struct {
 	Tags          []string   `gorm:"type:text;serializer:json" json:"tags"`
 	Status        string     `gorm:"size:16;index;not null;default:draft" json:"status"`
 	Pinned        bool       `json:"pinned"`
+	OpenComment   bool       `gorm:"not null;default:true" json:"openComment"`
 	Sort          int        `json:"sort"`
 	ViewCount     int        `json:"viewCount"`
 	LikeCount     int        `json:"likeCount"`

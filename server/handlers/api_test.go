@@ -887,3 +887,43 @@ func TestSiteSettingsAndLogs(t *testing.T) {
 		t.Fatalf("管理员不应能修改站点设置，实际 %d", status)
 	}
 }
+
+func TestCommentToggle(t *testing.T) {
+	s := newTestAPI(t)
+	token, _ := s.register(t, "commentowner")
+
+	status, created := s.do(t, "POST", "/api/docs", token, map[string]any{
+		"kind": "article", "title": "关闭评论的文章", "content": "正文", "status": "published", "openComment": false,
+	})
+	if status != http.StatusCreated {
+		t.Fatalf("创建关闭评论的文章失败: %d %v", status, created)
+	}
+	doc := obj(created, "doc")
+	if doc["openComment"] != false {
+		t.Fatalf("创建时应保留关闭评论设置: %v", doc)
+	}
+	docID := number(doc["id"])
+
+	status, _ = s.do(t, "POST", "/api/docs/"+itoa(uint(docID))+"/comments", token, map[string]string{"content": "能评论吗"})
+	if status != http.StatusForbidden {
+		t.Fatalf("关闭评论后应返回 403，实际 %d", status)
+	}
+
+	status, updated := s.do(t, "PUT", "/api/docs/"+itoa(uint(docID)), token, map[string]any{
+		"title": "重新打开评论", "content": "正文", "status": "published", "openComment": true,
+	})
+	if status != http.StatusOK || obj(updated, "doc")["openComment"] != true {
+		t.Fatalf("重新打开评论失败: %d %v", status, updated)
+	}
+	status, comment := s.do(t, "POST", "/api/docs/"+itoa(uint(docID))+"/comments", token, map[string]string{"content": "现在可以了"})
+	if status != http.StatusCreated {
+		t.Fatalf("打开评论后应能评论: %d %v", status, comment)
+	}
+
+	status, defaultCreated := s.do(t, "POST", "/api/docs", token, map[string]any{
+		"kind": "article", "title": "默认允许评论", "content": "正文", "status": "published",
+	})
+	if status != http.StatusCreated || obj(defaultCreated, "doc")["openComment"] != true {
+		t.Fatalf("默认应允许评论: %d %v", status, defaultCreated)
+	}
+}

@@ -17,16 +17,17 @@ import (
 )
 
 type docInput struct {
-	Kind       string   `json:"kind"`
-	Title      string   `json:"title"`
-	Abstract   string   `json:"abstract"`
-	Content    string   `json:"content"`
-	Tags       []string `json:"tags"`
-	Status     string   `json:"status"`
-	ParentID   *uint    `json:"parentID"`
-	CategoryID *uint    `json:"categoryID"`
-	Pinned     *bool    `json:"pinned"`
-	Sort       int      `json:"sort"`
+	Kind        string   `json:"kind"`
+	Title       string   `json:"title"`
+	Abstract    string   `json:"abstract"`
+	Content     string   `json:"content"`
+	Tags        []string `json:"tags"`
+	Status      string   `json:"status"`
+	ParentID    *uint    `json:"parentID"`
+	CategoryID  *uint    `json:"categoryID"`
+	Pinned      *bool    `json:"pinned"`
+	OpenComment *bool    `json:"openComment"`
+	Sort        int      `json:"sort"`
 }
 
 var (
@@ -365,17 +366,22 @@ func (a *API) DocCreate(c *gin.Context) {
 	if abstract == "" {
 		abstract = plainText(in.Content)
 	}
+	openComment := true
+	if in.OpenComment != nil {
+		openComment = *in.OpenComment
+	}
 	doc := models.Document{
-		Kind:       in.Kind,
-		Title:      in.Title,
-		Abstract:   abstract,
-		Content:    in.Content,
-		AuthorID:   u.ID,
-		ParentID:   in.ParentID,
-		CategoryID: categoryID,
-		Tags:       normalizeTags(in.Tags),
-		Status:     in.Status,
-		Sort:       in.Sort,
+		Kind:        in.Kind,
+		Title:       in.Title,
+		Abstract:    abstract,
+		Content:     in.Content,
+		AuthorID:    u.ID,
+		ParentID:    in.ParentID,
+		CategoryID:  categoryID,
+		Tags:        normalizeTags(in.Tags),
+		Status:      in.Status,
+		OpenComment: openComment,
+		Sort:        in.Sort,
 	}
 	if in.Pinned != nil && *in.Pinned {
 		doc.Pinned = true
@@ -387,6 +393,11 @@ func (a *API) DocCreate(c *gin.Context) {
 	if err := a.DB.Create(&doc).Error; err != nil {
 		fail(c, http.StatusInternalServerError, "保存失败")
 		return
+	}
+	if !openComment {
+		// 带默认值的布尔字段用零值创建时会被数据库默认值覆盖，这里显式落一次关闭状态。
+		a.DB.Model(&doc).UpdateColumn("open_comment", false)
+		doc.OpenComment = false
 	}
 	a.DB.Preload("Author", func(db *gorm.DB) *gorm.DB {
 		return db.Select("id", "username", "nickname", "bio", "role", "created_at")
@@ -453,6 +464,10 @@ func (a *API) DocUpdate(c *gin.Context) {
 	doc.CategoryID = categoryID
 	doc.Sort = in.Sort
 	fields := []string{"title", "abstract", "content", "tags", "status", "parent_id", "category_id", "sort"}
+	if in.OpenComment != nil {
+		doc.OpenComment = *in.OpenComment
+		fields = append(fields, "open_comment")
+	}
 	if in.Pinned != nil {
 		doc.Pinned = *in.Pinned
 		fields = append(fields, "pinned")

@@ -9,7 +9,8 @@ import Icon from './Icon.vue'
 import Pagination from './Pagination.vue'
 
 const props = defineProps({
-  docId: { type: [Number, String], required: true }
+  docId: { type: [Number, String], required: true },
+  open: { type: Boolean, default: true }
 })
 const emit = defineEmits(['count'])
 
@@ -130,7 +131,11 @@ onMounted(load)
       </div>
     </header>
 
-    <form v-if="auth.user" class="comment-form" @submit.prevent="submit">
+    <div v-if="!open" class="comment-closed">
+      作者关闭了这篇内容的评论。已有的讨论仍然可以阅读和点赞。
+    </div>
+
+    <form v-if="open && auth.user" class="comment-form" @submit.prevent="submit">
       <UserAvatar :username="auth.user.username" :nickname="auth.user.nickname" :size="38" />
       <div class="comment-form-main">
         <div v-if="replyTo" class="reply-banner">
@@ -153,7 +158,7 @@ onMounted(load)
       </div>
     </form>
 
-    <div v-else class="comment-login">
+    <div v-else-if="open" class="comment-login">
       <p>登录后可以评论、点赞和回复。</p>
       <RouterLink class="btn btn-ghost btn-sm" :to="{ path: '/login', query: { redirect: $route.fullPath } }">
         去登录
@@ -177,7 +182,7 @@ onMounted(load)
               <Icon name="heart" :size="14" />
               <span>{{ comment.likeCount || '' }}</span>
             </button>
-            <button type="button" @click="startReply(comment)">回复</button>
+            <button v-if="open" type="button" @click="startReply(comment)">回复</button>
             <button v-if="canDelete(comment)" type="button" class="danger" @click="remove(comment)">删除</button>
           </div>
 
@@ -196,7 +201,7 @@ onMounted(load)
                     <Icon name="heart" :size="14" />
                     <span>{{ reply.likeCount || '' }}</span>
                   </button>
-                  <button type="button" @click="startReply(reply)">回复</button>
+                  <button v-if="open" type="button" @click="startReply(reply)">回复</button>
                   <button v-if="canDelete(reply)" type="button" class="danger" @click="remove(reply)">删除</button>
                 </div>
               </div>

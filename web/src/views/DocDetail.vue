@@ -251,7 +251,7 @@ watch(
             </button>
           </nav>
 
-          <CommentSection :doc-id="doc.id" @count="doc.commentCount = $event" />
+          <CommentSection :doc-id="doc.id" :open="doc.openComment !== false" @count="doc.commentCount = $event" />
         </article>
 
         <aside v-if="visibleToc.length > 2" class="docs-toc">

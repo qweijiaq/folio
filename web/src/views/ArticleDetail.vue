@@ -259,7 +259,7 @@ watch(
             </div>
           </section>
 
-          <CommentSection :doc-id="doc.id" @count="doc.commentCount = $event" />
+          <CommentSection :doc-id="doc.id" :open="doc.openComment !== false" @count="doc.commentCount = $event" />
         </div>
 
         <aside v-if="articleToc.length > 2" class="article-aside">
