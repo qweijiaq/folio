@@ -4,6 +4,12 @@
 
 /* ---------- 首页 ---------- */
 
+.home-page {
+  background-image:
+    radial-gradient(ellipse 60% 42% at 8% 0%, color-mix(in srgb, var(--accent) 7%, transparent), transparent 72%),
+    radial-gradient(ellipse 48% 38% at 96% 6%, color-mix(in srgb, var(--success) 5%, transparent), transparent 70%);
+}
+
 .hero {
   display: grid;
   grid-template-columns: 1.05fr 0.95fr;
@@ -3864,4 +3870,10 @@
 .notice-admin-item span {
   color: var(--ink-faint);
   font-size: 11.5px;
+}
+
+.editor-status.dirty {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
 }

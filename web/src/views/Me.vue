@@ -7,6 +7,7 @@ import { toast, toastError } from '../stores/toast'
 import { roleLabel, shortDate, timeAgo } from '../utils/format'
 import UserAvatar from '../components/UserAvatar.vue'
 import EmailCode from '../components/EmailCode.vue'
+import PasswordInput from '../components/PasswordInput.vue'
 import EmptyState from '../components/EmptyState.vue'
 import Icon from '../components/Icon.vue'
 
@@ -466,16 +467,16 @@ onMounted(async () => {
           <form class="security-form" @submit.prevent="changePassword">
             <div class="field">
               <label for="pwd-old">原密码</label>
-              <input id="pwd-old" v-model="passwordForm.oldPassword" type="password" autocomplete="current-password" />
+              <PasswordInput id="pwd-old" v-model="passwordForm.oldPassword" autocomplete="current-password" />
             </div>
             <div class="form-row">
               <div class="field">
                 <label for="pwd-new">新密码</label>
-                <input id="pwd-new" v-model="passwordForm.newPassword" type="password" autocomplete="new-password" />
+                <PasswordInput id="pwd-new" v-model="passwordForm.newPassword" autocomplete="new-password" />
               </div>
               <div class="field">
                 <label for="pwd-confirm">确认新密码</label>
-                <input id="pwd-confirm" v-model="passwordForm.confirm" type="password" autocomplete="new-password" />
+                <PasswordInput id="pwd-confirm" v-model="passwordForm.confirm" autocomplete="new-password" />
               </div>
             </div>
             <div class="form-actions">

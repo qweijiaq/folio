@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { api } from '../api/client'
 import { toastError } from '../stores/toast'
 import DocCard from '../components/DocCard.vue'
+import DocCardSkeleton from '../components/DocCardSkeleton.vue'
 import EmptyState from '../components/EmptyState.vue'
 import Icon from '../components/Icon.vue'
 
@@ -95,7 +96,9 @@ watch(
         <button type="button" :class="{ active: tab === 'doc' }" @click="tab = 'doc'">文档 <span>{{ docTotal }}</span></button>
       </div>
 
-      <p v-if="loading" class="muted loading-line">正在检索…</p>
+      <div v-if="loading" class="doc-grid">
+        <DocCardSkeleton v-for="i in 4" :key="i" />
+      </div>
       <EmptyState
         v-else-if="searched && !total"
         icon="search"
@@ -106,7 +109,7 @@ watch(
       </EmptyState>
       <div v-else-if="!searched" class="search-hint">
         <Icon name="search" :size="24" />
-        <p>试试搜索「封面」「Go」「知识管理」，或者按 <kbd>/</kbd> 随时唤起搜索。</p>
+        <p>试试搜索「封面」「Go」「知识管理」，或者按 <kbd>/</kbd> 或 <kbd>⌘K</kbd> 随时唤起快速搜索。</p>
       </div>
       <div v-else class="doc-grid">
         <DocCard v-for="doc in results" :key="`${doc.kind}-${doc.id}`" :doc="doc" />

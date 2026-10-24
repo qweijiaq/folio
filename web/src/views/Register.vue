@@ -8,6 +8,7 @@ import { toast } from '../stores/toast'
 import RoughAccent from '../components/RoughAccent.vue'
 import EmailCode from '../components/EmailCode.vue'
 import CaptchaField from '../components/CaptchaField.vue'
+import PasswordInput from '../components/PasswordInput.vue'
 import Icon from '../components/Icon.vue'
 
 const route = useRoute()
@@ -135,7 +136,7 @@ async function submit() {
             </div>
             <div class="field">
               <label for="reg-password">密码</label>
-              <input id="reg-password" v-model="form.password" type="password" autocomplete="new-password" placeholder="至少 6 位" />
+              <PasswordInput id="reg-password" v-model="form.password" autocomplete="new-password" placeholder="至少 6 位" />
             </div>
             <CaptchaField v-if="captchaEnabled && !emailEnabled" ref="captchaRef" v-model:id="captchaId" v-model:code="captchaCode" />
 

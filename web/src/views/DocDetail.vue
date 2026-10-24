@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '../api/client'
 import { auth } from '../stores/auth'
@@ -11,9 +11,12 @@ import CoverImage from '../components/CoverImage.vue'
 import UserAvatar from '../components/UserAvatar.vue'
 import MarkdownView from '../components/MarkdownView.vue'
 import CommentSection from '../components/CommentSection.vue'
+import ArticleSkeleton from '../components/ArticleSkeleton.vue'
 import TagPill from '../components/TagPill.vue'
 import EmptyState from '../components/EmptyState.vue'
 import Icon from '../components/Icon.vue'
+import ReadingBar from '../components/ReadingBar.vue'
+import { useReadingProgress } from '../composables/useReadingProgress'
 
 const route = useRoute()
 const router = useRouter()
@@ -28,6 +31,7 @@ const favorited = ref(false)
 const loading = ref(true)
 const notFound = ref(false)
 const sideOpen = ref(false)
+const { progress, activeId, refresh: refreshReading } = useReadingProgress()
 
 const canEdit = computed(() => {
   if (!doc.value || !auth.user) return false
@@ -82,6 +86,7 @@ async function load() {
     else toastError(err)
   } finally {
     loading.value = false
+    nextTick(refreshReading)
   }
 }
 
@@ -143,9 +148,8 @@ watch(
 
 <template>
   <div class="page docs-page">
-    <div v-if="loading" class="container page-loading">
-      <p class="muted loading-line">正在打开文档…</p>
-    </div>
+    <ReadingBar v-if="doc && !loading" :progress="progress" />
+    <ArticleSkeleton v-if="loading" />
 
     <div v-else-if="notFound" class="container page-loading">
       <EmptyState icon="info" title="这篇文档不存在" description="它可能被删除，或者还没有公开。">
@@ -258,7 +262,13 @@ watch(
           <div class="aside-sticky">
             <h4>本页目录</h4>
             <nav class="toc">
-              <a v-for="item in visibleToc" :key="item.id" :href="`#${item.id}`" :class="`toc-level-${item.level}`">
+              <a
+                v-for="item in visibleToc"
+                :key="item.id"
+                :href="`#${item.id}`"
+                :class="[`toc-level-${item.level}`, { active: activeId === item.id }]"
+                :aria-current="activeId === item.id ? 'location' : undefined"
+              >
                 {{ item.text }}
               </a>
             </nav>

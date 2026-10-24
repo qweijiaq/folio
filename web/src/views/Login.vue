@@ -8,6 +8,7 @@ import { toast } from '../stores/toast'
 import RoughAccent from '../components/RoughAccent.vue'
 import EmailCode from '../components/EmailCode.vue'
 import CaptchaField from '../components/CaptchaField.vue'
+import PasswordInput from '../components/PasswordInput.vue'
 import Icon from '../components/Icon.vue'
 
 const route = useRoute()
@@ -168,7 +169,7 @@ function fillDemo() {
               </div>
               <div class="field">
                 <label for="login-password">密码</label>
-                <input id="login-password" v-model="password" type="password" autocomplete="current-password" placeholder="至少 6 位" />
+                <PasswordInput id="login-password" v-model="password" autocomplete="current-password" placeholder="至少 6 位" />
               </div>
               <CaptchaField ref="captchaRef" v-model:id="captchaId" v-model:code="captchaCode" />
               <p v-if="emailEnabled" class="auth-aux">

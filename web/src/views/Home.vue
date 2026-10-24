@@ -5,6 +5,7 @@ import { auth } from '../stores/auth'
 import { mergeSite, site } from '../stores/site'
 import CoverImage from '../components/CoverImage.vue'
 import DocCard from '../components/DocCard.vue'
+import DocCardSkeleton from '../components/DocCardSkeleton.vue'
 import TagPill from '../components/TagPill.vue'
 import UserAvatar from '../components/UserAvatar.vue'
 import Icon from '../components/Icon.vue'
@@ -64,7 +65,18 @@ onMounted(async () => {
         </dl>
       </div>
 
-      <RouterLink v-if="data?.featured" :to="`/articles/${data.featured.id}`" class="hero-feature">
+      <div v-if="loading" class="hero-feature hero-feature--skeleton" aria-hidden="true">
+        <div class="skeleton-cover"></div>
+        <div class="hero-feature-body">
+          <span class="skeleton-line skeleton-line--kicker"></span>
+          <span class="skeleton-line skeleton-line--title"></span>
+          <span class="skeleton-line"></span>
+          <span class="skeleton-line skeleton-line--short"></span>
+          <span class="skeleton-line skeleton-line--meta"></span>
+        </div>
+      </div>
+
+      <RouterLink v-else-if="data?.featured" :to="`/articles/${data.featured.id}`" class="hero-feature">
         <div class="hero-feature-cover">
           <CoverImage :doc="data.featured" />
         </div>
@@ -94,7 +106,9 @@ onMounted(async () => {
     </section>
 
     <section v-if="loading" class="section container">
-      <p class="muted loading-line">正在打开展示柜…</p>
+      <div class="doc-grid">
+        <DocCardSkeleton v-for="i in 3" :key="i" />
+      </div>
     </section>
 
     <template v-else>

@@ -5,9 +5,10 @@
 .prose {
   max-width: 760px;
   color: var(--ink);
-  font-family: var(--sans);
-  font-size: 16.5px;
-  line-height: 1.92;
+  font-family: var(--serif);
+  font-size: 17px;
+  line-height: 1.98;
+  letter-spacing: 0.005em;
   word-break: break-word;
 }
 

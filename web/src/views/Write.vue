@@ -1,6 +1,6 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { api } from '../api/client'
 import { toast, toastError } from '../stores/toast'
 import { buildTree, flattenTree } from '../utils/tree'
@@ -37,11 +37,30 @@ const preview = ref(true)
 const uploading = ref(false)
 const aiEnabled = ref(false)
 const aiLoading = ref(false)
+const savedSnapshot = ref('')
 
 const editingId = computed(() => (route.params.id ? Number(route.params.id) : 0))
 const isEdit = computed(() => Boolean(editingId.value))
 const wordCount = computed(() => (form.content || '').replace(/\s/g, '').length)
 const coverSeed = computed(() => editingId.value || form.title || '新的内容')
+
+function snapshot() {
+  return JSON.stringify({
+    kind: form.kind,
+    title: form.title,
+    abstract: form.abstract,
+    content: form.content,
+    tags: form.tags,
+    status: form.status,
+    parentID: form.parentID,
+    categoryID: form.categoryID,
+    pinned: form.pinned,
+    openComment: form.openComment,
+    sort: form.sort
+  })
+}
+
+const dirty = computed(() => !loading.value && snapshot() !== savedSnapshot.value)
 
 const parentOptions = computed(() => {
   if (form.kind !== 'doc') return []
@@ -100,6 +119,7 @@ async function load() {
     if (err.status === 403 || err.status === 404) router.replace('/me')
   } finally {
     loading.value = false
+    savedSnapshot.value = snapshot()
   }
 }
 
@@ -295,9 +315,12 @@ async function save(status = 'draft') {
       const data = await api.put(`/docs/${editingId.value}`, payload)
       doc.value = data.doc
       form.status = status
+      savedSnapshot.value = snapshot()
       toast(status === 'published' ? '已更新并保持发布' : '已转为草稿')
     } else {
       const data = await api.post('/docs', payload)
+      form.status = status
+      savedSnapshot.value = snapshot()
       toast(status === 'published' ? '已发布' : '草稿已保存')
       if (status === 'published') {
         router.push(`/${form.kind === 'doc' ? 'docs' : 'articles'}/${data.doc.id}`)
@@ -317,6 +340,17 @@ function goBack() {
   else router.back()
 }
 
+onBeforeRouteLeave(() => {
+  if (!dirty.value) return true
+  return window.confirm('这篇内容还有未保存的修改，确定离开吗？')
+})
+
+function onBeforeUnload(event) {
+  if (!dirty.value) return
+  event.preventDefault()
+  event.returnValue = ''
+}
+
 function onKeydown(event) {
   if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
     event.preventDefault()
@@ -329,10 +363,12 @@ watch(editingId, load)
 onMounted(() => {
   load()
   window.addEventListener('keydown', onKeydown)
+  window.addEventListener('beforeunload', onBeforeUnload)
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown)
+  window.removeEventListener('beforeunload', onBeforeUnload)
 })
 </script>
 
@@ -350,7 +386,9 @@ onBeforeUnmount(() => {
           </div>
         </div>
         <div class="editor-actions">
-          <span class="editor-status" :class="form.status">{{ form.status === 'published' ? '已发布' : '草稿' }}</span>
+          <span class="editor-status" :class="[form.status, { dirty }]">
+            {{ dirty ? '未保存' : form.status === 'published' ? '已发布' : '草稿' }}
+          </span>
           <button class="btn btn-ghost btn-sm" type="button" :disabled="Boolean(saving)" @click="save('draft')">
             {{ saving === 'draft' ? '保存中…' : '存为草稿' }}
           </button>

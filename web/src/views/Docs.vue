@@ -6,6 +6,7 @@ import { toastError } from '../stores/toast'
 import { buildTree } from '../utils/tree'
 import DocTree from '../components/DocTree.vue'
 import DocCard from '../components/DocCard.vue'
+import DocCardSkeleton from '../components/DocCardSkeleton.vue'
 import EmptyState from '../components/EmptyState.vue'
 import Icon from '../components/Icon.vue'
 
@@ -49,7 +50,9 @@ onMounted(async () => {
       </aside>
 
       <div class="docs-content">
-        <p v-if="loading" class="muted loading-line">正在整理书架…</p>
+        <div v-if="loading" class="doc-grid">
+          <DocCardSkeleton v-for="i in 4" :key="i" />
+        </div>
         <EmptyState
           v-else-if="!docs.length"
           icon="book"

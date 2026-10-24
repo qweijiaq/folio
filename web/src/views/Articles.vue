@@ -5,6 +5,7 @@ import { api } from '../api/client'
 import { auth } from '../stores/auth'
 import { toastError } from '../stores/toast'
 import DocCard from '../components/DocCard.vue'
+import DocCardSkeleton from '../components/DocCardSkeleton.vue'
 import Pagination from '../components/Pagination.vue'
 import EmptyState from '../components/EmptyState.vue'
 import Icon from '../components/Icon.vue'
@@ -170,7 +171,9 @@ onMounted(() => {
         <RouterLink :to="{ name: 'articles' }" class="filter-clear">查看全部</RouterLink>
       </div>
 
-      <p v-if="loading" class="muted loading-line">正在翻页…</p>
+      <div v-if="loading" class="doc-grid">
+        <DocCardSkeleton v-for="i in 6" :key="i" />
+      </div>
       <EmptyState
         v-else-if="!docs.length"
         icon="edit"
@@ -183,7 +186,7 @@ onMounted(() => {
         <DocCard v-for="doc in docs" :key="doc.id" :doc="doc" />
       </div>
 
-      <Pagination :page="page" :total="total" :page-size="pageSize" @change="changePage" />
+      <Pagination v-if="!loading" :page="page" :total="total" :page-size="pageSize" @change="changePage" />
     </div>
   </div>
 </template>

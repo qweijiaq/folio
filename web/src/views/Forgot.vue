@@ -5,6 +5,7 @@ import { api } from '../api/client'
 import { toast } from '../stores/toast'
 import RoughAccent from '../components/RoughAccent.vue'
 import EmailCode from '../components/EmailCode.vue'
+import PasswordInput from '../components/PasswordInput.vue'
 import Icon from '../components/Icon.vue'
 
 const router = useRouter()
@@ -95,11 +96,11 @@ async function submit() {
             </div>
             <div class="field">
               <label for="forgot-password">新密码</label>
-              <input id="forgot-password" v-model="form.password" type="password" autocomplete="new-password" placeholder="至少 6 位" />
+              <PasswordInput id="forgot-password" v-model="form.password" autocomplete="new-password" placeholder="至少 6 位" />
             </div>
             <div class="field">
               <label for="forgot-confirm">确认新密码</label>
-              <input id="forgot-confirm" v-model="form.confirm" type="password" autocomplete="new-password" />
+              <PasswordInput id="forgot-confirm" v-model="form.confirm" autocomplete="new-password" />
             </div>
 
             <p v-if="error" class="form-error">{{ error }}</p>

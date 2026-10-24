@@ -4,6 +4,8 @@
    ============================================================ */
 
 :root {
+  color-scheme: light;
+  accent-color: var(--accent);
   --paper: #f4f3ee;
   --paper-deep: #ecebe4;
   --surface: #fbfaf5;
@@ -39,6 +41,7 @@
 }
 
 html[data-theme="dark"] {
+  color-scheme: dark;
   --paper: #1a1a18;
   --paper-deep: #161614;
   --surface: #21211e;
@@ -79,14 +82,37 @@ body {
   font-size: 15.5px;
   line-height: 1.75;
   color: var(--ink);
-  background: var(--paper);
+  background-color: var(--paper);
+  background-image: radial-gradient(color-mix(in srgb, var(--ink) 4%, transparent) 0.5px, transparent 0.5px);
+  background-size: 24px 24px;
+  background-attachment: fixed;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 ::selection {
   background: var(--accent-soft);
   color: var(--ink);
+}
+
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 2px solid var(--paper);
+  border-radius: 999px;
+  background: var(--line-strong);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--ink-faint);
 }
 
 :focus-visible {
@@ -1224,6 +1250,26 @@ button.tag {
   }
 }
 
+@media (max-width: 420px) {
+  .header-actions .icon-btn[aria-label="管理后台"] {
+    display: none;
+  }
+
+  .header-inner {
+    gap: 8px;
+  }
+
+  .brand {
+    gap: 6px;
+    font-size: 20px;
+  }
+
+  .brand-mark {
+    width: 28px;
+    height: 28px;
+  }
+}
+
 @media (max-width: 640px) {
   body {
     font-size: 15px;
@@ -1294,4 +1340,53 @@ button.tag {
     animation-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* ---------- 页面切换 ---------- */
+
+.page-enter-active,
+.page-leave-active {
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.page-enter-from {
+  opacity: 0;
+  transform: translateY(7px);
+}
+
+.page-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
+/* ---------- 跳转链接 ---------- */
+
+.skip-link {
+  position: fixed;
+  top: -60px;
+  left: 20px;
+  z-index: 300;
+  padding: 8px 14px;
+  border: 1.3px solid var(--accent);
+  border-radius: var(--sketch-sm);
+  background: var(--surface);
+  color: var(--accent);
+  font-size: 13px;
+  transition: top 0.16s ease;
+}
+
+.skip-link:focus {
+  top: 12px;
+}
+
+kbd {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 5px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 4px;
+  background: var(--surface-2);
+  color: var(--ink-faint);
+  font-size: 0.86em;
+  line-height: 1.5;
 }

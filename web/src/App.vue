@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getToken } from './api/client'
 import { auth, logout, logoutLocal, refreshInbox, refreshMe } from './stores/auth'
@@ -10,36 +10,19 @@ import Icon from './components/Icon.vue'
 import BrandMark from './components/BrandMark.vue'
 import UserAvatar from './components/UserAvatar.vue'
 import ToastHost from './components/ToastHost.vue'
+import CommandPalette from './components/CommandPalette.vue'
 
 const router = useRouter()
 const route = useRoute()
 const menuOpen = ref(false)
 const mobileOpen = ref(false)
 const scrolled = ref(false)
-const query = ref('')
-const searchInput = ref(null)
 let inboxTimer = null
 
 const unreadTotal = computed(() => (auth.unread.messages || 0) + (auth.unread.notifications || 0) + (auth.unread.notices || 0))
 const staff = computed(() => ['super_admin', 'admin'].includes(auth.user?.role))
 const writeTarget = computed(() => (auth.user ? '/write' : { path: '/login', query: { redirect: '/write' } }))
 const today = new Date().getFullYear()
-
-function submitSearch() {
-  const q = query.value.trim()
-  if (!q) {
-    nextTick(() => searchInput.value?.focus())
-    return
-  }
-  ui.searchOpen = false
-  mobileOpen.value = false
-  router.push({ name: 'search', query: { q } })
-}
-
-function openSearch() {
-  ui.searchOpen = !ui.searchOpen
-  if (ui.searchOpen) nextTick(() => searchInput.value?.focus())
-}
 
 async function doLogout() {
   await logout()
@@ -60,10 +43,10 @@ function onScroll() {
 function onKeydown(event) {
   const tag = (event.target.tagName || '').toLowerCase()
   const typing = tag === 'input' || tag === 'textarea' || tag === 'select' || event.target.isContentEditable
-  if (event.key === '/' && !typing) {
+  if ((event.key === '/' && !typing) || ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k')) {
     event.preventDefault()
+    mobileOpen.value = false
     ui.searchOpen = true
-    nextTick(() => searchInput.value?.focus())
   }
   if (event.key === 'Escape') {
     ui.searchOpen = false
@@ -114,6 +97,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="app-shell">
+    <a class="skip-link" href="#main">跳到正文</a>
     <header class="site-header" :class="{ 'is-scrolled': scrolled }">
       <div class="container header-inner">
         <RouterLink to="/" class="brand" aria-label="知微首页">
@@ -122,13 +106,25 @@ onBeforeUnmount(() => {
         </RouterLink>
 
         <nav class="primary-nav" aria-label="主导航">
-          <RouterLink to="/articles" class="nav-link" active-class="is-active">文章</RouterLink>
+          <RouterLink
+            to="/articles"
+            class="nav-link"
+            :class="{ 'is-active': route.path.startsWith('/articles') && !(route.path === '/articles' && route.query.sort === 'popular') }"
+          >
+            文章
+          </RouterLink>
           <RouterLink to="/docs" class="nav-link" active-class="is-active">文档</RouterLink>
-          <RouterLink to="/articles?sort=popular" class="nav-link">热门</RouterLink>
+          <RouterLink
+            to="/articles?sort=popular"
+            class="nav-link"
+            :class="{ 'is-active': route.path === '/articles' && route.query.sort === 'popular' }"
+          >
+            热门
+          </RouterLink>
         </nav>
 
         <div class="header-actions">
-          <button class="icon-btn" type="button" aria-label="搜索" title="搜索（/）" @click="openSearch">
+          <button class="icon-btn" type="button" aria-label="搜索" title="搜索（/ 或 ⌘K）" @click="mobileOpen = false; ui.searchOpen = true">
             <Icon name="search" :size="19" />
           </button>
           <button class="icon-btn" type="button" aria-label="切换主题" title="切换明暗" @click="toggleTheme">
@@ -187,26 +183,7 @@ onBeforeUnmount(() => {
       </div>
 
       <Transition name="search-slide">
-        <form v-if="ui.searchOpen" class="header-search" @submit.prevent="submitSearch">
-          <div class="container header-search-inner">
-            <Icon name="search" :size="18" />
-            <input
-              ref="searchInput"
-              v-model="query"
-              type="search"
-              placeholder="搜索文章、文档或标签…"
-              aria-label="站内搜索"
-            />
-            <button type="submit" class="btn btn-primary btn-sm">搜索</button>
-            <button type="button" class="icon-btn" aria-label="关闭搜索" @click="ui.searchOpen = false">
-              <Icon name="close" :size="18" />
-            </button>
-          </div>
-        </form>
-      </Transition>
-
-      <Transition name="search-slide">
-        <nav v-if="mobileOpen" class="mobile-nav">
+        <nav v-if="mobileOpen" class="mobile-nav" aria-label="移动端导航">
           <div class="container">
             <RouterLink to="/articles" class="mobile-link">文章</RouterLink>
             <RouterLink to="/docs" class="mobile-link">文档</RouterLink>
@@ -220,8 +197,12 @@ onBeforeUnmount(() => {
       </Transition>
     </header>
 
-    <main class="site-main">
-      <RouterView />
+    <main id="main" class="site-main">
+      <RouterView v-slot="{ Component }">
+        <Transition name="page" mode="out-in">
+          <component :is="Component" :key="route.path" />
+        </Transition>
+      </RouterView>
     </main>
 
     <footer class="site-footer">
@@ -258,5 +239,6 @@ onBeforeUnmount(() => {
     </footer>
 
     <ToastHost />
+    <CommandPalette />
   </div>
 </template>
