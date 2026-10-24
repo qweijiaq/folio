@@ -128,7 +128,7 @@ func (a *API) Inbox(c *gin.Context) {
 	me := currentUser(c)
 	var messages, notifications int64
 	a.DB.Model(&models.Message{}).Where("receiver_id = ? AND read_at IS NULL", me.ID).Count(&messages)
-	a.DB.Model(&models.Notification{}).Where("user_id = ? AND read = ?", me.ID, false).Count(&notifications)
+	a.DB.Model(&models.Notification{}).Where("user_id = ? AND `read` = ?", me.ID, false).Count(&notifications)
 	c.JSON(http.StatusOK, gin.H{"messages": messages, "notifications": notifications})
 }
 
@@ -139,12 +139,12 @@ func (a *API) Notifications(c *gin.Context) {
 		return db.Select("id", "username", "nickname", "bio", "role", "created_at")
 	}).Where("user_id = ?", me.ID).Order("id DESC").Limit(60).Find(&items)
 	var unread int64
-	a.DB.Model(&models.Notification{}).Where("user_id = ? AND read = ?", me.ID, false).Count(&unread)
+	a.DB.Model(&models.Notification{}).Where("user_id = ? AND `read` = ?", me.ID, false).Count(&unread)
 	c.JSON(http.StatusOK, gin.H{"items": items, "unread": unread})
 }
 
 func (a *API) NotificationsRead(c *gin.Context) {
 	me := currentUser(c)
-	a.DB.Model(&models.Notification{}).Where("user_id = ? AND read = ?", me.ID, false).UpdateColumn("read", true)
+	a.DB.Model(&models.Notification{}).Where("user_id = ? AND `read` = ?", me.ID, false).UpdateColumn("`read`", true)
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
