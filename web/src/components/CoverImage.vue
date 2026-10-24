@@ -22,6 +22,8 @@ const seed = computed(() => {
 
 const kind = computed(() => props.doc?.kind || props.kind || 'article')
 
+const label = computed(() => props.doc?.title || props.title || '')
+
 const alt = computed(() => {
   if (props.alt) return props.alt
   const title = props.doc?.title || props.title
@@ -29,7 +31,11 @@ const alt = computed(() => {
 })
 
 function render() {
-  drawCover(canvas.value, { seed: seed.value, kind: kind.value })
+  drawCover(canvas.value, {
+    seed: seed.value,
+    kind: kind.value,
+    label: label.value
+  })
 }
 
 onMounted(() => {
@@ -45,7 +51,7 @@ onBeforeUnmount(() => {
 })
 
 watch(
-  () => [seed.value, kind.value, ui.theme],
+  () => [seed.value, kind.value, label.value, ui.theme],
   () => nextTick(render)
 )
 </script>
