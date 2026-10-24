@@ -429,7 +429,7 @@ FOLIO_SMTP_FROM=you@qq.com
 - `/robots.txt`：屏蔽后台、登录、私信、编辑与搜索页，并指向 sitemap；
 - `/api/art/cover.png`：1200×630 的分享卡片底图，与站内封面同一套线稿语言；
 - Go 服务在返回 `index.html` 时会根据当前路径注入标题、description、canonical、Open Graph、Twitter Card 和 JSON-LD；爬虫不执行 JS 也能读到；
-- 文章/文档页的「分享」按钮会打开一张可视化分享卡片，支持复制链接、系统分享、X 和微博。
+- 文章/文档页的「分享」按钮会打开一张可视化分享卡片，支持复制链接和系统分享。
 
 生产环境请设置：
 

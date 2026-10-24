@@ -14,8 +14,6 @@ const canNativeShare = ref(typeof navigator !== 'undefined' && typeof navigator.
 
 const shareURL = computed(() => props.url || window.location.href)
 const shareTitle = computed(() => `${props.doc.title} · ${site.name}`)
-const xShare = computed(() => `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareTitle.value)}&url=${encodeURIComponent(shareURL.value)}`)
-const weiboShare = computed(() => `https://service.weibo.com/share/share.php?title=${encodeURIComponent(shareTitle.value)}&url=${encodeURIComponent(shareURL.value)}`)
 
 async function copyLink() {
   try {
@@ -78,8 +76,6 @@ onBeforeUnmount(() => {
             <button v-if="canNativeShare" class="btn btn-ghost btn-sm" type="button" @click="nativeShare">
               <Icon name="share" :size="15" /> 系统分享
             </button>
-            <a class="btn btn-ghost btn-sm" :href="xShare" target="_blank" rel="noopener noreferrer">X</a>
-            <a class="btn btn-ghost btn-sm" :href="weiboShare" target="_blank" rel="noopener noreferrer">微博</a>
           </div>
 
           <div class="share-card-url">{{ shareURL }}</div>

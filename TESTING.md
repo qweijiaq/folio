@@ -290,7 +290,7 @@ docker compose restart app
 - [ ] 访问 `/robots.txt` 能看到 sitemap 地址和后台屏蔽规则；
 - [ ] 访问 `/api/art/cover.png?seed=1&kind=article` 返回 1200×630 PNG；
 - [ ] 用 `curl` 直接请求 `/articles/:id`，HTML 里包含文章标题、description、OG 图和 JSON-LD（不依赖浏览器执行 JS）；
-- [ ] 文章/文档页点「分享」打开分享卡片，复制链接和 X/微博按钮可用；
+- [ ] 文章/文档页点「分享」打开分享卡片，复制链接可用，支持系统分享的浏览器会显示系统分享按钮；
 - [ ] 配置 `FOLIO_SITE_URL` 后，feed、sitemap、canonical 都使用该域名。
 
 ### 交互与视觉
