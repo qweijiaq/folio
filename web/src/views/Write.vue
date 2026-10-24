@@ -25,6 +25,7 @@ const form = reactive({
   status: 'draft',
   parentID: route.query.parent ? Number(route.query.parent) : null,
   categoryID: null,
+  private: false,
   pinned: false,
   openComment: true,
   sort: 0
@@ -53,6 +54,16 @@ const isEdit = computed(() => Boolean(editingId.value))
 const wordCount = computed(() => (form.content || '').replace(/\s/g, '').length)
 const coverSeed = computed(() => editingId.value || `new-${form.kind}`)
 const coverCategory = computed(() => categories.value.find((item) => String(item.id) === String(form.categoryID))?.name || '')
+const parentPrivate = computed(() => {
+  if (form.kind !== 'doc' || !form.parentID) return false
+  const byId = new Map(parentItems.value.map((item) => [Number(item.id), item]))
+  let current = byId.get(Number(form.parentID))
+  for (let i = 0; i < 20 && current; i += 1) {
+    if (current.private) return true
+    current = current.parentID ? byId.get(Number(current.parentID)) : null
+  }
+  return false
+})
 
 function snapshot() {
   return JSON.stringify({
@@ -64,6 +75,7 @@ function snapshot() {
     status: form.status,
     parentID: form.parentID,
     categoryID: form.categoryID,
+    private: form.private,
     pinned: form.pinned,
     openComment: form.openComment,
     sort: form.sort
@@ -97,6 +109,7 @@ function draftFields(source) {
     status: source.status || 'draft',
     parentID: source.parentID ?? null,
     categoryID: source.categoryID ?? null,
+    private: Boolean(source.private),
     pinned: Boolean(source.pinned),
     openComment: source.openComment !== false,
     sort: Number(source.sort) || 0
@@ -210,6 +223,7 @@ async function load() {
       form.status = data.doc.status
       form.parentID = data.doc.parentID ?? null
       form.categoryID = data.doc.categoryID ?? null
+      form.private = Boolean(data.doc.private)
       form.pinned = data.doc.pinned
       form.openComment = data.doc.openComment !== false
       form.sort = data.doc.sort || 0
@@ -407,6 +421,7 @@ async function save(status = 'draft') {
     status,
     parentID: form.kind === 'doc' && form.parentID ? Number(form.parentID) : null,
     categoryID: form.kind === 'article' && form.categoryID ? Number(form.categoryID) : null,
+    private: form.kind === 'doc' ? form.private : false,
     pinned: form.pinned,
     openComment: form.openComment,
     sort: Number(form.sort) || 0
@@ -458,6 +473,7 @@ function onRevisionRestored(restored) {
   form.status = restored.status
   form.parentID = restored.parentID ?? null
   form.categoryID = restored.categoryID ?? null
+  form.private = Boolean(restored.private)
   form.pinned = restored.pinned
   form.openComment = restored.openComment !== false
   form.sort = restored.sort || 0
@@ -601,7 +617,7 @@ onBeforeUnmount(() => {
               <select id="editor-parent" v-model="form.parentID">
                 <option :value="null">无（顶级文档）</option>
                 <option v-for="item in parentOptions" :key="item.id" :value="item.id">
-                  {{ '　'.repeat(item.depth) }}{{ item.title }}
+                  {{ '　'.repeat(item.depth) }}{{ item.title }}{{ item.private ? '（私密）' : '' }}
                 </option>
               </select>
             </div>
@@ -615,6 +631,12 @@ onBeforeUnmount(() => {
                 置顶
               </label>
             </div>
+            <label class="checkbox">
+              <input v-model="form.private" type="checkbox" />
+              私密文档（只有自己可见）
+            </label>
+            <p v-if="form.private" class="hint">保存后只有你（和超级管理员）能在列表、目录和详情中看到。</p>
+            <p v-else-if="parentPrivate" class="hint">上级文档是私密文档，这篇文档也会按私密处理。</p>
           </template>
           <label v-else class="checkbox">
             <input v-model="form.pinned" type="checkbox" />

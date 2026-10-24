@@ -2382,3 +2382,182 @@ func TestTagCountsByKind(t *testing.T) {
 		t.Fatalf("全站标签计数不正确: %v", all)
 	}
 }
+
+func TestAIKeysPersistence(t *testing.T) {
+	var seenKey string
+	var calls int
+	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		seenKey = r.Header.Get("x-api-key")
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"id":"msg_key","type":"message","role":"assistant","model":"claude-sonnet-5-5","content":[{"type":"text","text":"已使用保存的 Key。"}],"stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":10,"output_tokens":10}}`)
+	}))
+	defer fake.Close()
+
+	s := newTestAPI(t, func(cfg *config.Config) { cfg.AIBaseURL = fake.URL })
+	token, _ := s.register(t, "keyowner")
+	status, data := s.do(t, "GET", "/api/ai/keys", token, nil)
+	if status != http.StatusOK {
+		t.Fatalf("读取已保存 Key 失败: %d %v", status, data)
+	}
+	if saved := obj(data, "saved"); len(saved) != 0 {
+		t.Fatalf("初始不应有保存的 Key: %v", data)
+	}
+
+	status, data = s.do(t, "PUT", "/api/ai/keys", token, map[string]string{
+		"provider": "anthropic", "apiKey": "stored-user-key",
+	})
+	if status != http.StatusOK {
+		t.Fatalf("保存 AI Key 失败: %d %v", status, data)
+	}
+	var row models.AIProviderKey
+	if err := s.api.DB.Where("provider = ?", "anthropic").First(&row).Error; err != nil {
+		t.Fatalf("读取 AI Key 记录失败: %v", err)
+	}
+	if !strings.HasPrefix(row.Key, "enc:v1:") || strings.Contains(row.Key, "stored-user-key") {
+		t.Fatalf("AI Key 应加密保存: %s", row.Key)
+	}
+	status, data = s.do(t, "GET", "/api/ai/keys", token, nil)
+	if status != http.StatusOK || obj(data, "saved")["anthropic"] != true {
+		t.Fatalf("已保存 Key 状态不正确: %d %v", status, data)
+	}
+
+	status, answer := s.do(t, "POST", "/api/ai/ask", token, map[string]string{
+		"question": "怎么邀请注册？", "model": "claude-sonnet-5-5",
+	})
+	if status != http.StatusOK || calls != 1 || seenKey != "stored-user-key" {
+		t.Fatalf("应使用已保存的 Key: status=%d calls=%d key=%q %v", status, calls, seenKey, answer)
+	}
+
+	status, data = s.do(t, "DELETE", "/api/ai/keys/anthropic", token, nil)
+	if status != http.StatusOK || obj(data, "saved")["anthropic"] == true {
+		t.Fatalf("删除已保存 Key 失败: %d %v", status, data)
+	}
+	status, _ = s.do(t, "POST", "/api/ai/ask", token, map[string]string{
+		"question": "怎么邀请注册？", "model": "claude-sonnet-5-5",
+	})
+	if status != http.StatusBadRequest || calls != 1 {
+		t.Fatalf("删除后缺少 Key 应拒绝，实际 status=%d calls=%d", status, calls)
+	}
+
+	reader, _ := s.register(t, "keyreader")
+	status, data = s.do(t, "GET", "/api/ai/keys", reader, nil)
+	if status != http.StatusOK || len(obj(data, "saved")) != 0 {
+		t.Fatalf("用户之间不应共享 Key: %d %v", status, data)
+	}
+	status, _ = s.do(t, "PUT", "/api/ai/keys", token, map[string]string{"provider": "unknown", "apiKey": "stored-user-key"})
+	if status != http.StatusBadRequest {
+		t.Fatalf("未知服务商应拒绝，实际 %d", status)
+	}
+}
+
+func TestPrivateDocuments(t *testing.T) {
+	s := newTestAPI(t)
+	ownerToken, _ := s.register(t, "privacyowner")
+	readerToken, _ := s.register(t, "privacyreader")
+
+	create := func(body map[string]any) uint {
+		status, data := s.do(t, "POST", "/api/docs", ownerToken, body)
+		if status != http.StatusCreated {
+			t.Fatalf("创建私密测试文档失败: %d %v", status, data)
+		}
+		return uint(number(obj(data, "doc")["id"]))
+	}
+
+	privateRoot := create(map[string]any{
+		"kind": "doc", "title": "量子土豆根", "content": "量子土豆根的私密内容。",
+		"tags": []string{"私密测试"}, "status": "published", "private": true,
+	})
+	publicChild := create(map[string]any{
+		"kind": "doc", "title": "私密根下的公开子文档", "content": "子文档内容。",
+		"status": "published", "parentID": privateRoot, "private": false,
+	})
+	publicParent := create(map[string]any{
+		"kind": "doc", "title": "公开父文档", "content": "公开父文档内容。",
+		"status": "published", "private": false,
+	})
+	privateChild := create(map[string]any{
+		"kind": "doc", "title": "公开父下的私密子文档", "content": "私密子文档内容。",
+		"status": "published", "parentID": publicParent, "private": true,
+	})
+
+	listIDs := func(token string) map[uint]bool {
+		status, data := s.do(t, "GET", "/api/docs?kind=doc&pageSize=100", token, nil)
+		if status != http.StatusOK {
+			t.Fatalf("读取文档列表失败: %d %v", status, data)
+		}
+		ids := map[uint]bool{}
+		for _, item := range list(data, "items") {
+			ids[uint(number(item.(map[string]any)["id"]))] = true
+		}
+		return ids
+	}
+	readerIDs := listIDs(readerToken)
+	if readerIDs[privateRoot] || readerIDs[publicChild] || readerIDs[privateChild] {
+		t.Fatalf("读者不应看到私密文档或私密父级下的子文档: %v", readerIDs)
+	}
+	if !readerIDs[publicParent] {
+		t.Fatalf("公开父文档应可见: %v", readerIDs)
+	}
+	ownerIDs := listIDs(ownerToken)
+	for _, id := range []uint{privateRoot, publicChild, publicParent, privateChild} {
+		if !ownerIDs[id] {
+			t.Fatalf("作者应看到自己的文档 %d: %v", id, ownerIDs)
+		}
+	}
+
+	for _, id := range []uint{privateRoot, publicChild, privateChild} {
+		status, _ := s.do(t, "GET", fmt.Sprintf("/api/docs/%d", id), readerToken, nil)
+		if status != http.StatusNotFound {
+			t.Fatalf("读者访问私密文档 %d 应返回 404，实际 %d", id, status)
+		}
+	}
+	status, _ := s.do(t, "GET", fmt.Sprintf("/api/docs/%d", privateRoot), ownerToken, nil)
+	if status != http.StatusOK {
+		t.Fatalf("作者应能访问自己的私密文档，实际 %d", status)
+	}
+	status, _ = s.do(t, "GET", fmt.Sprintf("/api/docs/%d", publicParent), "", nil)
+	if status != http.StatusOK {
+		t.Fatalf("公开父文档应允许匿名访问，实际 %d", status)
+	}
+
+	status, treeData := s.do(t, "GET", "/api/doc-tree", "", nil)
+	if status != http.StatusOK {
+		t.Fatalf("读取目录树失败: %d %v", status, treeData)
+	}
+	treeIDs := map[uint]bool{}
+	for _, item := range list(treeData, "items") {
+		treeIDs[uint(number(item.(map[string]any)["id"]))] = true
+	}
+	if treeIDs[privateRoot] || treeIDs[publicChild] || treeIDs[privateChild] || !treeIDs[publicParent] {
+		t.Fatalf("目录树可见性不正确: %v", treeIDs)
+	}
+
+	status, search := s.do(t, "GET", "/api/docs?kind=doc&q=%E9%87%8F%E5%AD%90%E5%9C%9F%E8%B1%86%E6%A0%B9", readerToken, nil)
+	if status != http.StatusOK || number(search["total"]) != 0 {
+		t.Fatalf("搜索不应命中私密文档: %d %v", status, search)
+	}
+
+	status, _, sitemap := s.raw(t, "GET", "/sitemap.xml", "")
+	if status != http.StatusOK || strings.Contains(sitemap, "量子土豆根") || strings.Contains(sitemap, "私密根下的公开子文档") || strings.Contains(sitemap, "公开父下的私密子文档") {
+		t.Fatalf("sitemap 不应包含私密文档: %s", sitemap)
+	}
+
+	for _, path := range []string{"/api/docs/%d/like", "/api/docs/%d/favorite"} {
+		status, _ = s.do(t, "POST", fmt.Sprintf(path, privateRoot), readerToken, nil)
+		if status != http.StatusNotFound {
+			t.Fatalf("读者不应能操作私密文档 %s，实际 %d", path, status)
+		}
+	}
+	status, _ = s.do(t, "POST", fmt.Sprintf("/api/docs/%d/comments", privateRoot), readerToken, map[string]string{"content": "不该出现"})
+	if status != http.StatusNotFound {
+		t.Fatalf("读者不应能评论私密文档，实际 %d", status)
+	}
+
+	status, data := s.do(t, "POST", "/api/ai/ask", readerToken, map[string]string{
+		"question": "量子土豆根是什么？", "apiKey": "sk-test-invalid-key", "model": "claude-sonnet-5-5",
+	})
+	if status != http.StatusOK || len(list(data, "sources")) != 0 {
+		t.Fatalf("AI 检索不应返回私密文档: %d %v", status, data)
+	}
+}

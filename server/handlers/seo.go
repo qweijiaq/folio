@@ -153,9 +153,12 @@ func (a *API) Sitemap(c *gin.Context) {
 	}
 
 	var docs []models.Document
-	a.DB.Select("id", "kind", "updated_at").
-		Where("status = ?", models.StatusPublished).
-		Order("updated_at DESC").Limit(50000).Find(&docs)
+	docQuery := a.DB.Select("id", "kind", "updated_at").
+		Where("status = ?", models.StatusPublished)
+	if hidden := a.hiddenDocIDs(nil); len(hidden) > 0 {
+		docQuery = docQuery.Where("id NOT IN ?", hidden)
+	}
+	docQuery.Order("updated_at DESC").Limit(50000).Find(&docs)
 	for _, doc := range docs {
 		section := "articles"
 		priority := "0.8"
@@ -306,7 +309,12 @@ func (a *API) pageMetaFor(c *gin.Context, path string) pageMeta {
 		if err == nil {
 			var doc models.Document
 			if err := a.DB.Preload("Category").Preload("Author").Where("id = ? AND kind = ? AND status = ?", id, models.KindDoc, models.StatusPublished).First(&doc).Error; err == nil {
-				a.fillDocumentMeta(&meta, base, &doc)
+				if a.docIsPrivate(doc.ID) {
+					meta.Title = "文档"
+					meta.NoIndex = true
+				} else {
+					a.fillDocumentMeta(&meta, base, &doc)
+				}
 			}
 		}
 	case strings.HasPrefix(path, "/u/"):

@@ -67,6 +67,10 @@ func (a *API) visibleDoc(c *gin.Context, id uint) (*models.Document, bool) {
 		fail(c, http.StatusNotFound, "内容不存在")
 		return nil, false
 	}
+	if !a.canViewDocument(currentUser(c), &doc) {
+		fail(c, http.StatusNotFound, "内容不存在")
+		return nil, false
+	}
 	return &doc, true
 }
 

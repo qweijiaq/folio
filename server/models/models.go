@@ -54,6 +54,7 @@ type Document struct {
 	Category      *Category  `gorm:"foreignKey:CategoryID" json:"category,omitempty"`
 	Tags          []string   `gorm:"type:text;serializer:json" json:"tags"`
 	Status        string     `gorm:"size:16;index;not null;default:draft" json:"status"`
+	Private       bool       `gorm:"not null;default:false" json:"private"`
 	Pinned        bool       `json:"pinned"`
 	OpenComment   bool       `gorm:"not null;default:true" json:"openComment"`
 	Sort          int        `json:"sort"`
@@ -154,6 +155,16 @@ type Image struct {
 	Hash     string `gorm:"size:64;index" json:"-"`
 }
 
+// AIProviderKey 保存用户自己选择记忆的 AI Key，落库前加密。
+type AIProviderKey struct {
+	Base
+	UserID   uint   `gorm:"uniqueIndex:idx_ai_key_user_provider;not null" json:"userID"`
+	Provider string `gorm:"size:32;uniqueIndex:idx_ai_key_user_provider;not null" json:"provider"`
+	Key      string `gorm:"size:1024" json:"-"`
+}
+
+func (AIProviderKey) TableName() string { return "ai_provider_keys" }
+
 // DocumentRevision 保存内容的历史版本，用于查看和回滚。
 type DocumentRevision struct {
 	Base
@@ -165,6 +176,7 @@ type DocumentRevision struct {
 	Content     string   `gorm:"type:longtext" json:"content"`
 	Tags        []string `gorm:"type:text;serializer:json" json:"tags"`
 	Status      string   `gorm:"size:16" json:"status"`
+	Private     bool     `json:"private"`
 	ParentID    *uint    `json:"parentID"`
 	CategoryID  *uint    `json:"categoryID"`
 	Pinned      bool     `json:"pinned"`

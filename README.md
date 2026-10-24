@@ -12,7 +12,7 @@
 - **三种数据模式**：SQLite（默认）、MySQL、进程内内存 Mock。Redis 可选，用于登出黑名单与浏览量去重。图片默认落本地磁盘，也可以切换到七牛云。
 - **保留内容能力**：正文图片上传与图库、粘贴/拖拽插图、文章分类、文章推荐、收藏夹分组、浏览历史、评论、点赞、收藏、关注、私信、通知都已恢复。
 - **邮箱能力**：配置 SMTP 后支持邮箱验证码注册、验证码登录、绑定/更换邮箱和自助找回密码。
-- **AI 问答**：登录用户可以使用自己的 API Key 向站内文章、文档和站点帮助提问，可选 Anthropic、DeepSeek、智谱 GLM、Kimi、通义千问；支持分块检索、严格/通用模式、多轮追问和流式回答，回答会带回引用，本站不提供、不保存 Key。
+- **AI 问答**：登录用户可以使用自己的 API Key 向站内文章、文档和站点帮助提问，可选 Anthropic、DeepSeek、智谱 GLM、Kimi、通义千问；支持分块检索、严格/通用模式、多轮追问和流式回答，回答会带回引用。本站不提供 Key；用户可选择将自己的 Key 加密保存，方便下次使用。
 - **关于页与站点帮助**：`/about` 按场景介绍全部功能，目录同时作为 AI 的站点帮助知识库；新增功能只需补充一条目录记录。
 - **站点设置与审计**：超级管理员可以在后台修改站点名称、描述、维护者和登录图形验证码；公开注册与 QQ 登录开关在「注册与邀请」；登录、内容、分类、图片、角色等关键动作都会写入操作日志。
 - **隐私与消息偏好**：每个人都可以决定是否公开关注/粉丝列表、是否接收私信和点赞/评论通知，并选择公开主页的封面样式。
@@ -56,7 +56,7 @@ folio/
 │   ├── db/                 # SQLite / MySQL / 内存数据库
 │   ├── cache/              # Redis：JWT 黑名单、浏览量去重
 │   ├── mail/               # SMTP 发信与本地调试邮件
-│   ├── models/             # 23 张表的模型
+│   ├── models/             # 24 张表的模型
 │   ├── art/                # 生成式封面与头像
 │   ├── storage/            # 本地磁盘 / 七牛云存储抽象
 │   ├── handlers/           # 路由、接口与集成测试
@@ -169,6 +169,16 @@ QQ 登录也由这里控制：没有配置 QQ 互联凭据时开关不可开启�
 
 管理后台入口在登录后的顶栏齿轮图标、用户下拉菜单「管理后台」，以及「我的空间」侧栏。
 
+### 文档私密
+
+文档可以在编辑器里勾选「私密文档」：
+
+- 私密文档只有作者本人和超级管理员可以打开；其他读者在文章/文档列表、目录树、搜索、收藏、sitemap 和 AI 检索中都看不到；
+- 父级文档设为私密后，整棵子树都会按私密处理，即使子文档自己没有勾选私密；
+- 子文档设为私密不会影响父文档，父文档可以继续保持公开；
+- 私密文档不写入公开阅读统计，也不出现在公开标签和首页统计中；
+- 私密状态会随历史版本保存和恢复。
+
 ## 自测
 
 完整的自测步骤、检查清单和故障排查见 [TESTING.md](TESTING.md)。最短路径：
@@ -199,7 +209,7 @@ Go 服务会自动托管 `../web/dist`，访问 <http://localhost:8080> 即可�
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
 | `FOLIO_ADDR` | `:8080` | 监听地址 |
-| `FOLIO_SECRET` | 开发用默认值 | JWT 签名密钥，同时用于加密后台保存的七牛密钥；**部署时必须修改，修改后需重新填写七牛密钥** |
+| `FOLIO_SECRET` | 开发用默认值 | JWT 签名密钥，同时用于加密后台七牛密钥和用户选择保存的 AI Key；**部署时必须修改，修改后需重新填写这些密钥** |
 | `FOLIO_DB_DRIVER` | `sqlite` | `sqlite` / `mysql` / `memory` |
 | `FOLIO_DB` | `./data/folio.db` | SQLite 文件路径 |
 | `FOLIO_MYSQL_DSN` | 空 | MySQL DSN，例如 `folio:folio_pass@tcp(127.0.0.1:3306)/folio?charset=utf8mb4&parseTime=True&loc=Local` |
@@ -249,14 +259,14 @@ Go 服务会自动托管 `../web/dist`，访问 <http://localhost:8080> 即可�
 
 ## 数据模型
 
-只有 23 张表：
+只有 24 张表：
 
 | 表 | 用途 |
 | --- | --- |
 | `users` | 用户名、昵称、邮箱、密码哈希、简介、角色、最后登录 |
 | `user_settings` | 隐私与消息偏好：关注/粉丝可见性、私信开关、点赞/评论通知、主页样式 |
 | `categories` | 文章分类 |
-| `documents` | 文章与文档共用：`kind`、`title`、`abstract`、`content`、`parent_id`、`category_id`、`tags`、`status`、`open_comment`、计数字段 |
+| `documents` | 文章与文档共用：`kind`、`title`、`abstract`、`content`、`parent_id`、`category_id`、`tags`、`status`、`private`、`open_comment`、计数字段 |
 | `likes` | 用户与内容点赞（唯一索引） |
 | `favorite_folders` | 用户自定义收藏夹 |
 | `favorites` | 用户与内容收藏（唯一索引，带 `folder_id`） |
@@ -266,6 +276,7 @@ Go 服务会自动托管 `../web/dist`，访问 <http://localhost:8080> 即可�
 | `messages` | 私信：类型（文字/图片）、正文、图片地址、已读时间 |
 | `notifications` | 点赞 / 评论 / 关注通知 |
 | `images` | 上传图片：文件名、存储提供方、对象键、URL、MIME、大小、内容哈希、上传者 |
+| `ai_provider_keys` | 用户选择记住的 AI Key：按用户和服务商唯一，密钥加密保存 |
 | `view_histories` | 登录用户的浏览历史（用户 + 内容唯一） |
 | `doc_daily_stats` | 内容每日阅读量（内容 + 日期唯一），用于数据看板 |
 | `invite_codes` | 一次性邀请码：备注、有效期、创建者、使用者和使用时间 |
@@ -403,7 +414,8 @@ FOLIO_QQ_REDIRECT=http://localhost:8080/api/auth/qq/callback
 
 - 用户必须自己填写所选服务商的 API Key，**本站不提供 Key，也不会用站点的 `FOLIO_AI_API_KEY` 代替**；
 - 可选服务商：Anthropic、DeepSeek、智谱 GLM、Kimi、通义千问；每个服务商自带常用模型，也可以手动填写新模型名称；
-- Key 只保存在当前浏览器标签页的 sessionStorage（按服务商分别记忆），提交时发送到服务端用于这一次请求，不写入数据库、不写日志；
+- 默认只在当前浏览器标签页的 sessionStorage 中记住 Key（按服务商分别记忆）；
+- 勾选「记住 Key」后，Key 会使用 `FOLIO_SECRET` 加密保存到 `ai_provider_keys` 表，下次留空即可直接使用；接口只返回是否已保存，不回显明文，不写操作日志，可以随时清除；
 - 知识库由已发布的文章、文档和「站点帮助」目录共同组成。文章会切成分块，标题、摘要、标签、分类和正文一起参与检索，取最相关的片段而不是整篇塞给模型；
 - 「站点帮助」是一份可扩展的功能目录，同时驱动公开的 `/about` 关于页；每条功能带标题、摘要、步骤、路由、关键词和适用角色，管理员专属功能只对管理员检索；
 - 回答支持两种模式：严格站内（只依据资料）和通用知识（资料不足时补充站外常识并明确标注）；
@@ -540,7 +552,7 @@ FOLIO_SITE_URL=https://your-domain.com
 - `/articles` 文章列表：标签、分类筛选，最新/最多阅读/最多点赞排序，分页
 - `/articles/:id` 文章详情：自动封面、Markdown 正文、固定目录、右侧点赞/收藏/分享、阅读进度、回到顶部、作者卡、相关文章、评论
 - `/docs` 知识库总览：左侧目录树 + 文档卡片
-- `/docs/:id` 文档详情：目录树、面包屑、正文与固定右侧目录、上一篇/下一篇、右侧点赞收藏/分享、评论
+- `/docs/:id` 文档详情：目录树、面包屑、正文与固定右侧目录、上一篇/下一篇、右侧点赞收藏/分享、评论；私密文档只有作者和超级管理员可访问
 - `/search` 全站搜索：关键词搜索；点击任意标签进入该标签的全站聚合
 - `/about` 关于：按场景系统介绍站点全部功能，支持页面内搜索、角色标记和截图，也是 AI 问答的站点帮助目录
 - `/u/:username` 公开主页：文章、文档、关注、粉丝、公开收藏夹和作者置顶文章；可按隐私设置隐藏关注/粉丝/收藏，并支持封面、紧凑、纯文字三种头部样式
@@ -579,7 +591,7 @@ FOLIO_SITE_URL=https://your-domain.com
 | 内容 | `GET /docs`、`GET /docs/:id`、`GET /docs/:id/related`、`GET /docs/:id/revisions`、`GET /docs/:id/revisions/:revisionID`、`POST /docs/:id/revisions/:revisionID/restore`、`POST /docs`、`PUT /docs/:id`、`DELETE /docs/:id`、`GET /doc-tree` |
 | 分类 | `GET /categories`、`POST /categories`、`PUT /categories/:id`、`DELETE /categories/:id` |
 | 图片 | `POST /images`、`GET /images`、`DELETE /images/:id`；本地模式通过 `/uploads/*` 访问，七牛模式返回云存储 URL |
-| AI | `GET /ai/status`、`POST /ai/analyze`（仅管理员）、`GET /ai/providers`、`GET /ai/meta`、`POST /ai/ask`、`POST /ai/ask/stream`（SSE，登录用户需自带 Key） |
+| AI | `GET /ai/status`、`POST /ai/analyze`（仅管理员）、`GET /ai/providers`、`GET /ai/meta`、`GET|PUT /ai/keys`、`DELETE /ai/keys/:provider`、`POST /ai/ask`、`POST /ai/ask/stream`（SSE，登录用户需自带 Key） |
 | 互动 | `POST /docs/:id/like`、`POST /docs/:id/favorite`、`GET|POST /docs/:id/comments`、`POST /comments/:id/like` |
 | 消息 | `GET /messages/conversations`、`GET|POST /messages/with/:username`、`GET /notifications`、`GET /notices`、`POST /notices/read`、`GET /ws`（WebSocket，token 查询参数） |
 | 我的 | `GET /me/docs`、`GET /me/favorites`、`GET|DELETE /me/history`、`GET|POST /favorite-folders`、`PUT|DELETE /favorite-folders/:id`、`PUT /me`、`PUT /me/password`、`GET|PUT /me/settings`、`PUT /me/featured-doc`、`GET /me/login-records`、`GET /inbox` |

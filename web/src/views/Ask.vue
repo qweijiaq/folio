@@ -16,6 +16,8 @@ const CUSTOM_MODEL = '__custom__'
 
 const providers = ref([])
 const aiMeta = ref(null)
+const savedKeys = ref({})
+const rememberKey = ref(true)
 const providerId = ref('')
 const apiKey = ref('')
 const model = ref('')
@@ -41,6 +43,7 @@ const examples = [
 const currentProvider = computed(() => providers.value.find((item) => item.id === providerId.value) || null)
 const selectedModel = computed(() => (model.value === CUSTOM_MODEL ? customModel.value.trim() : model.value))
 const knowledge = computed(() => aiMeta.value?.knowledge || {})
+const hasSavedKey = computed(() => Boolean(savedKeys.value[providerId.value]))
 
 function readKey(id) {
   try {
@@ -96,6 +99,7 @@ function resetForProvider(id) {
   apiKey.value = readKey(id)
   model.value = provider?.models?.[0]?.id || ''
   customModel.value = ''
+  rememberKey.value = true
   saveProviderPref(id)
 }
 
@@ -131,11 +135,21 @@ async function loadMeta() {
   }
 }
 
+async function loadSavedKeys() {
+  try {
+    const data = await api.get('/ai/keys')
+    savedKeys.value = data.saved || {}
+    if (hasSavedKey.value) rememberKey.value = true
+  } catch {
+    savedKeys.value = {}
+  }
+}
+
 watch(apiKey, (value) => storeKey(providerId.value, value))
 
-onMounted(() => {
-  loadProviders()
-  loadMeta()
+onMounted(async () => {
+  await loadProviders()
+  await Promise.all([loadMeta(), loadSavedKeys()])
 })
 
 function useExample(text) {
@@ -143,9 +157,21 @@ function useExample(text) {
   nextTick(() => document.querySelector('#ask-question')?.focus())
 }
 
-function clearKey() {
+async function clearKey() {
+  const provider = providerId.value
   apiKey.value = ''
-  storeKey(providerId.value, '')
+  storeKey(provider, '')
+  if (savedKeys.value[provider]) {
+    try {
+      await api.del(`/ai/keys/${encodeURIComponent(provider)}`)
+      savedKeys.value = { ...savedKeys.value, [provider]: false }
+      toast('已清除保存的 API Key')
+      return
+    } catch (err) {
+      toast(err.message || '清除保存的 Key 失败', 'error')
+      return
+    }
+  }
   toast('已清除当前标签页的 API Key')
 }
 
@@ -231,8 +257,8 @@ async function ask() {
     error.value = providersError.value || 'AI 服务商还没有加载完成'
     return
   }
-  if (!key) {
-    error.value = `请先填写你自己的 ${name} API Key`
+  if (!key && !hasSavedKey.value) {
+    error.value = `请先填写你自己的 ${name} API Key，或勾选「记住 Key」保存一次`
     return
   }
   if (!text) {
@@ -243,7 +269,18 @@ async function ask() {
     error.value = '请填写要使用的模型名称'
     return
   }
-  storeKey(providerId.value, key)
+  if (key) {
+    storeKey(providerId.value, key)
+    if (rememberKey.value) {
+      try {
+        await api.put('/ai/keys', { provider: providerId.value, apiKey: key })
+        savedKeys.value = { ...savedKeys.value, [providerId.value]: true }
+        apiKey.value = ''
+      } catch (err) {
+        toast(err.message || 'Key 保存失败，本次仍会使用你输入的 Key', 'error')
+      }
+    }
+  }
   const history = buildHistory()
   thread.value.push({ role: 'user', content: text })
   const assistant = {
@@ -378,14 +415,23 @@ onBeforeUnmount(() => {
                 id="ask-key"
                 v-model="apiKey"
                 autocomplete="off"
-                :placeholder="currentProvider?.keyHint || 'sk-...'"
+                :placeholder="hasSavedKey ? '已保存，可留空直接提问' : (currentProvider?.keyHint || 'sk-...')"
               />
-              <button v-if="apiKey" class="text-link" type="button" @click="clearKey">清除</button>
+              <button v-if="apiKey || hasSavedKey" class="text-link" type="button" @click="clearKey">清除</button>
             </div>
-            <span class="hint">
-              只保存在当前标签页，并按服务商分别记忆。
+            <span v-if="hasSavedKey" class="hint ask-key-saved">
+              <Icon name="check" :size="13" />
+              已加密保存在本站，可留空直接提问；输入新 Key 会覆盖。
               <a v-if="currentProvider?.consoleURL" :href="currentProvider.consoleURL" target="_blank" rel="noopener noreferrer">获取 Key</a>
             </span>
+            <span v-else class="hint">
+              只保存在当前标签页；勾选下方选项后才会加密保存到本站。
+              <a v-if="currentProvider?.consoleURL" :href="currentProvider.consoleURL" target="_blank" rel="noopener noreferrer">获取 Key</a>
+            </span>
+            <label class="ask-remember">
+              <input v-model="rememberKey" type="checkbox" />
+              <span>记住 Key，使用 FOLIO_SECRET 加密保存，可随时清除</span>
+            </label>
           </div>
 
           <div class="field">

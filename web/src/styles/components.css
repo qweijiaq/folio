@@ -1440,3 +1440,31 @@
     max-height: 48vh;
   }
 }
+
+.doc-private {
+  position: absolute;
+  bottom: 11px;
+  left: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px;
+  border: 1px dashed var(--accent);
+  border-radius: var(--sketch-sm);
+  background: color-mix(in srgb, var(--surface) 90%, transparent);
+  color: var(--accent);
+  font-family: var(--hand);
+  font-size: 12px;
+}
+
+.tree-link {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.tree-lock {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: var(--ink-faint);
+}

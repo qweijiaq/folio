@@ -91,11 +91,14 @@ func (a *API) AdminDashboard(c *gin.Context) {
 	a.DB.Model(&models.Image{}).Select("COALESCE(SUM(size), 0)").Scan(&uploadBytes)
 
 	var top []models.Document
-	a.DB.Preload("Author", func(db *gorm.DB) *gorm.DB {
+	topQuery := a.DB.Preload("Author", func(db *gorm.DB) *gorm.DB {
 		return db.Select("id", "username", "nickname", "bio", "role", "created_at")
 	}).Preload("Category").
-		Where("status = ?", models.StatusPublished).
-		Order("view_count DESC, like_count DESC, id DESC").Limit(6).Find(&top)
+		Where("status = ?", models.StatusPublished)
+	if hidden := a.hiddenDocIDs(currentUser(c)); len(hidden) > 0 {
+		topQuery = topQuery.Where("id NOT IN ?", hidden)
+	}
+	topQuery.Order("view_count DESC, like_count DESC, id DESC").Limit(6).Find(&top)
 	topItems := make([]gin.H, 0, len(top))
 	for _, doc := range top {
 		topItems = append(topItems, gin.H{

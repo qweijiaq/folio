@@ -268,9 +268,11 @@ func (a *API) retrieveQAContext(question string, staff bool) []qaSource {
 	chunks := make([]qaChunk, 0, 160)
 
 	var docs []models.Document
-	a.DB.Preload("Category").
-		Where("status = ?", models.StatusPublished).
-		Order("view_count DESC, id DESC").Limit(500).Find(&docs)
+	docQuery := a.DB.Preload("Category").Where("status = ?", models.StatusPublished)
+	if hidden := a.hiddenDocIDs(nil); len(hidden) > 0 {
+		docQuery = docQuery.Where("documents.id NOT IN ?", hidden)
+	}
+	docQuery.Order("view_count DESC, id DESC").Limit(500).Find(&docs)
 	for _, doc := range docs {
 		category := ""
 		if doc.Category != nil {

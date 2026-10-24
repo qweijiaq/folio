@@ -29,10 +29,14 @@ func (a *API) recordHistory(userID, docID uint) {
 func (a *API) MyHistory(c *gin.Context) {
 	me := currentUser(c)
 	page, size := pageParams(c)
+	q := a.DB.Model(&models.ViewHistory{}).Where("user_id = ?", me.ID)
+	if hidden := a.hiddenDocIDs(me); len(hidden) > 0 {
+		q = q.Where("doc_id NOT IN ?", hidden)
+	}
 	var total int64
-	a.DB.Model(&models.ViewHistory{}).Where("user_id = ?", me.ID).Count(&total)
+	q.Count(&total)
 	var rows []models.ViewHistory
-	a.DB.Where("user_id = ?", me.ID).Order("updated_at DESC").Offset((page - 1) * size).Limit(size).Find(&rows)
+	q.Order("updated_at DESC").Offset((page - 1) * size).Limit(size).Find(&rows)
 
 	ids := make([]uint, 0, len(rows))
 	for _, row := range rows {

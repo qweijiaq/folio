@@ -5,7 +5,8 @@ import Icon from './Icon.vue'
 const props = defineProps({
   nodes: { type: Array, default: () => [] },
   activeId: { type: [Number, String], default: null },
-  depth: { type: Number, default: 0 }
+  depth: { type: Number, default: 0 },
+  ancestorPrivate: { type: Boolean, default: false }
 })
 
 const openMap = reactive({})
@@ -35,13 +36,14 @@ watch(
           <Icon name="chevronRight" :size="13" />
         </button>
         <span v-else class="tree-dot"></span>
-        <RouterLink :to="`/docs/${node.id}`" class="tree-link">{{ node.title }}</RouterLink>
+        <RouterLink :to="`/docs/${node.id}`" class="tree-link"><span>{{ node.title }}</span><Icon v-if="node.private || ancestorPrivate" name="lock" :size="12" class="tree-lock" /></RouterLink>
       </div>
       <DocTree
         v-if="node.children?.length && openMap[node.id]"
         :nodes="node.children"
         :active-id="activeId"
         :depth="depth + 1"
+        :ancestor-private="ancestorPrivate || node.private"
       />
     </li>
   </ul>

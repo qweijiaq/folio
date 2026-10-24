@@ -25,6 +25,7 @@ type docInput struct {
 	Content     string   `json:"content"`
 	Tags        []string `json:"tags"`
 	Status      string   `json:"status"`
+	Private     *bool    `json:"private"`
 	ParentID    *uint    `json:"parentID"`
 	CategoryID  *uint    `json:"categoryID"`
 	Pinned      *bool    `json:"pinned"`
@@ -212,6 +213,11 @@ func (a *API) DocList(c *gin.Context) {
 			q = q.Where("category_id = ?", uint(id))
 		}
 	}
+	if kind != models.KindArticle {
+		if hidden := a.hiddenDocIDs(viewer); len(hidden) > 0 {
+			q = q.Where("id NOT IN ?", hidden)
+		}
+	}
 
 	var total int64
 	q.Count(&total)
@@ -240,16 +246,25 @@ func (a *API) DocList(c *gin.Context) {
 
 func (a *API) DocTree(c *gin.Context) {
 	var docs []models.Document
-	a.DB.Select("id", "title", "parent_id", "sort", "created_at", "updated_at", "view_count", "like_count").
+	a.DB.Select("id", "title", "parent_id", "sort", "private", "created_at", "updated_at", "view_count", "like_count").
 		Where("kind = ? AND status = ?", models.KindDoc, models.StatusPublished).
 		Order("sort ASC, id ASC").Find(&docs)
+	viewer := currentUser(c)
+	hidden := map[uint]bool{}
+	for _, id := range a.hiddenDocIDs(viewer) {
+		hidden[id] = true
+	}
 	items := make([]gin.H, 0, len(docs))
 	for _, d := range docs {
+		if hidden[d.ID] {
+			continue
+		}
 		items = append(items, gin.H{
 			"id":        d.ID,
 			"title":     d.Title,
 			"parentID":  d.ParentID,
 			"sort":      d.Sort,
+			"private":   d.Private,
 			"viewCount": d.ViewCount,
 			"likeCount": d.LikeCount,
 			"createdAt": d.CreatedAt,
@@ -276,6 +291,11 @@ func (a *API) DocDetail(c *gin.Context) {
 		fail(c, http.StatusNotFound, "内容不存在")
 		return
 	}
+	if !a.canViewDocument(viewer, &doc) {
+		fail(c, http.StatusNotFound, "内容不存在")
+		return
+	}
+	privateDoc := doc.Kind == models.KindDoc && a.docIsPrivate(doc.ID)
 
 	liked, favorited, following := false, false, false
 	if viewer != nil {
@@ -290,7 +310,7 @@ func (a *API) DocDetail(c *gin.Context) {
 		}
 	}
 
-	if doc.Status == models.StatusPublished && (viewer == nil || viewer.ID != doc.AuthorID) {
+	if doc.Status == models.StatusPublished && !privateDoc && (viewer == nil || viewer.ID != doc.AuthorID) {
 		viewerKey := "anon:" + c.ClientIP()
 		if viewer != nil {
 			viewerKey = fmt.Sprintf("user:%d", viewer.ID)
@@ -308,7 +328,7 @@ func (a *API) DocDetail(c *gin.Context) {
 			}
 		}
 	}
-	if viewer != nil && viewer.ID != doc.AuthorID && doc.Status == models.StatusPublished {
+	if viewer != nil && viewer.ID != doc.AuthorID && doc.Status == models.StatusPublished && !privateDoc {
 		a.recordHistory(viewer.ID, doc.ID)
 	}
 
@@ -390,6 +410,7 @@ func (a *API) DocCreate(c *gin.Context) {
 		CategoryID:  categoryID,
 		Tags:        normalizeTags(in.Tags),
 		Status:      in.Status,
+		Private:     in.Kind == models.KindDoc && in.Private != nil && *in.Private,
 		OpenComment: openComment,
 		Sort:        in.Sort,
 	}
@@ -480,6 +501,10 @@ func (a *API) DocUpdate(c *gin.Context) {
 	doc.CategoryID = categoryID
 	doc.Sort = in.Sort
 	fields := []string{"title", "abstract", "content", "tags", "status", "parent_id", "category_id", "sort"}
+	if doc.Kind == models.KindDoc && in.Private != nil {
+		doc.Private = *in.Private
+		fields = append(fields, "private")
+	}
 	if in.OpenComment != nil {
 		doc.OpenComment = *in.OpenComment
 		fields = append(fields, "open_comment")
@@ -585,6 +610,11 @@ func (a *API) MyDocs(c *gin.Context) {
 	if status == models.StatusDraft || status == models.StatusPublished {
 		q = q.Where("status = ?", status)
 	}
+	if kind != models.KindArticle {
+		if hidden := a.hiddenDocIDs(u); len(hidden) > 0 {
+			q = q.Where("id NOT IN ?", hidden)
+		}
+	}
 	var total int64
 	q.Count(&total)
 	var docs []models.Document
@@ -604,6 +634,9 @@ func (a *API) MyFavorites(c *gin.Context) {
 		if id, err := strconv.ParseUint(folderID, 10, 64); err == nil && id > 0 {
 			q = q.Where("folder_id = ?", uint(id))
 		}
+	}
+	if hidden := a.hiddenDocIDs(u); len(hidden) > 0 {
+		q = q.Where("doc_id NOT IN ?", hidden)
 	}
 	var total int64
 	q.Count(&total)

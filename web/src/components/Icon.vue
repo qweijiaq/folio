@@ -28,6 +28,7 @@ const icons = {
   chevronRight: '<path d="m9 6 6 6-6 6"/>',
   arrowRight: '<path d="M5 12h14"/><path d="m13 6 6 6-6 6"/>',
   arrowUp: '<path d="M12 19V5"/><path d="m5 12 7-7 7 7"/>',
+  lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
   arrowLeft: '<path d="M19 12H5"/><path d="m11 18-6-6 6-6"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
   eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>',

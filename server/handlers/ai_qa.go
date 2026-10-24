@@ -439,11 +439,20 @@ func (a *API) prepareQA(c *gin.Context, in qaAskInput) (qaPrepared, int, string)
 	if !qaModelValid(in.Model) {
 		return qaPrepared{}, http.StatusBadRequest, "模型名称不合法"
 	}
+	user := currentUser(c)
+	if in.APIKey == "" && user != nil {
+		stored, ok, err := a.storedAIKey(user.ID, provider.ID)
+		if err != nil {
+			return qaPrepared{}, http.StatusBadRequest, "已保存的 API Key 无法解密，请清除后重新填写"
+		}
+		if ok {
+			in.APIKey = stored
+		}
+	}
 	if len(in.APIKey) < 10 || len(in.APIKey) > 512 {
-		return qaPrepared{}, http.StatusBadRequest, fmt.Sprintf("请填写你自己的 %s API Key，本站不提供 Key", provider.Name)
+		return qaPrepared{}, http.StatusBadRequest, fmt.Sprintf("请填写你自己的 %s API Key，或在问答页勾选「记住 Key」后保存", provider.Name)
 	}
 	history := normalizeQAHistory(in.History)
-	user := currentUser(c)
 	sources := a.retrieveQAContext(qaSearchQuestion(in.Question, history), isStaff(user))
 	contextText := qaContextBlock(sources)
 	return qaPrepared{

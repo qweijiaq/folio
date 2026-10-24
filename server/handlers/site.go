@@ -23,6 +23,11 @@ func (a *API) tagStats(limit int, kind string) []tagCount {
 	if kind == models.KindArticle || kind == models.KindDoc {
 		q = q.Where("kind = ?", kind)
 	}
+	if kind != models.KindArticle {
+		if hidden := a.hiddenDocIDs(nil); len(hidden) > 0 {
+			q = q.Where("id NOT IN ?", hidden)
+		}
+	}
 	q.Pluck("tags", &raw)
 	counts := map[string]int{}
 	for _, s := range raw {
@@ -60,8 +65,13 @@ func (a *API) Tags(c *gin.Context) {
 
 func (a *API) SiteHome(c *gin.Context) {
 	var articles, docs, users int64
+	hiddenDocs := a.hiddenDocIDs(nil)
 	a.DB.Model(&models.Document{}).Where("status = ? AND kind = ?", models.StatusPublished, models.KindArticle).Count(&articles)
-	a.DB.Model(&models.Document{}).Where("status = ? AND kind = ?", models.StatusPublished, models.KindDoc).Count(&docs)
+	docQuery := a.DB.Model(&models.Document{}).Where("status = ? AND kind = ?", models.StatusPublished, models.KindDoc)
+	if len(hiddenDocs) > 0 {
+		docQuery = docQuery.Where("id NOT IN ?", hiddenDocs)
+	}
+	docQuery.Count(&docs)
 	a.DB.Model(&models.User{}).Count(&users)
 	var views int64
 	a.DB.Model(&models.Document{}).Where("status = ?", models.StatusPublished).
@@ -82,9 +92,12 @@ func (a *API) SiteHome(c *gin.Context) {
 		Order("COALESCE(published_at, created_at) DESC, id DESC").Limit(6).Find(&recent)
 
 	var recentDocs []models.Document
-	a.DB.Preload("Category").Preload("Author", authorSelect).
-		Where("status = ? AND kind = ?", models.StatusPublished, models.KindDoc).
-		Order("view_count DESC, id DESC").Limit(6).Find(&recentDocs)
+	recentDocQuery := a.DB.Preload("Category").Preload("Author", authorSelect).
+		Where("status = ? AND kind = ?", models.StatusPublished, models.KindDoc)
+	if len(hiddenDocs) > 0 {
+		recentDocQuery = recentDocQuery.Where("documents.id NOT IN ?", hiddenDocs)
+	}
+	recentDocQuery.Order("view_count DESC, id DESC").Limit(6).Find(&recentDocs)
 	blankContent(recent)
 	blankContent(recentDocs)
 

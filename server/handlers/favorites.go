@@ -176,12 +176,16 @@ func (a *API) PublicFavoriteFolders(c *gin.Context) {
 	var folders []models.FavoriteFolder
 	a.DB.Where("user_id = ?", target.ID).Order("is_default DESC, sort ASC, id ASC").Find(&folders)
 	items := make([]gin.H, 0, len(folders))
+	hidden := a.hiddenDocIDs(viewer)
 	for _, folder := range folders {
 		var count int64
-		a.DB.Table("favorites").
+		query := a.DB.Table("favorites").
 			Joins("JOIN documents ON documents.id = favorites.doc_id").
-			Where("favorites.user_id = ? AND favorites.folder_id = ? AND documents.status = ?", target.ID, folder.ID, models.StatusPublished).
-			Count(&count)
+			Where("favorites.user_id = ? AND favorites.folder_id = ? AND documents.status = ?", target.ID, folder.ID, models.StatusPublished)
+		if len(hidden) > 0 {
+			query = query.Where("documents.id NOT IN ?", hidden)
+		}
+		query.Count(&count)
 		items = append(items, gin.H{
 			"id":        folder.ID,
 			"name":      folder.Name,
@@ -227,6 +231,9 @@ func (a *API) PublicFavorites(c *gin.Context) {
 	query := a.DB.Table("favorites").
 		Joins("JOIN documents ON documents.id = favorites.doc_id").
 		Where("favorites.user_id = ? AND favorites.folder_id = ? AND documents.status = ?", target.ID, folder.ID, models.StatusPublished)
+	if hidden := a.hiddenDocIDs(viewer); len(hidden) > 0 {
+		query = query.Where("documents.id NOT IN ?", hidden)
+	}
 	var total int64
 	query.Count(&total)
 	var favorites []models.Favorite

@@ -5185,3 +5185,38 @@
     transition: none;
   }
 }
+
+.ask-key-saved {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--success);
+}
+
+.ask-remember {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  color: var(--ink-faint);
+  font-size: 11.5px;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.ask-remember input {
+  width: auto;
+  margin-top: 2px;
+  accent-color: var(--accent);
+}
+
+.private-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 4px;
+  padding: 1px 7px;
+  border: 1px dashed var(--accent);
+  border-radius: var(--sketch-sm);
+  color: var(--accent);
+  font-family: var(--hand);
+}

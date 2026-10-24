@@ -26,6 +26,7 @@ func (a *API) saveRevision(doc *models.Document, editor *models.User) error {
 		Content:     doc.Content,
 		Tags:        append([]string{}, doc.Tags...),
 		Status:      doc.Status,
+		Private:     doc.Private,
 		ParentID:    doc.ParentID,
 		CategoryID:  doc.CategoryID,
 		Pinned:      doc.Pinned,
@@ -64,6 +65,9 @@ func (a *API) documentChanged(doc *models.Document, in docInput, abstract string
 		return true
 	}
 	if in.OpenComment != nil && doc.OpenComment != *in.OpenComment {
+		return true
+	}
+	if doc.Kind == models.KindDoc && in.Private != nil && doc.Private != *in.Private {
 		return true
 	}
 	return false
@@ -159,12 +163,13 @@ func (a *API) RevisionRestore(c *gin.Context) {
 	doc.Content = revision.Content
 	doc.Tags = append([]string{}, revision.Tags...)
 	doc.Status = revision.Status
+	doc.Private = revision.Private
 	doc.ParentID = revision.ParentID
 	doc.CategoryID = revision.CategoryID
 	doc.Pinned = revision.Pinned
 	doc.OpenComment = revision.OpenComment
 	doc.Sort = revision.Sort
-	fields := []string{"title", "abstract", "content", "tags", "status", "parent_id", "category_id", "pinned", "open_comment", "sort"}
+	fields := []string{"title", "abstract", "content", "tags", "status", "private", "parent_id", "category_id", "pinned", "open_comment", "sort"}
 	if doc.Status == models.StatusPublished && doc.PublishedAt == nil {
 		now := time.Now()
 		doc.PublishedAt = &now

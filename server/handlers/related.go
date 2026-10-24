@@ -21,11 +21,21 @@ func (a *API) RelatedDocs(c *gin.Context) {
 		fail(c, http.StatusNotFound, "内容不存在")
 		return
 	}
+	viewer := currentUser(c)
+	if !a.canViewDocument(viewer, &current) {
+		fail(c, http.StatusNotFound, "内容不存在")
+		return
+	}
 	var candidates []models.Document
-	a.DB.Preload("Category").Preload("Author", func(db *gorm.DB) *gorm.DB {
+	query := a.DB.Preload("Category").Preload("Author", func(db *gorm.DB) *gorm.DB {
 		return db.Select("id", "username", "nickname", "bio", "role", "created_at")
-	}).Where("kind = ? AND status = ? AND id <> ?", current.Kind, models.StatusPublished, current.ID).
-		Order("view_count DESC").Limit(80).Find(&candidates)
+	}).Where("kind = ? AND status = ? AND id <> ?", current.Kind, models.StatusPublished, current.ID)
+	if current.Kind == models.KindDoc {
+		if hidden := a.hiddenDocIDs(viewer); len(hidden) > 0 {
+			query = query.Where("id NOT IN ?", hidden)
+		}
+	}
+	query.Order("view_count DESC").Limit(80).Find(&candidates)
 
 	currentTags := map[string]bool{}
 	for _, tag := range current.Tags {

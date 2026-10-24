@@ -67,6 +67,18 @@ const nextDoc = computed(() =>
 
 const visibleToc = computed(() => toc.value.filter((item) => item.level <= 3))
 
+const docPrivate = computed(() => {
+  if (!doc.value) return false
+  const byId = new Map(treeItems.value.map((item) => [item.id, item]))
+  let current = { id: doc.value.id, parentID: doc.value.parentID, private: Boolean(doc.value.private) }
+  for (let i = 0; i < 20 && current; i += 1) {
+    if (current.private) return true
+    if (!current.parentID) break
+    current = byId.get(current.parentID)
+  }
+  return false
+})
+
 usePageMeta(() => {
   const current = doc.value
   if (!current) return { title: '文档', description: '知微知识库', image: '/api/art/cover.png?seed=docs&kind=site' }
@@ -226,6 +238,7 @@ watch(
               <span class="kicker-link">文档</span>
               <span class="kicker-sep">/</span>
               <span>{{ formatDate(doc.updatedAt) }} 更新</span>
+              <span v-if="docPrivate" class="private-kicker"><Icon name="lock" :size="12" /> 私密</span>
             </div>
             <h1>{{ doc.title }}</h1>
             <p v-if="doc.abstract" class="article-abstract">{{ doc.abstract }}</p>

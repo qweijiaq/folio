@@ -38,9 +38,13 @@ func exportFilename(title string) string {
 
 func (a *API) ExportContent(c *gin.Context) {
 	var docs []models.Document
-	a.DB.Preload("Category").Preload("Author", func(db *gorm.DB) *gorm.DB {
+	query := a.DB.Preload("Category").Preload("Author", func(db *gorm.DB) *gorm.DB {
 		return db.Select("id", "username", "nickname", "bio", "role", "created_at")
-	}).Order("kind ASC, id ASC").Find(&docs)
+	})
+	if hidden := a.hiddenDocIDs(currentUser(c)); len(hidden) > 0 {
+		query = query.Where("id NOT IN ?", hidden)
+	}
+	query.Order("kind ASC, id ASC").Find(&docs)
 
 	var buf bytes.Buffer
 	writer := zip.NewWriter(&buf)

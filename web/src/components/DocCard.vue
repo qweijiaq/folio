@@ -19,6 +19,7 @@ const href = computed(() => `/${props.doc.kind === 'doc' ? 'docs' : 'articles'}/
       <CoverImage :doc="doc" />
       <span class="doc-kind">{{ doc.kind === 'doc' ? '文档' : '文章' }}</span>
       <span v-if="doc.status === 'draft'" class="badge badge-draft">草稿</span>
+      <span v-if="doc.private" class="doc-private"><Icon name="lock" :size="12" /> 私密</span>
       <span v-if="doc.pinned" class="doc-pin"><Icon name="star" :size="13" /> 置顶</span>
     </div>
     <div class="doc-card-body">
