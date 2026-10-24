@@ -1092,3 +1092,32 @@ func TestUserPrivacySettings(t *testing.T) {
 	}
 	_ = aliceID
 }
+
+func TestMyLoginRecords(t *testing.T) {
+	s := newTestAPI(t)
+	token, userID := s.register(t, "loginlog")
+	status, loginData := s.do(t, "POST", "/api/auth/login", "", map[string]string{
+		"username": "loginlog", "password": "password123",
+	})
+	if status != http.StatusOK {
+		t.Fatalf("登录失败: %d %v", status, loginData)
+	}
+	loginToken, _ := loginData["token"].(string)
+
+	status, records := s.do(t, "GET", "/api/me/login-records", loginToken, nil)
+	if status != http.StatusOK {
+		t.Fatalf("读取登录记录失败: %d", status)
+	}
+	actions := map[string]bool{}
+	for _, item := range list(records, "items") {
+		entry := item.(map[string]any)
+		if uint(number(entry["userID"])) != userID {
+			t.Fatalf("登录记录不应包含其他用户: %v", entry)
+		}
+		actions[fmt.Sprint(entry["action"])] = true
+	}
+	if !actions["登录"] || !actions["注册账号"] {
+		t.Fatalf("登录记录缺少关键动作: %v", actions)
+	}
+	_ = token
+}

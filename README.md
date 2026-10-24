@@ -314,6 +314,8 @@ FOLIO_AI_API_KEY=sk-ant-... FOLIO_AI_MODEL=claude-opus-5-5 ./dev.sh
 - 是否生成评论/回复通知、点赞通知；
 - 公开主页头部样式：`cover`（封面）、`compact`（紧凑）、`plain`（纯文字）。
 
+「账号安全」里还会显示最近 12 条登录与安全动作（登录、注册、改密、找回密码、绑定邮箱），数据来自操作日志，只对本人可见。
+
 这些设置保存在 `user_settings`，没有记录时按全部公开、全部通知处理，老用户不需要迁移。
 
 ## 邮箱验证码（可选）
@@ -373,7 +375,7 @@ FOLIO_SMTP_FROM=you@qq.com
 - `/u/:username` 公开主页：文章、文档、关注、粉丝；可按隐私设置隐藏关注/粉丝，并支持封面、紧凑、纯文字三种头部样式
 - `/write`、`/write/:id` 编辑器：Markdown 分栏预览、图片上传/粘贴/拖拽、分类、自动封面预览、标签、评论开关、草稿/发布、文档树父级与排序（仅超级管理员和管理员）
 - `/messages` 私信与通知：会话列表、WebSocket 实时消息、图片与表情、轮询兜底、通知已读
-- `/me` 我的空间：资料、密码、隐私与消息、收藏夹、浏览历史；管理员额外看到自己的文章与文档
+- `/me` 我的空间：资料、密码、隐私与消息、最近登录记录、收藏夹、浏览历史；管理员额外看到自己的文章与文档
 - `/admin` 管理后台：概览、内容管理、分类管理、图片管理；超级管理员额外拥有用户与权限、站点设置和操作日志
 - `/login`、`/register` 登录注册：密码登录、邮箱验证码登录、注册
 - `/forgot` 通过邮箱验证码重置密码
@@ -400,7 +402,7 @@ FOLIO_SMTP_FROM=you@qq.com
 | AI | `GET /ai/status`、`POST /ai/analyze`（仅管理员） |
 | 互动 | `POST /docs/:id/like`、`POST /docs/:id/favorite`、`GET|POST /docs/:id/comments`、`POST /comments/:id/like` |
 | 消息 | `GET /messages/conversations`、`GET|POST /messages/with/:username`、`GET /notifications`、`GET /ws`（WebSocket，token 查询参数） |
-| 我的 | `GET /me/docs`、`GET /me/favorites`、`GET|DELETE /me/history`、`GET|POST /favorite-folders`、`PUT|DELETE /favorite-folders/:id`、`PUT /me`、`PUT /me/password`、`GET|PUT /me/settings`、`GET /inbox` |
+| 我的 | `GET /me/docs`、`GET /me/favorites`、`GET|DELETE /me/history`、`GET|POST /favorite-folders`、`PUT|DELETE /favorite-folders/:id`、`PUT /me`、`PUT /me/password`、`GET|PUT /me/settings`、`GET /me/login-records`、`GET /inbox` |
 | 视觉 | `GET /art/cover.svg`、`GET /art/avatar.svg` |
 | 系统 | `GET /health` |
 | 管理 | `GET /admin/stats`、`GET /admin/docs`、`GET /admin/users`、`DELETE /admin/users/:id`、`PUT /admin/users/:id/role`、`GET|PUT /admin/settings`、`GET /admin/logs` |

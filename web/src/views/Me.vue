@@ -24,6 +24,7 @@ const newFolderName = ref('')
 const editingFolderID = ref(0)
 const folderNameDraft = ref('')
 const history = ref([])
+const loginRecords = ref([])
 const savingProfile = ref(false)
 const savingPassword = ref(false)
 const savingEmail = ref(false)
@@ -194,6 +195,8 @@ async function loadTab() {
       history.value = data.items
     } else if (tab.value === 'privacy') {
       await loadPrivacySettings()
+    } else if (tab.value === 'security') {
+      await loadLoginRecords()
     }
   } catch (err) {
     toastError(err)
@@ -229,6 +232,15 @@ async function saveProfile() {
     toastError(err)
   } finally {
     savingProfile.value = false
+  }
+}
+
+async function loadLoginRecords() {
+  try {
+    const data = await api.get('/me/login-records')
+    loginRecords.value = data.items
+  } catch (err) {
+    toastError(err)
   }
 }
 
@@ -500,6 +512,22 @@ onMounted(async () => {
               </div>
             </template>
             <p v-else class="hint">站点未配置邮件服务，暂时不能绑定或验证邮箱。</p>
+          </section>
+
+          <section class="login-records">
+            <header>
+              <h3>最近登录与安全动作</h3>
+              <p>只记录你自己的登录、注册、改密与绑定邮箱，保留最近的 12 条。</p>
+            </header>
+            <p v-if="!loginRecords.length" class="muted">还没有记录。</p>
+            <ul v-else>
+              <li v-for="record in loginRecords" :key="record.id">
+                <span class="login-record-action">{{ record.action }}</span>
+                <span class="login-record-detail">{{ record.detail || '—' }}</span>
+                <span class="login-record-ip">{{ record.ip || '—' }}</span>
+                <time>{{ timeAgo(record.createdAt) }}</time>
+              </li>
+            </ul>
           </section>
         </div>
 

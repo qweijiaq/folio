@@ -3644,3 +3644,79 @@
   color: var(--ink-faint);
   font-size: 12px;
 }
+
+.login-records {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 30px;
+  padding-top: 26px;
+  border-top: 1.2px dashed var(--line);
+}
+
+.login-records header h3 {
+  margin: 0 0 5px;
+  font-family: var(--hand);
+  font-size: 17px;
+  font-weight: 500;
+}
+
+.login-records header p {
+  margin: 0;
+  color: var(--ink-faint);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.login-records ul {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.login-records li {
+  display: grid;
+  grid-template-columns: 88px minmax(160px, 1fr) 110px 70px;
+  gap: 12px;
+  align-items: center;
+  padding: 9px 0;
+  border-bottom: 1px dashed var(--line);
+  color: var(--ink-soft);
+  font-size: 12.5px;
+}
+
+.login-record-action {
+  color: var(--accent);
+  font-family: var(--hand);
+  font-size: 13.5px;
+}
+
+.login-record-detail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.login-record-ip {
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.login-records time {
+  color: var(--ink-faint);
+  font-size: 11.5px;
+  text-align: right;
+}
+
+@media (max-width: 620px) {
+  .login-records li {
+    grid-template-columns: 1fr auto;
+  }
+
+  .login-record-detail,
+  .login-record-ip {
+    display: none;
+  }
+}

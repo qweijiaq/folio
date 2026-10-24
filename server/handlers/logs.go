@@ -66,3 +66,12 @@ func (a *API) AdminLogs(c *gin.Context) {
 		"pageSize": size,
 	})
 }
+
+// MyLoginRecords 让用户查看自己的登录与安全动作，不暴露其他用户的日志。
+func (a *API) MyLoginRecords(c *gin.Context) {
+	me := currentUser(c)
+	var logs []models.OperationLog
+	a.DB.Where("user_id = ? AND action IN ?", me.ID, []string{"登录", "注册账号", "重置密码", "修改密码", "绑定邮箱"}).
+		Order("id DESC").Limit(12).Find(&logs)
+	c.JSON(http.StatusOK, gin.H{"items": logs})
+}
