@@ -1350,8 +1350,8 @@ button.tag {
 
 @keyframes page-in {
   from {
-    opacity: 0;
-    transform: translateY(6px);
+    opacity: 0.86;
+    transform: translateY(5px);
   }
   to {
     opacity: 1;
