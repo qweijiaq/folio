@@ -141,6 +141,10 @@ func (a *API) Routes(r *gin.Engine) {
 	admin.DELETE("/notices/:id", a.StaffOnly(), a.AdminNoticeDelete)
 	admin.GET("/docs", a.StaffOnly(), a.AdminDocs)
 	admin.GET("/users", a.SuperAdminOnly(), a.AdminUsers)
+	admin.POST("/users", a.SuperAdminOnly(), a.AdminCreateUser)
+	admin.GET("/invites", a.SuperAdminOnly(), a.AdminInvites)
+	admin.POST("/invites", a.SuperAdminOnly(), a.AdminInviteCreate)
+	admin.DELETE("/invites/:id", a.SuperAdminOnly(), a.AdminInviteDelete)
 	admin.DELETE("/users/:id", a.SuperAdminOnly(), a.AdminDeleteUser)
 	admin.PUT("/users/:id/role", a.SuperAdminOnly(), a.AdminUpdateRole)
 }

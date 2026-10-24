@@ -40,6 +40,7 @@ go test ./...
 - 全站公告发布、未读计数、已读标记与删除权限；
 - RSS、sitemap、robots、1200×630 分享图以及服务端注入的页面元信息；
 - 数据看板的 7/30/90 天趋势、权限、每日阅读聚合与热门内容；
+- 邀请码注册、一次性消费、关闭注册后的邀请入口，以及超级管理员直接创建用户；
 - 图形验证码的生成、缺失/错误拦截与正确校验（含调试答案模式）；
 - 站点设置保存与生效、关闭注册、后台图形验证码开关、操作日志记录与权限；
 - AI 摘要的启用状态、权限与 JSON 解析（使用 mock 上游，不消耗真实额度）；
@@ -185,6 +186,14 @@ docker compose restart app
 - [ ] 公告的站内/站外链接可以打开；
 - [ ] 删除公告后，读者通知页不再显示，已读记录一并清理；
 - [ ] 普通读者不能发布或删除公告（接口返回 403）。
+
+### 邀请注册与创建用户
+
+- [ ] 关闭「开放注册」后，普通访问 `/register` 只能看到关闭提示，不能提交注册；
+- [ ] 超级管理员生成邀请链接并复制，打开后注册页出现邀请码并可以创建账号；
+- [ ] 邀请码只能使用一次，过期或已使用的邀请码会被拒绝；
+- [ ] 超级管理员可以撤销未使用的邀请码，已使用的邀请码保留记录；
+- [ ] 超级管理员可以直接创建用户并指定读者/管理员，创建后能正常登录。
 
 ### 数据看板
 
@@ -364,7 +373,7 @@ TRUNCATE TABLE comment_likes; TRUNCATE TABLE comments;
 TRUNCATE TABLE likes; TRUNCATE TABLE favorite_folders; TRUNCATE TABLE favorites;
 TRUNCATE TABLE documents; TRUNCATE TABLE users;
 TRUNCATE TABLE images; TRUNCATE TABLE view_histories;
-TRUNCATE TABLE email_codes; TRUNCATE TABLE user_settings;
+TRUNCATE TABLE email_codes; TRUNCATE TABLE invite_codes; TRUNCATE TABLE user_settings;
 TRUNCATE TABLE notice_reads; TRUNCATE TABLE global_notices;
 TRUNCATE TABLE operation_logs; TRUNCATE TABLE site_settings;
 SET FOREIGN_KEY_CHECKS=1;"

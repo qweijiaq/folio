@@ -69,6 +69,7 @@ func (a *API) Register(c *gin.Context) {
 		Email       string `json:"email"`
 		Password    string `json:"password"`
 		Code        string `json:"code"`
+		Invite      string `json:"invite"`
 		CaptchaID   string `json:"captchaId"`
 		CaptchaCode string `json:"captchaCode"`
 	}
@@ -76,8 +77,18 @@ func (a *API) Register(c *gin.Context) {
 		bad(c, "请求格式错误")
 		return
 	}
-	if !a.allowRegistration() {
-		fail(c, http.StatusForbidden, "站点暂未开放注册")
+	in.Invite = trim(in.Invite)
+	var invite *models.InviteCode
+	if in.Invite != "" {
+		found, err := a.findValidInvite(in.Invite)
+		if err != nil {
+			bad(c, err.Error())
+			return
+		}
+		invite = found
+	}
+	if !a.allowRegistration() && invite == nil {
+		fail(c, http.StatusForbidden, "站点暂未开放注册，请使用邀请链接")
 		return
 	}
 	in.Username = trim(in.Username)
@@ -133,6 +144,15 @@ func (a *API) Register(c *gin.Context) {
 	} else if !a.requireCaptcha(c, in.CaptchaID, in.CaptchaCode) {
 		return
 	}
+	if invite != nil {
+		result := a.DB.Model(&models.InviteCode{}).
+			Where("id = ? AND used_at IS NULL", invite.ID).
+			Update("used_at", time.Now())
+		if result.Error != nil || result.RowsAffected == 0 {
+			bad(c, "邀请码已被使用")
+			return
+		}
+	}
 	var total int64
 	a.DB.Model(&models.User{}).Count(&total)
 	role := models.RoleUser
@@ -156,7 +176,14 @@ func (a *API) Register(c *gin.Context) {
 		return
 	}
 	_, _ = a.ensureDefaultFolder(u.ID)
-	a.recordLog(c, &u, "注册账号", "user", u.ID, "注册方式："+map[bool]string{true: "邮箱验证码", false: "用户名密码"}[a.emailEnabled()])
+	if invite != nil {
+		a.DB.Model(invite).UpdateColumn("used_by", u.ID)
+	}
+	method := map[bool]string{true: "邮箱验证码", false: "用户名密码"}[a.emailEnabled()]
+	if invite != nil {
+		method = "邀请码"
+	}
+	a.recordLog(c, &u, "注册账号", "user", u.ID, "注册方式："+method)
 	token, err := a.issueToken(&u)
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "登录失败")

@@ -17,7 +17,10 @@ const router = useRouter()
 
 usePageMeta(() => ({ title: '注册', description: '注册知微账号', noindex: true }))
 
-const form = ref({ username: '', nickname: '', email: '', password: '', code: '' })
+const inviteFromLink = String(route.query.invite || '').trim()
+const form = ref({ username: '', nickname: '', email: '', password: '', code: '', invite: inviteFromLink })
+const showInviteForm = ref(false)
+const canRegister = computed(() => site.allowRegister || Boolean(inviteFromLink) || showInviteForm.value)
 const submitting = ref(false)
 const error = ref('')
 const emailEnabled = ref(false)
@@ -55,6 +58,10 @@ async function submit() {
     error.value = '密码至少 6 位'
     return
   }
+  if (!site.allowRegister && !form.value.invite.trim()) {
+    error.value = '请填写邀请码'
+    return
+  }
   const email = form.value.email.trim()
   if (emailEnabled.value && !email) {
     error.value = '请填写邮箱并获取验证码'
@@ -76,6 +83,7 @@ async function submit() {
       email,
       password: form.value.password,
       code: form.value.code.trim(),
+      invite: form.value.invite.trim(),
       captchaId: captchaId.value,
       captchaCode: captchaCode.value
     })
@@ -108,17 +116,24 @@ async function submit() {
           <h1>创建账号</h1>
           <p class="auth-sub">
             {{
-              emailEnabled
-                ? '填写邮箱并验证，之后可以用验证码登录或找回密码。'
-                : '只需要一个用户名和密码。邮箱可选，用于找回账号。'
+              !site.allowRegister
+                ? '使用邀请码创建账号，邀请码只能使用一次。'
+                : emailEnabled
+                  ? '填写邮箱并验证，之后可以用验证码登录或找回密码。'
+                  : '只需要一个用户名和密码。邮箱可选，用于找回账号。'
             }}
           </p>
 
-          <div v-if="!site.allowRegister" class="empty-note">
-            站点暂时关闭了注册。如果你已经有账号，可以直接登录；需要新账号请联系超级管理员。
+          <div v-if="!canRegister" class="empty-note">
+            站点暂时关闭了注册。如果你有邀请码，可以使用邀请码创建账号；已有账号可以直接登录。
+            <button class="text-link invite-toggle" type="button" @click="showInviteForm = true">使用邀请码</button>
           </div>
 
-          <form v-else class="auth-form" @submit.prevent="submit">
+          <form v-if="canRegister" class="auth-form" @submit.prevent="submit">
+            <div v-if="!site.allowRegister" class="field">
+              <label for="reg-invite">邀请码</label>
+              <input id="reg-invite" v-model="form.invite" type="text" autocomplete="off" placeholder="从邀请链接中复制邀请码" />
+            </div>
             <div class="form-row">
               <div class="field">
                 <label for="reg-username">用户名</label>

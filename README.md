@@ -54,7 +54,7 @@ folio/
 │   ├── db/                 # SQLite / MySQL / 内存数据库
 │   ├── cache/              # Redis：JWT 黑名单、浏览量去重
 │   ├── mail/               # SMTP 发信与本地调试邮件
-│   ├── models/             # 20 张表的模型
+│   ├── models/             # 21 张表的模型
 │   ├── art/                # 生成式封面与头像
 │   ├── storage/            # 本地磁盘 / 七牛云存储抽象
 │   ├── handlers/           # 路由、接口与集成测试
@@ -151,9 +151,15 @@ cd web && npm install && npm run dev
 | 发布、编辑、删除自己的内容 | ✓ | ✓ | — |
 | 编辑、删除任何人的内容 | ✓ | — | — |
 | 进入管理后台 | ✓ | ✓（只看自己的内容） | — |
-| 删除用户、设置或取消管理员、修改站点设置、查看操作日志 | ✓ | — | — |
+| 删除用户、设置或取消管理员、创建用户、生成邀请码、修改站点设置、查看操作日志 | ✓ | — | — |
 
 规则很简单：站点只有一个超级管理员，通常是第一位注册用户；超级管理员在 `/admin` 的「用户与权限」里把读者设为管理员，或把管理员降回读者。管理员降级后不能继续发布，但已经发布的内容和互动会保留。
+
+关闭注册后，超级管理员仍然可以在「用户与权限」里：
+
+- 生成一次性邀请链接，朋友通过 `/register?invite=...` 创建普通读者账号；
+- 直接创建用户，并指定是读者还是管理员；
+- 邀请码可设置 1 / 7 / 30 / 90 天有效期，使用后立即失效，未使用的可以撤销。
 
 管理后台入口在登录后的顶栏齿轮图标、用户下拉菜单「管理后台」，以及「我的空间」侧栏。
 
@@ -233,7 +239,7 @@ Go 服务会自动托管 `../web/dist`，访问 <http://localhost:8080> 即可�
 
 ## 数据模型
 
-只有 20 张表：
+只有 21 张表：
 
 | 表 | 用途 |
 | --- | --- |
@@ -252,6 +258,7 @@ Go 服务会自动托管 `../web/dist`，访问 <http://localhost:8080> 即可�
 | `images` | 上传图片：文件名、存储提供方、对象键、URL、MIME、大小、内容哈希、上传者 |
 | `view_histories` | 登录用户的浏览历史（用户 + 内容唯一） |
 | `doc_daily_stats` | 内容每日阅读量（内容 + 日期唯一），用于数据看板 |
+| `invite_codes` | 一次性邀请码：备注、有效期、创建者、使用者和使用时间 |
 | `email_codes` | 邮箱验证码：用途、HMAC 摘要、过期时间、尝试次数、消费时间 |
 | `site_settings` | 单行站点设置：名称、描述、维护者、注册开关、图形验证码 |
 | `operation_logs` | 操作日志：操作者、动作、对象、详情、IP、User-Agent |
@@ -463,8 +470,8 @@ FOLIO_SITE_URL=https://your-domain.com
 - `/write`、`/write/:id` 编辑器：Markdown 分栏预览、图片上传/粘贴/拖拽、分类、自动封面预览、标签、评论开关、草稿/发布、文档树父级与排序（仅超级管理员和管理员）
 - `/messages` 私信与通知：会话列表、WebSocket 实时消息、图片与表情、轮询兜底、全站公告与通知已读
 - `/me` 我的空间：资料、密码、隐私与消息、最近登录记录、收藏夹、浏览历史；管理员额外看到自己的文章与文档
-- `/admin` 管理后台：概览、数据看板、内容管理、分类管理、图片管理、全站通知；超级管理员额外拥有用户与权限、站点设置和操作日志
-- `/login`、`/register` 登录注册：密码登录、邮箱验证码登录、QQ 登录、注册
+- `/admin` 管理后台：概览、数据看板、内容管理、分类管理、图片管理、全站通知；超级管理员额外拥有用户与权限、邀请注册、站点设置和操作日志
+- `/login`、`/register` 登录注册：密码登录、邮箱验证码登录、QQ 登录、注册；关闭注册后可通过一次性邀请链接注册
 - `/forgot` 通过邮箱验证码重置密码
 
 交互细节：
@@ -501,7 +508,7 @@ FOLIO_SITE_URL=https://your-domain.com
 | 视觉 | `GET /art/cover.svg`、`GET /art/cover.png`、`GET /art/avatar.svg` |
 | SEO | `GET /feed.xml`、`GET /sitemap.xml`、`GET /robots.txt` |
 | 系统 | `GET /health` |
-| 管理 | `GET /admin/stats`、`GET /admin/dashboard`、`GET /admin/docs`、`GET /admin/users`、`DELETE /admin/users/:id`、`PUT /admin/users/:id/role`、`GET|PUT /admin/settings`、`GET /admin/logs`、`GET|POST /admin/notices`、`DELETE /admin/notices/:id` |
+| 管理 | `GET /admin/stats`、`GET /admin/dashboard`、`GET /admin/docs`、`GET /admin/users`、`POST /admin/users`、`DELETE /admin/users/:id`、`PUT /admin/users/:id/role`、`GET|POST /admin/invites`、`DELETE /admin/invites/:id`、`GET|PUT /admin/settings`、`GET /admin/logs`、`GET|POST /admin/notices`、`DELETE /admin/notices/:id` |
 
 ## 一些实现约定
 

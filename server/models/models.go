@@ -154,6 +154,18 @@ type Image struct {
 	Hash     string `gorm:"size:64;index" json:"-"`
 }
 
+// InviteCode 是一次性注册邀请码，只有超级管理员可以创建。
+type InviteCode struct {
+	Base
+	Code          string     `gorm:"size:32;uniqueIndex;not null" json:"code"`
+	Note          string     `gorm:"size:100" json:"note"`
+	CreatedBy     uint       `json:"createdBy"`
+	CreatedByName string     `gorm:"size:32" json:"createdByName"`
+	ExpiresAt     *time.Time `json:"expiresAt"`
+	UsedBy        *uint      `json:"usedBy"`
+	UsedAt        *time.Time `json:"usedAt"`
+}
+
 // DocDailyStat 按天聚合内容阅读量，用于后台数据看板。
 type DocDailyStat struct {
 	Base

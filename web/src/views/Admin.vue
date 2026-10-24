@@ -9,6 +9,7 @@ import { mergeSite } from '../stores/site'
 import UserAvatar from '../components/UserAvatar.vue'
 import EmptyState from '../components/EmptyState.vue'
 import Icon from '../components/Icon.vue'
+import PasswordInput from '../components/PasswordInput.vue'
 import TrendChart from '../components/TrendChart.vue'
 import { usePageMeta } from '../composables/usePageMeta'
 
@@ -26,6 +27,12 @@ const dashboardRange = ref(7)
 const dashboardMetric = ref('views')
 const docs = ref([])
 const users = ref([])
+const invites = ref([])
+const inviteNote = ref('')
+const inviteDays = ref(7)
+const creatingInvite = ref(false)
+const creatingUser = ref(false)
+const newUser = reactive({ username: '', nickname: '', email: '', password: '', role: 'user' })
 const images = ref([])
 const categories = ref([])
 const userQuery = ref('')
@@ -143,6 +150,93 @@ async function loadUsers() {
     users.value = data.items
   } catch (err) {
     toastError(err)
+  }
+}
+
+async function loadInvites() {
+  try {
+    const data = await api.get('/admin/invites')
+    invites.value = data.items
+  } catch (err) {
+    toastError(err)
+  }
+}
+
+async function createInvite() {
+  creatingInvite.value = true
+  try {
+    await api.post('/admin/invites', {
+      note: inviteNote.value.trim() || '邀请注册',
+      expiresInDays: Number(inviteDays.value) || 7
+    })
+    inviteNote.value = ''
+    await loadInvites()
+    toast('邀请链接已生成')
+  } catch (err) {
+    toastError(err)
+  } finally {
+    creatingInvite.value = false
+  }
+}
+
+function inviteLink(code) {
+  return `${window.location.origin}/register?invite=${code}`
+}
+
+async function copyInvite(invite) {
+  try {
+    await navigator.clipboard.writeText(inviteLink(invite.code))
+    toast('邀请链接已复制')
+  } catch {
+    toast('复制失败，请手动复制邀请码', 'error')
+  }
+}
+
+async function removeInvite(invite) {
+  if (!window.confirm(`撤销这个邀请码？${invite.note || ''}`)) return
+  try {
+    await api.del(`/admin/invites/${invite.id}`)
+    await loadInvites()
+    toast('邀请码已撤销')
+  } catch (err) {
+    toastError(err)
+  }
+}
+
+function inviteStatusLabel(status) {
+  return { active: '可邀请', used: '已使用', expired: '已过期' }[status] || status
+}
+
+async function createUser() {
+  const username = newUser.username.trim()
+  if (!/^[A-Za-z0-9_]{2,20}$/.test(username)) {
+    toast('用户名需为 2-20 位字母、数字或下划线')
+    return
+  }
+  if (newUser.password.length < 6) {
+    toast('密码至少 6 位')
+    return
+  }
+  creatingUser.value = true
+  try {
+    await api.post('/admin/users', {
+      username,
+      nickname: newUser.nickname.trim() || username,
+      email: newUser.email.trim(),
+      password: newUser.password,
+      role: newUser.role
+    })
+    newUser.username = ''
+    newUser.nickname = ''
+    newUser.email = ''
+    newUser.password = ''
+    newUser.role = 'user'
+    await loadUsers()
+    toast('用户已创建')
+  } catch (err) {
+    toastError(err)
+  } finally {
+    creatingUser.value = false
   }
 }
 
@@ -393,7 +487,7 @@ async function loadTab() {
         tab.value = 'overview'
         await loadStats()
       } else {
-        await loadUsers()
+        await Promise.all([loadUsers(), loadInvites()])
       }
     } else if (tab.value === 'settings') {
       if (!isSuper.value) {
@@ -884,6 +978,90 @@ onMounted(async () => {
               <button class="btn btn-ghost btn-sm" type="submit">搜索</button>
             </form>
           </header>
+
+          <div class="admin-user-tools">
+            <section class="admin-tool-card">
+              <header class="admin-tool-head">
+                <div>
+                  <h3>邀请注册</h3>
+                  <p>生成一次性邀请链接。适合关闭注册后只邀请朋友加入。</p>
+                </div>
+              </header>
+              <form class="invite-form" @submit.prevent="createInvite">
+                <input v-model="inviteNote" maxlength="100" placeholder="备注，例如「给阿林」" />
+                <select v-model.number="inviteDays" aria-label="有效期">
+                  <option :value="1">1 天</option>
+                  <option :value="7">7 天</option>
+                  <option :value="30">30 天</option>
+                  <option :value="90">90 天</option>
+                </select>
+                <button class="btn btn-primary btn-sm" type="submit" :disabled="creatingInvite">
+                  {{ creatingInvite ? '生成中…' : '生成邀请' }}
+                </button>
+              </form>
+              <p v-if="!invites.length" class="hint">还没有邀请码。</p>
+              <div v-else class="invite-list">
+                <div v-for="invite in invites" :key="invite.id" class="invite-row">
+                  <span class="badge" :class="invite.status === 'active' ? 'badge-live' : ''">{{ inviteStatusLabel(invite.status) }}</span>
+                  <span class="invite-main">
+                    <strong>{{ invite.note || '邀请注册' }}</strong>
+                    <small v-if="invite.status === 'active'">{{ inviteLink(invite.code) }}</small>
+                    <small v-else-if="invite.status === 'used'">{{ shortDate(invite.usedAt) }} 已使用 · 由 {{ invite.createdByName }}</small>
+                    <small v-else>{{ shortDate(invite.expiresAt) }} 过期 · 由 {{ invite.createdByName }}</small>
+                  </span>
+                  <template v-if="invite.status === 'active'">
+                    <button class="text-link" type="button" @click="copyInvite(invite)">复制链接</button>
+                    <button class="text-link danger" type="button" @click="removeInvite(invite)">撤销</button>
+                  </template>
+                </div>
+              </div>
+            </section>
+
+            <section class="admin-tool-card">
+              <header class="admin-tool-head">
+                <div>
+                  <h3>直接创建用户</h3>
+                  <p>不需要邮箱验证，适合帮朋友开账号。</p>
+                </div>
+              </header>
+              <form class="create-user-form" @submit.prevent="createUser">
+                <div class="form-row">
+                  <div class="field">
+                    <label for="new-user-name">用户名</label>
+                    <input id="new-user-name" v-model="newUser.username" maxlength="20" placeholder="字母、数字或下划线" />
+                  </div>
+                  <div class="field">
+                    <label for="new-user-nick">昵称</label>
+                    <input id="new-user-nick" v-model="newUser.nickname" maxlength="24" placeholder="可选" />
+                  </div>
+                </div>
+                <div class="form-row">
+                  <div class="field">
+                    <label for="new-user-email">邮箱</label>
+                    <input id="new-user-email" v-model="newUser.email" type="email" placeholder="可选" />
+                  </div>
+                  <div class="field">
+                    <label for="new-user-password">初始密码</label>
+                    <PasswordInput id="new-user-password" v-model="newUser.password" autocomplete="new-password" placeholder="至少 6 位" />
+                  </div>
+                </div>
+                <div class="form-row">
+                  <div class="field">
+                    <label for="new-user-role">角色</label>
+                    <select id="new-user-role" v-model="newUser.role">
+                      <option value="user">读者</option>
+                      <option value="admin">管理员</option>
+                    </select>
+                  </div>
+                  <div class="form-actions">
+                    <button class="btn btn-primary btn-sm" type="submit" :disabled="creatingUser">
+                      {{ creatingUser ? '创建中…' : '创建用户' }}
+                    </button>
+                  </div>
+                </div>
+              </form>
+            </section>
+          </div>
 
           <p v-if="tabLoading" class="muted loading-line">正在加载…</p>
           <div v-else class="admin-table admin-users-table">

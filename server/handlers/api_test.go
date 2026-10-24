@@ -1475,3 +1475,73 @@ func TestAdminDashboard(t *testing.T) {
 		t.Fatalf("删除内容后每日统计应一并清理，实际 %d", daily)
 	}
 }
+
+func TestInvitesAndAdminCreateUser(t *testing.T) {
+	s := newTestAPI(t)
+	ownerToken, _ := s.register(t, "inviteowner")
+
+	status, _ := s.do(t, "PUT", "/api/admin/settings", ownerToken, map[string]any{
+		"siteName": "测试站", "siteDesc": "测试", "siteOwner": "tester",
+		"allowRegister": false, "loginCaptcha": false,
+	})
+	if status != http.StatusOK {
+		t.Fatalf("关闭注册失败: %d", status)
+	}
+	status, _ = s.do(t, "POST", "/api/auth/register", "", map[string]string{
+		"username": "closeduser", "password": "password123",
+	})
+	if status != http.StatusForbidden {
+		t.Fatalf("关闭注册后普通注册应失败, 实际 %d", status)
+	}
+
+	status, inviteData := s.do(t, "POST", "/api/admin/invites", ownerToken, map[string]any{
+		"note": "朋友邀请", "expiresInDays": 7,
+	})
+	if status != http.StatusCreated {
+		t.Fatalf("创建邀请码失败: %d %v", status, inviteData)
+	}
+	invite := obj(inviteData, "invite")
+	code, _ := invite["code"].(string)
+	if code == "" {
+		t.Fatalf("邀请码为空: %v", inviteData)
+	}
+	status, registered := s.do(t, "POST", "/api/auth/register", "", map[string]string{
+		"username": "inviteduser", "nickname": "受邀用户", "password": "password123", "invite": code,
+	})
+	if status != http.StatusCreated {
+		t.Fatalf("邀请码注册失败: %d %v", status, registered)
+	}
+	status, _ = s.do(t, "POST", "/api/auth/register", "", map[string]string{
+		"username": "inviteduser2", "password": "password123", "invite": code,
+	})
+	if status != http.StatusBadRequest {
+		t.Fatalf("邀请码应只能用一次, 实际 %d", status)
+	}
+
+	status, invites := s.do(t, "GET", "/api/admin/invites", ownerToken, nil)
+	if status != http.StatusOK || len(list(invites, "items")) != 1 {
+		t.Fatalf("邀请码列表异常: %d %v", status, invites)
+	}
+	if list(invites, "items")[0].(map[string]any)["status"] != "used" {
+		t.Fatalf("邀请码状态应为 used: %v", invites)
+	}
+
+	status, created := s.do(t, "POST", "/api/admin/users", ownerToken, map[string]any{
+		"username": "createdbyadmin", "nickname": "后台创建", "password": "password123", "role": "admin",
+	})
+	if status != http.StatusCreated {
+		t.Fatalf("管理员创建用户失败: %d %v", status, created)
+	}
+	status, _ = s.do(t, "POST", "/api/auth/login", "", map[string]string{
+		"username": "createdbyadmin", "password": "password123",
+	})
+	if status != http.StatusOK {
+		t.Fatalf("后台创建的用户不能登录: %d", status)
+	}
+
+	readerToken, _ := registered["token"].(string)
+	status, _ = s.do(t, "POST", "/api/admin/invites", readerToken, map[string]any{"note": "越权"})
+	if status != http.StatusForbidden {
+		t.Fatalf("读者不应能创建邀请码, 实际 %d", status)
+	}
+}
