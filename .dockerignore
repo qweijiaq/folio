@@ -1,0 +1,13 @@
+node_modules
+**/node_modules
+web/dist
+server/data
+server/folio
+data
+.run
+.git
+.DS_Store
+*.db
+*.db-shm
+*.db-wal
+.env

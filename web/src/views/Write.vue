@@ -1,0 +1,458 @@
+<script setup>
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { api } from '../api/client'
+import { toast, toastError } from '../stores/toast'
+import { buildTree, flattenTree } from '../utils/tree'
+import CoverImage from '../components/CoverImage.vue'
+import MarkdownView from '../components/MarkdownView.vue'
+import Icon from '../components/Icon.vue'
+
+const route = useRoute()
+const router = useRouter()
+
+const form = reactive({
+  kind: route.query.kind === 'doc' ? 'doc' : 'article',
+  title: '',
+  abstract: '',
+  content: '',
+  tags: [],
+  status: 'draft',
+  parentID: route.query.parent ? Number(route.query.parent) : null,
+  categoryID: null,
+  pinned: false,
+  sort: 0
+})
+
+const tagInput = ref('')
+const textarea = ref(null)
+const fileInput = ref(null)
+const doc = ref(null)
+const parentItems = ref([])
+const categories = ref([])
+const loading = ref(true)
+const saving = ref('')
+const preview = ref(true)
+const uploading = ref(false)
+
+const editingId = computed(() => (route.params.id ? Number(route.params.id) : 0))
+const isEdit = computed(() => Boolean(editingId.value))
+const wordCount = computed(() => (form.content || '').replace(/\s/g, '').length)
+const coverSeed = computed(() => editingId.value || form.title || '新的内容')
+
+const parentOptions = computed(() => {
+  if (form.kind !== 'doc') return []
+  const blocked = new Set()
+  if (isEdit.value) {
+    blocked.add(editingId.value)
+    let changed = true
+    while (changed) {
+      changed = false
+      parentItems.value.forEach((item) => {
+        if (item.parentID && blocked.has(item.parentID) && !blocked.has(item.id)) {
+          blocked.add(item.id)
+          changed = true
+        }
+      })
+    }
+  }
+  return parentItems.value.filter((item) => !blocked.has(item.id))
+})
+
+async function load() {
+  loading.value = true
+  try {
+    const [treeData, mine, categoryData] = await Promise.all([
+      api.get('/doc-tree'),
+      api.get('/me/docs', { kind: 'doc', pageSize: 50 }),
+      api.get('/categories')
+    ])
+    categories.value = categoryData.items
+    const map = new Map()
+    ;[...treeData.items, ...mine.items].forEach((item) => map.set(item.id, item))
+    parentItems.value = flattenTree(buildTree([...map.values()]))
+
+    if (isEdit.value) {
+      const data = await api.get(`/docs/${editingId.value}/edit`)
+      doc.value = data.doc
+      form.kind = data.doc.kind
+      form.title = data.doc.title
+      form.abstract = data.doc.abstract || ''
+      form.content = data.doc.content || ''
+      form.tags = [...(data.doc.tags || [])]
+      form.status = data.doc.status
+      form.parentID = data.doc.parentID ?? null
+      form.categoryID = data.doc.categoryID ?? null
+      form.pinned = data.doc.pinned
+      form.sort = data.doc.sort || 0
+    }
+  } catch (err) {
+    toastError(err)
+    if (err.status === 403 || err.status === 404) router.replace('/me')
+  } finally {
+    loading.value = false
+  }
+}
+
+function addTag() {
+  const value = tagInput.value.trim().replace(/^#/, '')
+  if (!value) return
+  if (form.tags.length >= 6) {
+    toast('最多添加 6 个标签')
+    return
+  }
+  if (!form.tags.some((tag) => tag.toLowerCase() === value.toLowerCase())) {
+    form.tags.push(value.slice(0, 16))
+  }
+  tagInput.value = ''
+}
+
+function onTagKey(event) {
+  if (event.key === ',' || event.key === '，') {
+    event.preventDefault()
+    addTag()
+  }
+  if (event.key === 'Backspace' && !tagInput.value && form.tags.length) {
+    form.tags.pop()
+  }
+}
+
+function removeTag(tag) {
+  form.tags = form.tags.filter((item) => item !== tag)
+}
+
+function wrap(before, after = '', placeholder = '文字') {
+  const el = textarea.value
+  if (!el) return
+  const start = el.selectionStart
+  const end = el.selectionEnd
+  const selected = form.content.slice(start, end) || placeholder
+  form.content = form.content.slice(0, start) + before + selected + after + form.content.slice(end)
+  nextTick(() => {
+    el.focus()
+    el.setSelectionRange(start + before.length, start + before.length + selected.length)
+  })
+}
+
+function prefix(marker) {
+  const el = textarea.value
+  if (!el) return
+  const start = el.selectionStart
+  const lineStart = form.content.lastIndexOf('\n', start - 1) + 1
+  form.content = form.content.slice(0, lineStart) + marker + form.content.slice(lineStart)
+  nextTick(() => {
+    el.focus()
+    el.setSelectionRange(start + marker.length, start + marker.length)
+  })
+}
+
+function insertAtPosition(snippet, position = null) {
+  const el = textarea.value
+  if (!el) return
+  const start = position === null ? el.selectionStart : position
+  const end = position === null ? el.selectionEnd : position
+  form.content = form.content.slice(0, start) + snippet + form.content.slice(end)
+  nextTick(() => {
+    el.focus()
+    const pos = start + snippet.length
+    el.setSelectionRange(pos, pos)
+  })
+}
+
+function insertSnippet(snippet) {
+  insertAtPosition(snippet)
+}
+
+function insertLink() {
+  wrap('[', '](https://)', '链接文字')
+}
+
+async function uploadImages(fileList) {
+  const images = Array.from(fileList || []).filter((file) => file.type.startsWith('image/'))
+  if (!images.length || uploading.value) return
+  const el = textarea.value
+  const position = el ? el.selectionStart : form.content.length
+  uploading.value = true
+  try {
+    const uploaded = []
+    for (const file of images) {
+      uploaded.push(await api.uploadImage(file))
+    }
+    const markdown = uploaded
+      .map((image) => `![${(image.filename || '图片').replace(/[[\]]/g, '')}](${image.url})`)
+      .join('\n\n')
+    const before = position > 0 && form.content[position - 1] !== '\n' ? '\n\n' : ''
+    const after = form.content[position] && form.content[position] !== '\n' ? '\n\n' : ''
+    insertAtPosition(before + markdown + after, position)
+    toast(`已插入 ${uploaded.length} 张图片`)
+  } catch (err) {
+    toastError(err)
+  } finally {
+    uploading.value = false
+  }
+}
+
+function onFilePick(event) {
+  const files = Array.from(event.target.files || [])
+  event.target.value = ''
+  uploadImages(files)
+}
+
+function onPaste(event) {
+  const files = Array.from(event.clipboardData?.files || []).filter((file) => file.type.startsWith('image/'))
+  if (!files.length) return
+  event.preventDefault()
+  uploadImages(files)
+}
+
+function onDrop(event) {
+  const files = Array.from(event.dataTransfer?.files || []).filter((file) => file.type.startsWith('image/'))
+  if (!files.length) return
+  event.preventDefault()
+  uploadImages(files)
+}
+
+function onDragOver(event) {
+  if (Array.from(event.dataTransfer?.types || []).includes('Files')) {
+    event.preventDefault()
+  }
+}
+
+async function save(status = 'draft') {
+  if (saving.value) return
+  const title = form.title.trim()
+  if (!title) {
+    toast('请先填写标题')
+    return
+  }
+  if (status === 'published' && !form.content.trim()) {
+    toast('发布前请先写正文')
+    return
+  }
+  addTag()
+  saving.value = status
+  const payload = {
+    kind: form.kind,
+    title,
+    abstract: form.abstract.trim(),
+    content: form.content,
+    tags: form.tags,
+    status,
+    parentID: form.kind === 'doc' && form.parentID ? Number(form.parentID) : null,
+    categoryID: form.kind === 'article' && form.categoryID ? Number(form.categoryID) : null,
+    pinned: form.pinned,
+    sort: Number(form.sort) || 0
+  }
+  try {
+    if (isEdit.value) {
+      const data = await api.put(`/docs/${editingId.value}`, payload)
+      doc.value = data.doc
+      form.status = status
+      toast(status === 'published' ? '已更新并保持发布' : '已转为草稿')
+    } else {
+      const data = await api.post('/docs', payload)
+      toast(status === 'published' ? '已发布' : '草稿已保存')
+      if (status === 'published') {
+        router.push(`/${form.kind === 'doc' ? 'docs' : 'articles'}/${data.doc.id}`)
+      } else {
+        router.push({ path: '/me', query: { tab: form.kind === 'doc' ? 'docs' : 'articles' } })
+      }
+    }
+  } catch (err) {
+    toastError(err)
+  } finally {
+    saving.value = ''
+  }
+}
+
+function goBack() {
+  if (isEdit.value) router.push(`/${form.kind === 'doc' ? 'docs' : 'articles'}/${editingId.value}`)
+  else router.back()
+}
+
+function onKeydown(event) {
+  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
+    event.preventDefault()
+    save(doc.value?.status === 'published' ? 'published' : 'draft')
+  }
+}
+
+watch(editingId, load)
+
+onMounted(() => {
+  load()
+  window.addEventListener('keydown', onKeydown)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onKeydown)
+})
+</script>
+
+<template>
+  <div class="page editor-page">
+    <div class="container">
+      <header class="editor-head">
+        <div class="editor-head-left">
+          <button class="icon-btn" type="button" aria-label="返回" @click="goBack">
+            <Icon name="arrowLeft" :size="18" />
+          </button>
+          <div>
+            <span class="eyebrow">{{ isEdit ? '编辑' : '创作' }}</span>
+            <h1>{{ form.title || '未命名' }}</h1>
+          </div>
+        </div>
+        <div class="editor-actions">
+          <span class="editor-status" :class="form.status">{{ form.status === 'published' ? '已发布' : '草稿' }}</span>
+          <button class="btn btn-ghost btn-sm" type="button" :disabled="Boolean(saving)" @click="save('draft')">
+            {{ saving === 'draft' ? '保存中…' : '存为草稿' }}
+          </button>
+          <button class="btn btn-primary btn-sm" type="button" :disabled="Boolean(saving)" @click="save('published')">
+            {{ saving === 'published' ? '发布中…' : form.status === 'published' ? '更新并发布' : '发布' }}
+          </button>
+        </div>
+      </header>
+
+      <p v-if="loading" class="muted loading-line">正在准备编辑器…</p>
+
+      <div v-else class="editor-shell">
+        <aside class="editor-fields">
+          <div class="field">
+            <label for="editor-title">标题</label>
+            <input id="editor-title" v-model="form.title" class="title-input" maxlength="120" placeholder="给这篇内容一个名字" />
+          </div>
+
+          <div class="field">
+            <label for="editor-abstract">摘要 <span class="hint">留空则自动截取正文</span></label>
+            <textarea id="editor-abstract" v-model="form.abstract" rows="3" maxlength="500" placeholder="一句话说明它讲了什么…"></textarea>
+          </div>
+
+          <div class="field">
+            <label>类型</label>
+            <div class="segmented" :class="{ disabled: isEdit }">
+              <button type="button" :class="{ active: form.kind === 'article' }" @click="!isEdit && (form.kind = 'article')">文章</button>
+              <button type="button" :class="{ active: form.kind === 'doc' }" @click="!isEdit && (form.kind = 'doc')">文档</button>
+            </div>
+            <p class="hint">{{ form.kind === 'doc' ? '文档可以设置上级，组成左侧目录树。' : '文章按时间排列，出现在文章列表。' }}</p>
+          </div>
+
+          <div v-if="form.kind === 'article'" class="field">
+            <label for="editor-category">分类 <span class="hint">可选</span></label>
+            <select id="editor-category" v-model="form.categoryID">
+              <option :value="null">未分类</option>
+              <option v-for="category in categories" :key="category.id" :value="category.id">{{ category.name }}</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label>标签 <span class="hint">最多 6 个</span></label>
+            <div class="tag-editor">
+              <span v-for="tag in form.tags" :key="tag" class="tag">
+                {{ tag }}
+                <button type="button" aria-label="移除标签" @click="removeTag(tag)">
+                  <Icon name="close" :size="12" />
+                </button>
+              </span>
+              <input
+                v-model="tagInput"
+                maxlength="16"
+                placeholder="回车添加"
+                @keydown.enter.prevent="addTag"
+                @keydown="onTagKey"
+                @blur="addTag"
+              />
+            </div>
+          </div>
+
+          <template v-if="form.kind === 'doc'">
+            <div class="field">
+              <label for="editor-parent">上级文档</label>
+              <select id="editor-parent" v-model="form.parentID">
+                <option :value="null">无（顶级文档）</option>
+                <option v-for="item in parentOptions" :key="item.id" :value="item.id">
+                  {{ '　'.repeat(item.depth) }}{{ item.title }}
+                </option>
+              </select>
+            </div>
+            <div class="form-row">
+              <div class="field">
+                <label for="editor-sort">同级排序</label>
+                <input id="editor-sort" v-model.number="form.sort" type="number" min="0" />
+              </div>
+              <label class="checkbox">
+                <input v-model="form.pinned" type="checkbox" />
+                置顶
+              </label>
+            </div>
+          </template>
+          <label v-else class="checkbox">
+            <input v-model="form.pinned" type="checkbox" />
+            在列表中置顶
+          </label>
+
+          <div class="editor-note">
+            <Icon name="info" :size="15" />
+            <span>封面与头像由代码生成，不支持上传。正文图片可以直接粘贴、拖拽，或点工具栏的「图片」上传。</span>
+          </div>
+        </aside>
+
+        <div class="editor-main">
+          <div class="editor-cover">
+            <div class="editor-cover-head">
+              自动封面
+              <span>由标题与编号确定，永远保持一致</span>
+            </div>
+            <CoverImage :seed="coverSeed" :title="form.title" :kind="form.kind" />
+          </div>
+
+          <div class="editor-toolbar">
+            <button type="button" title="二级标题" @click="prefix('## ')">H2</button>
+            <button type="button" title="三级标题" @click="prefix('### ')">H3</button>
+            <button type="button" title="加粗" @click="wrap('**', '**', '重点')"><strong>B</strong></button>
+            <button type="button" title="斜体" @click="wrap('*', '*', '斜体')"><em>I</em></button>
+            <button type="button" title="引用" @click="prefix('> ')">❝</button>
+            <button type="button" title="行内代码" @click="wrap('`', '`', '代码')">&lt;/&gt;</button>
+            <button type="button" title="链接" @click="insertLink">链接</button>
+            <button type="button" title="上传图片（也支持粘贴、拖拽）" :disabled="uploading" @click="fileInput?.click()">
+              {{ uploading ? '上传中…' : '图片' }}
+            </button>
+            <button type="button" title="无序列表" @click="prefix('- ')">列表</button>
+            <button type="button" title="代码块" @click="insertSnippet('\n```go\n\n```\n')">代码块</button>
+            <button type="button" title="分割线" @click="insertSnippet('\n\n---\n\n')">分割线</button>
+            <span class="toolbar-spacer"></span>
+            <button type="button" class="preview-toggle" @click="preview = !preview">{{ preview ? '隐藏预览' : '显示预览' }}</button>
+          </div>
+
+          <div class="editor-split" :class="{ 'no-preview': !preview }">
+            <textarea
+              ref="textarea"
+              v-model="form.content"
+              class="editor-input"
+              placeholder="用 Markdown 开始写作。&#10;&#10;## 一个小标题&#10;&#10;先写下第一句，再慢慢修改。图片可以直接粘贴或拖进来。"
+              @paste="onPaste"
+              @drop="onDrop"
+              @dragover="onDragOver"
+            ></textarea>
+            <div v-if="preview" class="editor-preview">
+              <MarkdownView :source="form.content" />
+            </div>
+          </div>
+
+          <input
+            ref="fileInput"
+            class="hidden-file"
+            type="file"
+            accept="image/jpeg,image/png,image/gif,image/webp"
+            multiple
+            @change="onFilePick"
+          />
+
+          <div class="editor-foot">
+            <span>{{ wordCount }} 字</span>
+            <span>支持 Markdown · 图片可粘贴/拖拽 · Ctrl/⌘ + S 保存草稿</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>

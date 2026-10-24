@@ -1,0 +1,67 @@
+services:
+  db:
+    image: mysql:8.4
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    environment:
+      MYSQL_ROOT_PASSWORD: folio_root
+      MYSQL_DATABASE: folio
+      MYSQL_USER: folio
+      MYSQL_PASSWORD: folio_pass
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -ufolio -pfolio_pass --silent"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  app:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      FOLIO_ADDR: ":8080"
+      FOLIO_WEB: "/app/web/dist"
+      FOLIO_DB_DRIVER: "mysql"
+      FOLIO_MYSQL_DSN: "folio:folio_pass@tcp(db:3306)/folio?charset=utf8mb4&parseTime=True&loc=Local"
+      FOLIO_UPLOAD_DIR: "/app/data/uploads"
+      FOLIO_REDIS_ADDR: "redis:6379"
+      FOLIO_SECRET: "${FOLIO_SECRET:-please-change-this-secret}"
+      FOLIO_DEMO: "${FOLIO_DEMO:-1}"
+      FOLIO_SITE_NAME: "知微"
+      FOLIO_SITE_OWNER: "weijia"
+    ports:
+      - "8080:8080"
+    volumes:
+      - uploads-data:/app/data/uploads
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/api/health >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  mysql-data:
+  redis-data:
+  uploads-data:

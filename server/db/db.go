@@ -1,0 +1,128 @@
+package db
+
+import (
+	"fmt"
+	"log"
+	"os"
+	"path/filepath"
+	"time"
+
+	"folio/server/config"
+	"folio/server/models"
+
+	"github.com/glebarez/sqlite"
+	"gorm.io/driver/mysql"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
+)
+
+// Open 根据配置选择 MySQL、进程内 SQLite 或文件 SQLite，并执行迁移。
+func Open(cfg config.Config) (*gorm.DB, error) {
+	switch cfg.DBDriver {
+	case "mysql":
+		return openMySQL(cfg)
+	case "memory":
+		return openMemory()
+	default:
+		return openSQLite(cfg.DBPath)
+	}
+}
+
+func migrate(gdb *gorm.DB) error {
+	if err := gdb.AutoMigrate(
+		&models.User{},
+		&models.Category{},
+		&models.Document{},
+		&models.Like{},
+		&models.Favorite{},
+		&models.Comment{},
+		&models.CommentLike{},
+		&models.Follow{},
+		&models.Message{},
+		&models.Notification{},
+		&models.Image{},
+		&models.ViewHistory{},
+	); err != nil {
+		return err
+	}
+	return ensureSuperAdmin(gdb)
+}
+
+// ensureSuperAdmin 兼容旧数据：如果库里还没有超级管理员，
+// 就把最早的 admin（没有 admin 时取最早的用户）提升为超级管理员。
+func ensureSuperAdmin(gdb *gorm.DB) error {
+	var count int64
+	if err := gdb.Model(&models.User{}).Where("role = ?", models.RoleSuperAdmin).Count(&count).Error; err != nil {
+		return err
+	}
+	if count > 0 {
+		return nil
+	}
+	var u models.User
+	err := gdb.Where("role = ?", models.RoleAdmin).Order("id ASC").First(&u).Error
+	if err != nil {
+		if err := gdb.Order("id ASC").First(&u).Error; err != nil {
+			return nil // 空库，等第一位注册用户
+		}
+	}
+	return gdb.Model(&models.User{}).Where("id = ?", u.ID).UpdateColumn("role", models.RoleSuperAdmin).Error
+}
+
+func openSQLite(path string) (*gorm.DB, error) {
+	if dir := filepath.Dir(path); dir != "" && dir != "." {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return nil, fmt.Errorf("创建数据目录失败: %w", err)
+		}
+	}
+	dsn := path + "?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)"
+	gdb, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{Logger: logger.Default.LogMode(logger.Warn)})
+	if err != nil {
+		return nil, fmt.Errorf("打开 SQLite 失败: %w", err)
+	}
+	if err := migrate(gdb); err != nil {
+		return nil, fmt.Errorf("数据库迁移失败: %w", err)
+	}
+	return gdb, nil
+}
+
+func openMemory() (*gorm.DB, error) {
+	dsn := fmt.Sprintf("file:folio-memory-%d?mode=memory&cache=shared&_pragma=busy_timeout(5000)", os.Getpid())
+	gdb, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{Logger: logger.Default.LogMode(logger.Warn)})
+	if err != nil {
+		return nil, fmt.Errorf("打开内存数据库失败: %w", err)
+	}
+	sqlDB, err := gdb.DB()
+	if err != nil {
+		return nil, err
+	}
+	// 共享内存库在最后一个连接关闭时会消失，固定单连接保证进程存活期间数据不丢。
+	sqlDB.SetMaxOpenConns(1)
+	sqlDB.SetMaxIdleConns(1)
+	sqlDB.SetConnMaxLifetime(0)
+	if err := migrate(gdb); err != nil {
+		return nil, fmt.Errorf("数据库迁移失败: %w", err)
+	}
+	log.Println("使用内存数据库（重启后数据清空）")
+	return gdb, nil
+}
+
+func openMySQL(cfg config.Config) (*gorm.DB, error) {
+	if cfg.MySQLDSN == "" {
+		return nil, fmt.Errorf("FOLIO_MYSQL_DSN 不能为空")
+	}
+	gdb, err := gorm.Open(mysql.Open(cfg.MySQLDSN), &gorm.Config{Logger: logger.Default.LogMode(logger.Warn)})
+	if err != nil {
+		return nil, fmt.Errorf("连接 MySQL 失败: %w", err)
+	}
+	sqlDB, err := gdb.DB()
+	if err != nil {
+		return nil, err
+	}
+	sqlDB.SetMaxOpenConns(20)
+	sqlDB.SetMaxIdleConns(10)
+	sqlDB.SetConnMaxLifetime(time.Hour)
+	if err := migrate(gdb); err != nil {
+		return nil, fmt.Errorf("数据库迁移失败: %w", err)
+	}
+	return gdb, nil
+}

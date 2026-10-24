@@ -1,0 +1,319 @@
+# 自测指南
+
+这个项目有三条互相独立的验证路径：自动化集成测试、运行中实例的冒烟测试、手工验收。按需要选择，不必全部执行。
+
+## 0. 先选运行模式
+
+| 目的 | 命令 |
+| --- | --- |
+| 没有 Docker、没有数据库，只想看效果 | `./scripts/dev-mock.sh` |
+| 日常开发，数据持久化到文件 | `./dev.sh` |
+| 验证 MySQL + Redis + 容器化部署 | `docker compose up -d --build` |
+| 只用 Docker 起数据库，本地跑应用 | `docker compose up -d db redis` 然后 `./scripts/dev-mysql.sh` |
+
+对应地址：
+
+- 开发模式前端：<http://localhost:5173>
+- 后端 / Docker 全栈：<http://localhost:8080>
+
+## 1. 自动化测试（不依赖正在运行的服务）
+
+```bash
+cd server
+go test ./...
+```
+
+测试使用 `t.TempDir()` 里的临时 SQLite，不会碰你的开发数据库，也不会启动端口。覆盖：
+
+- 注册、登录、重复用户名、非法用户名、未登录拦截；
+- 文章创建、读取、搜索、更新权限（作者可以、他人 403）；
+- 文章分类的创建、筛选、删除后变为未分类；
+- 图片上传、去重、静态文件落盘、列表与删除权限；
+- 浏览历史记录、清空，以及相关文章推荐；
+- 点赞、收藏、两级评论与回复；
+- 关注、私信、收件箱、通知；
+- 文档树创建、删除父文档时级联删除子文档；
+- 管理员删除用户；
+- **角色权限**：读者不能发布；超管可以把读者设为管理员；管理员可以发布但不能管理用户；降级后不能继续发布；不能修改超管或创建第二个超管；
+- `/api/health` 的数据库状态。
+
+建议在改动后端后先跑这一条。`go vet ./...` 也可以一起跑。
+
+## 2. 冒烟测试（针对正在运行的实例）
+
+先确认实例已启动，然后：
+
+```bash
+python3 scripts/smoke.py
+```
+
+默认地址是 `http://localhost:8080`，默认管理员是 `weijia / folio1234`。可以覆盖：
+
+```bash
+BASE_URL=http://localhost:8090 python3 scripts/smoke.py
+SMOKE_ADMIN=weijia SMOKE_PASSWORD=folio1234 python3 scripts/smoke.py
+```
+
+脚本会：
+
+1. 检查 `/api/health`，打印当前数据库与 Redis 状态；
+2. 管理员登录；
+3. 临时注册一个 `smoke_xxxxxxxx` 用户；
+4. 创建一篇测试文章，读取、点赞、收藏、评论、回复、关注、私信；
+5. 上传一张测试图片，验证静态访问、图库列表与删除；
+6. 创建分类、给文章归类，验证分类筛选和浏览历史、相关文章；
+7. 检查搜索与标签筛选；
+8. 验证普通用户不能发布（403），超管把测试用户提升为管理员后可以发布，但管理员不能进入用户管理；
+9. 验证普通用户不能修改他人内容（403）；
+10. 如果 Redis 在线，验证同一用户重复打开文章只计一次浏览，以及登出后旧 token 返回 401；
+11. 删除测试文章、测试文档、测试图片、测试分类和临时用户，留下干净数据。
+
+成功时最后一行是：
+
+```
+全部通过：xx 项检查
+```
+
+如果 Redis 是 `off`，脚本会少两项检查，这是预期行为。
+
+## 3. Docker 模式自测
+
+```bash
+# 启动全部服务
+docker compose up -d --build
+
+# 查看状态
+docker compose ps
+
+# 健康检查
+curl -s http://localhost:8080/api/health
+# {"db":"mysql","dbStatus":"up","ok":true,"redis":"up",...}
+
+# 冒烟测试
+python3 scripts/smoke.py
+
+# 查看应用日志
+docker compose logs -f app
+```
+
+进入 MySQL 检查数据：
+
+```bash
+docker compose exec db mysql -ufolio -pfolio_pass folio \
+  -e "select count(*) as users from users; select kind,status,count(*) from documents group by kind,status;"
+```
+
+检查 Redis 中的两类键：
+
+```bash
+docker compose exec redis redis-cli --scan --pattern 'folio:*'
+```
+
+应该能看到 `folio:view:*`（浏览量去重）和 `folio:jwt:blacklist:*`（登出后的 token）。
+
+### 验证 Redis 不可用时自动降级
+
+```bash
+docker compose stop redis
+curl -s http://localhost:8080/api/health   # redis: "down"
+python3 scripts/smoke.py                   # 功能仍全部通过，跳过两项 Redis 检查
+docker compose start redis
+```
+
+应用在启动时连接 Redis；停止 Redis 后健康检查会报告 `down`，业务仍可用。重新启动 Redis 后需要重启应用容器才会重新启用缓存功能：
+
+```bash
+docker compose restart app
+```
+
+## 4. 手工验收清单
+
+### 认证
+
+- [ ] `/register` 创建新账号后自动登录并跳转；
+- [ ] 用户名重复、密码太短、用户名含非法字符时有中文错误提示；
+- [ ] `/login` 登录后回到 `redirect` 指定的页面；
+- [ ] 退出登录后刷新页面仍是未登录状态；
+- [ ] Redis 在线时，退出后用旧 token 请求 `/api/me` 返回 401。
+
+### 角色与权限
+
+- [ ] 读者登录后，顶栏没有「写文章」和齿轮入口，用户菜单里没有「写点什么」「管理后台」；
+- [ ] 读者直接访问 `/write` 或 `/admin` 会回到首页，并提示需要管理员权限；
+- [ ] 读者直接调用 `POST /api/docs` 返回 403；
+- [ ] 管理员登录后能看到「写文章」与「管理后台」，但 `/admin` 只有概览和内容管理，没有「用户与权限」；
+- [ ] 管理员可以发布、编辑、删除自己的内容，不能编辑他人的内容；
+- [ ] 超级管理员在 `/admin` 的「用户与权限」里可以把读者设为管理员；
+- [ ] 被设为管理员的用户刷新后能看到写作入口，并可以发布内容；
+- [ ] 把管理员降回读者后，其写作入口消失，调用发布接口返回 403；
+- [ ] 超级管理员的角色不可修改，也不能创建第二个超级管理员；
+- [ ] 「我的空间」对读者只显示资料、安全、收藏，不显示「我的文章 / 我的文档」。
+
+### 内容
+
+- [ ] `/write` 新建文章，只保存草稿时不出现在公开列表；
+- [ ] 「我的文章」能看到草稿，公开主页看不到；
+- [ ] 编辑器可以选择文章分类；分类在文章列表的筛选中生效；
+- [ ] `/write?kind=doc` 新建文档并选择「工程手册」作为上级；
+- [ ] `/docs` 左侧目录树出现新文档，面包屑与上一篇/下一篇正确；
+- [ ] 删除父文档后子文档一并消失；
+- [ ] 他人内容的编辑入口不可见，直接调接口返回 403；
+- [ ] 管理员的「用户管理」可以删除用户，用户内容一并清理。
+
+### 图片
+
+- [ ] 编辑器工具栏「图片」能选择本地图片并插入 Markdown；
+- [ ] 从剪贴板粘贴图片能自动上传并插入；
+- [ ] 把图片拖进编辑区能自动上传并插入；
+- [ ] 预览区能看到刚上传的图片，刷新文章后图片仍可访问；
+- [ ] 管理后台「图片管理」能看到刚上传的图片、大小、上传者；
+- [ ] 「复制链接」得到可直接访问的 `/uploads/...` 地址；
+- [ ] 删除图片后，图片列表移除且该 URL 返回 404；
+- [ ] 普通读者不能上传图片（接口返回 403）；
+- [ ] 超过 `FOLIO_UPLOAD_MAX_MB` 的文件会被拒绝。
+
+### 互动
+
+- [ ] 点赞、收藏按钮状态与计数在刷新后保持；
+- [ ] 评论发布后立刻出现，回复挂到根评论下并显示「回复 @某某」；
+- [ ] 评论点赞可以切换；
+- [ ] 关注/取消关注后粉丝数同步变化；
+- [ ] `/messages` 能搜索用户并发起私信，发送后消息出现在右侧；
+- [ ] 通知页能看到点赞、评论、关注，点击跳到正确的内容；
+- [ ] 浏览文章后，「我的空间 → 浏览历史」出现该文章，可以清空；
+- [ ] 文章底部的「相关文章」能根据标签/分类推荐其他文章；
+- [ ] 未登录点击点赞、收藏、评论会跳转登录页。
+
+### 搜索与标签
+
+- [ ] 顶部搜索框、`/` 快捷键、搜索页三种入口都能搜索；
+- [ ] 搜索结果分「全部 / 文章 / 文档」；
+- [ ] 点击任意标签进入标签聚合，数量与标签上的计数一致；
+- [ ] 搜索 `!`、`%`、`_` 等特殊字符不会报错。
+
+### 视觉与响应式
+
+- [ ] 同一篇文章刷新多次，封面不变；不同文章的封面线稿有差异；
+- [ ] 封面只有淡色底 + 一条几何线稿，没有标题文字或复杂图案；
+- [ ] 头像是「手绘圆 + 昵称首字」，没有上传入口；
+- [ ] 首屏关键词下方能看到手绘下划线，引用区上方有手绘波浪线；
+- [ ] 品牌标识是 rough.js 的圆和斜线，不是普通图标；
+- [ ] 卡片、按钮、输入框是不规则圆角和虚线/手绘边框；
+- [ ] 明暗主题切换后，封面、头像、装饰线都会重新绘制并改变颜色；
+- [ ] 刷新后主题保持；
+- [ ] 375px 宽度下没有横向滚动；
+- [ ] 移动端导航、文档目录抽屉、消息会话切换正常；
+- [ ] 编辑器在移动端为上下分栏，不是左右挤压；
+- [ ] 浏览器控制台没有 Vue 警告或 canvas 报错。
+
+### 数据库切换
+
+- [ ] Mock 模式启动后立即有演示数据，重启后数据恢复初始状态；
+- [ ] SQLite 模式新增内容，重启后仍在；
+- [ ] MySQL 模式数据写入 `documents` / `users` 等表，重启容器后仍在；
+- [ ] 在 MySQL 与 SQLite 模式之间切换时，确认自己看的是对应的数据源，不要误以为数据丢失。
+
+## 5. 重置数据
+
+### Mock 模式
+
+直接重启进程即可，内存数据库会重新播种。
+
+### SQLite
+
+```bash
+# 先停止正在运行的后端
+rm -f server/data/folio.db server/data/folio.db-shm server/data/folio.db-wal
+cd server && FOLIO_DEMO=1 go run .
+```
+
+### MySQL
+
+```bash
+# 会删除所有 MySQL / Redis 数据卷，谨慎使用
+docker compose down -v
+docker compose up -d --build
+```
+
+只清空业务数据、保留容器：
+
+```bash
+docker compose exec db mysql -ufolio -pfolio_pass folio -e "
+SET FOREIGN_KEY_CHECKS=0;
+TRUNCATE TABLE notifications; TRUNCATE TABLE messages; TRUNCATE TABLE follows;
+TRUNCATE TABLE comment_likes; TRUNCATE TABLE comments; TRUNCATE TABLE favorites;
+TRUNCATE TABLE likes; TRUNCATE TABLE documents; TRUNCATE TABLE users;
+SET FOREIGN_KEY_CHECKS=1;"
+docker compose restart app
+```
+
+### Redis
+
+```bash
+docker compose exec redis redis-cli FLUSHALL
+```
+
+Redis 只存缓存和黑名单，清空不会影响业务数据。
+
+## 6. 常见问题
+
+### Docker 守护进程未启动
+
+```
+Cannot connect to the Docker daemon
+```
+
+打开 Docker Desktop，等状态变为 Running 后重试。第一次构建需要拉取 `node:22-alpine`、`golang:1.24-alpine`、`alpine:3.20`，网络慢时可能超时，单独 `docker pull` 后重试即可。
+
+### 端口被占用
+
+- `8080`：应用；停掉旧的 `go run` 或 `docker compose stop app`，或改 `FOLIO_ADDR`；
+- `3306`：MySQL；本机已有 MySQL 时二选一，或修改 compose 的端口映射；
+- `6379`：Redis；同上；
+- `5173`：Vite；`dev.sh` 使用固定端口，先停掉占用进程。
+
+`dev.sh` 在启动前会检查 8080。如果 Docker 全栈还在运行，它会直接提示你先执行 `docker compose stop app`。
+
+### MySQL 连接失败
+
+```bash
+docker compose logs db | tail -50
+```
+
+确认容器状态为 `healthy`，再启动应用。应用启动时会自动建表；第一次连接失败通常是数据库还没初始化完成。
+
+### 登录后立刻掉线
+
+检查 `FOLIO_SECRET` 是否在前后两次启动之间变了。JWT 由这个密钥签名，换密钥会让旧 token 全部失效，这是预期行为。
+
+### Redis 显示 off，但我配置了地址
+
+- 地址是否写对（Docker 全栈内是 `redis:6379`，本机开发是 `127.0.0.1:6379`）；
+- 容器是否 healthy；
+- 看应用日志中的 `Redis 连接失败` 提示；
+- 应用启动时连接失败会降级，之后不会自动重试，需要重启应用。
+
+### 修改了前端但 Docker 页面没变化
+
+Docker 镜像是构建时打包前端的，重新构建：
+
+```bash
+docker compose up -d --build app
+```
+
+本地开发用 Vite 时无需重启，HMR 会热更新。
+
+### 演示数据没有出现
+
+演示数据只在**用户表为空**时写入。已有数据时不会覆盖。需要重置时参考上面的「重置数据」。
+
+## 7. 最小验收命令
+
+```bash
+cd server && go test ./...
+cd .. && docker compose up -d --build
+python3 scripts/smoke.py
+curl -s http://localhost:8080/api/health
+```
+
+四条都通过，说明核心链路（数据库、认证、内容、互动、Redis 可选功能、静态前端）是通的。

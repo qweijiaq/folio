@@ -1,0 +1,270 @@
+<script setup>
+import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { api } from '../api/client'
+import { auth } from '../stores/auth'
+import { toast, toastError } from '../stores/toast'
+import { buildTree, flattenTree } from '../utils/tree'
+import { formatDate, formatNumber, readingTime } from '../utils/format'
+import DocTree from '../components/DocTree.vue'
+import CoverImage from '../components/CoverImage.vue'
+import UserAvatar from '../components/UserAvatar.vue'
+import MarkdownView from '../components/MarkdownView.vue'
+import CommentSection from '../components/CommentSection.vue'
+import TagPill from '../components/TagPill.vue'
+import EmptyState from '../components/EmptyState.vue'
+import Icon from '../components/Icon.vue'
+
+const route = useRoute()
+const router = useRouter()
+
+const doc = ref(null)
+const treeItems = ref([])
+const tree = ref([])
+const flat = ref([])
+const toc = ref([])
+const liked = ref(false)
+const favorited = ref(false)
+const loading = ref(true)
+const notFound = ref(false)
+const sideOpen = ref(false)
+
+const canEdit = computed(() => {
+  if (!doc.value || !auth.user) return false
+  return doc.value.author.id === auth.user.id || auth.user.role === 'admin'
+})
+
+const breadcrumbs = computed(() => {
+  if (!doc.value) return []
+  const byId = new Map(treeItems.value.map((item) => [item.id, item]))
+  const chain = []
+  let current = { id: doc.value.id, title: doc.value.title, parentID: doc.value.parentID }
+  for (let i = 0; i < 20 && current; i += 1) {
+    chain.unshift({ id: current.id, title: current.title })
+    const node = byId.get(current.id)
+    const parentID = node ? node.parentID : current.parentID
+    if (!parentID) break
+    const parent = byId.get(parentID)
+    if (!parent) break
+    current = parent
+  }
+  return chain
+})
+
+const currentIndex = computed(() => flat.value.findIndex((item) => String(item.id) === String(doc.value?.id)))
+const prevDoc = computed(() => (currentIndex.value > 0 ? flat.value[currentIndex.value - 1] : null))
+const nextDoc = computed(() =>
+  currentIndex.value >= 0 && currentIndex.value < flat.value.length - 1 ? flat.value[currentIndex.value + 1] : null
+)
+
+const visibleToc = computed(() => toc.value.filter((item) => item.level <= 3))
+
+async function load() {
+  loading.value = true
+  notFound.value = false
+  try {
+    const [docData, treeData] = await Promise.all([
+      api.get(`/docs/${route.params.id}`),
+      api.get('/doc-tree')
+    ])
+    if (docData.doc.kind !== 'doc') {
+      router.replace(`/articles/${docData.doc.id}`)
+      return
+    }
+    doc.value = docData.doc
+    liked.value = docData.liked
+    favorited.value = docData.favorited
+    treeItems.value = treeData.items
+    tree.value = buildTree(treeData.items)
+    flat.value = flattenTree(tree.value)
+  } catch (err) {
+    if (err.status === 404) notFound.value = true
+    else toastError(err)
+  } finally {
+    loading.value = false
+  }
+}
+
+function requireLogin() {
+  if (auth.user) return true
+  router.push({ path: '/login', query: { redirect: route.fullPath } })
+  return false
+}
+
+async function toggleLike() {
+  if (!requireLogin()) return
+  try {
+    const data = await api.post(`/docs/${doc.value.id}/like`)
+    liked.value = data.liked
+    doc.value.likeCount = data.likeCount
+  } catch (err) {
+    toastError(err)
+  }
+}
+
+async function toggleFavorite() {
+  if (!requireLogin()) return
+  try {
+    const data = await api.post(`/docs/${doc.value.id}/favorite`)
+    favorited.value = data.favorited
+    doc.value.favoriteCount = data.favoriteCount
+    toast(data.favorited ? '已收藏' : '已取消收藏')
+  } catch (err) {
+    toastError(err)
+  }
+}
+
+async function share() {
+  try {
+    if (navigator.share) await navigator.share({ title: doc.value.title, url: window.location.href })
+    else {
+      await navigator.clipboard.writeText(window.location.href)
+      toast('链接已复制')
+    }
+  } catch {
+    /* 取消分享 */
+  }
+}
+
+function goDoc(id) {
+  sideOpen.value = false
+  router.push(`/docs/${id}`)
+}
+
+onMounted(load)
+watch(
+  () => route.params.id,
+  () => {
+    load()
+    window.scrollTo({ top: 0 })
+  }
+)
+</script>
+
+<template>
+  <div class="page docs-page">
+    <div v-if="loading" class="container page-loading">
+      <p class="muted loading-line">正在打开文档…</p>
+    </div>
+
+    <div v-else-if="notFound" class="container page-loading">
+      <EmptyState icon="info" title="这篇文档不存在" description="它可能被删除，或者还没有公开。">
+        <RouterLink to="/docs" class="btn btn-ghost btn-sm">返回知识库</RouterLink>
+      </EmptyState>
+    </div>
+
+    <template v-else-if="doc">
+      <div class="container docs-topbar">
+        <button class="docs-side-toggle" type="button" @click="sideOpen = !sideOpen">
+          <Icon name="layers" :size="16" />
+          目录
+        </button>
+        <nav class="breadcrumb" aria-label="面包屑">
+          <RouterLink to="/docs">知识库</RouterLink>
+          <template v-for="crumb in breadcrumbs" :key="crumb.id">
+            <span class="crumb-sep">/</span>
+            <RouterLink v-if="crumb.id !== doc.id" :to="`/docs/${crumb.id}`">{{ crumb.title }}</RouterLink>
+            <span v-else class="crumb-current">{{ crumb.title }}</span>
+          </template>
+        </nav>
+      </div>
+
+      <div class="container docs-layout" :class="{ 'docs-layout--toc': visibleToc.length > 2 }">
+        <aside class="docs-side" :class="{ open: sideOpen }">
+          <div class="docs-side-head">
+            <RouterLink to="/docs">文档目录</RouterLink>
+            <button class="icon-btn docs-side-close" type="button" aria-label="关闭目录" @click="sideOpen = false">
+              <Icon name="close" :size="16" />
+            </button>
+          </div>
+          <DocTree :nodes="tree" :active-id="doc.id" />
+          <p v-if="!tree.length" class="muted docs-side-empty">暂无其他文档。</p>
+        </aside>
+
+        <article class="docs-article">
+          <div v-if="doc.status === 'draft'" class="draft-banner">
+            <Icon name="info" :size="16" />
+            这是草稿，只有你能看到。
+          </div>
+
+          <header class="docs-article-head">
+            <div class="article-kicker">
+              <span class="kicker-link">文档</span>
+              <span class="kicker-sep">/</span>
+              <span>{{ formatDate(doc.updatedAt) }} 更新</span>
+            </div>
+            <h1>{{ doc.title }}</h1>
+            <p v-if="doc.abstract" class="article-abstract">{{ doc.abstract }}</p>
+            <div class="article-byline">
+              <RouterLink :to="`/u/${doc.author.username}`" class="byline-author">
+                <UserAvatar :username="doc.author.username" :nickname="doc.author.nickname" :size="36" />
+                <span class="byline-text">
+                  <strong>{{ doc.author.nickname }}</strong>
+                  <span>{{ formatDate(doc.createdAt) }} 创建</span>
+                </span>
+              </RouterLink>
+              <div class="byline-meta">
+                <span><Icon name="eye" :size="15" /> {{ formatNumber(doc.viewCount) }}</span>
+                <span><Icon name="clock" :size="15" /> {{ readingTime(doc.content) }} 分钟</span>
+                <RouterLink v-if="canEdit" :to="`/write/${doc.id}`" class="text-link"><Icon name="edit" :size="14" /> 编辑</RouterLink>
+              </div>
+            </div>
+          </header>
+
+          <figure class="docs-cover">
+            <CoverImage :doc="doc" />
+          </figure>
+
+          <MarkdownView :source="doc.content" @toc="toc = $event" />
+
+          <div v-if="doc.tags?.length" class="article-tags">
+            <Icon name="tag" :size="15" />
+            <TagPill v-for="tag in doc.tags" :key="tag" :name="tag" />
+          </div>
+
+          <div class="article-actions">
+            <button class="action-btn" :class="{ active: liked }" type="button" @click="toggleLike">
+              <Icon name="heart" :size="17" />
+              <span>{{ liked ? '已点赞' : '点赞' }}</span>
+              <span class="action-count">{{ doc.likeCount || 0 }}</span>
+            </button>
+            <button class="action-btn" :class="{ active: favorited }" type="button" @click="toggleFavorite">
+              <Icon name="bookmark" :size="17" />
+              <span>{{ favorited ? '已收藏' : '收藏' }}</span>
+              <span class="action-count">{{ doc.favoriteCount || 0 }}</span>
+            </button>
+            <button class="action-btn" type="button" @click="share">
+              <Icon name="share" :size="17" />
+              <span>分享</span>
+            </button>
+          </div>
+
+          <nav v-if="prevDoc || nextDoc" class="docs-pager">
+            <button v-if="prevDoc" type="button" class="pager-link" @click="goDoc(prevDoc.id)">
+              <span class="pager-label"><Icon name="arrowLeft" :size="14" /> 上一篇</span>
+              <strong>{{ prevDoc.title }}</strong>
+            </button>
+            <span v-else></span>
+            <button v-if="nextDoc" type="button" class="pager-link pager-link--right" @click="goDoc(nextDoc.id)">
+              <span class="pager-label">下一篇 <Icon name="arrowRight" :size="14" /></span>
+              <strong>{{ nextDoc.title }}</strong>
+            </button>
+          </nav>
+
+          <CommentSection :doc-id="doc.id" @count="doc.commentCount = $event" />
+        </article>
+
+        <aside v-if="visibleToc.length > 2" class="docs-toc">
+          <div class="aside-sticky">
+            <h4>本页目录</h4>
+            <nav class="toc">
+              <a v-for="item in visibleToc" :key="item.id" :href="`#${item.id}`" :class="`toc-level-${item.level}`">
+                {{ item.text }}
+              </a>
+            </nav>
+          </div>
+        </aside>
+      </div>
+    </template>
+  </div>
+</template>
