@@ -206,7 +206,11 @@ func currentClaims(c *gin.Context) *tokenClaims {
 }
 
 func paramID(c *gin.Context) (uint, bool) {
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	return parseParam(c, "id")
+}
+
+func parseParam(c *gin.Context, name string) (uint, bool) {
+	id, err := strconv.ParseUint(c.Param(name), 10, 64)
 	if err != nil || id == 0 {
 		bad(c, "参数错误")
 		return 0, false

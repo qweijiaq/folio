@@ -1647,3 +1647,57 @@ func TestFeaturedAndPublicCollections(t *testing.T) {
 		t.Fatalf("关闭后收藏应隐藏: %d %v", status, favorites)
 	}
 }
+
+func TestRevisionsAndExport(t *testing.T) {
+	s := newTestAPI(t)
+	ownerToken, _ := s.register(t, "revowner")
+	readerToken, _ := s.register(t, "revreader")
+	status, created := s.do(t, "POST", "/api/docs", ownerToken, map[string]any{
+		"kind": "article", "title": "版本测试", "content": "第一版内容", "status": "published",
+	})
+	if status != http.StatusCreated {
+		t.Fatalf("创建版本测试文章失败: %d %v", status, created)
+	}
+	docID := uint(number(obj(created, "doc")["id"]))
+	status, _ = s.do(t, "PUT", "/api/docs/"+itoa(docID), ownerToken, map[string]any{
+		"title": "版本测试", "content": "第二版内容", "status": "published",
+	})
+	if status != http.StatusOK {
+		t.Fatalf("更新文章失败: %d", status)
+	}
+
+	status, revisions := s.do(t, "GET", "/api/docs/"+itoa(docID)+"/revisions", ownerToken, nil)
+	if status != http.StatusOK || len(list(revisions, "items")) != 1 {
+		t.Fatalf("历史版本列表不正确: %d %v", status, revisions)
+	}
+	revisionID := uint(number(list(revisions, "items")[0].(map[string]any)["id"]))
+	status, detail := s.do(t, "GET", "/api/docs/"+itoa(docID)+"/revisions/"+itoa(revisionID), ownerToken, nil)
+	if status != http.StatusOK || obj(detail, "revision")["content"] != "第一版内容" {
+		t.Fatalf("历史版本详情不正确: %d %v", status, detail)
+	}
+	status, _ = s.do(t, "GET", "/api/docs/"+itoa(docID)+"/revisions", readerToken, nil)
+	if status != http.StatusForbidden {
+		t.Fatalf("读者不应能查看历史版本, 实际 %d", status)
+	}
+
+	status, restored := s.do(t, "POST", "/api/docs/"+itoa(docID)+"/revisions/"+itoa(revisionID)+"/restore", ownerToken, nil)
+	if status != http.StatusOK || obj(restored, "doc")["content"] != "第一版内容" {
+		t.Fatalf("恢复历史版本失败: %d %v", status, restored)
+	}
+	status, current := s.do(t, "GET", "/api/docs/"+itoa(docID), "", nil)
+	if status != http.StatusOK || obj(current, "doc")["content"] != "第一版内容" {
+		t.Fatalf("恢复后的内容不正确: %d %v", status, current)
+	}
+
+	status, headers, archive := s.raw(t, "GET", "/api/admin/export", ownerToken)
+	if status != http.StatusOK || !strings.Contains(headers.Get("Content-Type"), "application/zip") || !strings.HasPrefix(archive, "PK") {
+		t.Fatalf("导出内容异常: %d %s", status, headers.Get("Content-Type"))
+	}
+	if !strings.Contains(headers.Get("Content-Disposition"), "folio-export-") {
+		t.Fatalf("导出文件名异常: %s", headers.Get("Content-Disposition"))
+	}
+	status, _, _ = s.raw(t, "GET", "/api/admin/export", readerToken)
+	if status != http.StatusForbidden {
+		t.Fatalf("读者不应能导出内容, 实际 %d", status)
+	}
+}

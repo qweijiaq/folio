@@ -8,6 +8,7 @@ import { buildTree, flattenTree } from '../utils/tree'
 import CoverImage from '../components/CoverImage.vue'
 import MarkdownView from '../components/MarkdownView.vue'
 import Icon from '../components/Icon.vue'
+import RevisionHistory from '../components/RevisionHistory.vue'
 import { usePageMeta } from '../composables/usePageMeta'
 
 const route = useRoute()
@@ -43,6 +44,7 @@ const aiEnabled = ref(false)
 const aiLoading = ref(false)
 const savedSnapshot = ref('')
 const draftAvailable = ref(null)
+const revisionOpen = ref(false)
 const draftSavedAt = ref(0)
 let autoSaveTimer = null
 
@@ -445,6 +447,30 @@ async function save(status = 'draft') {
   }
 }
 
+function onRevisionRestored(restored) {
+  doc.value = restored
+  form.kind = restored.kind
+  form.title = restored.title
+  form.abstract = restored.abstract || ''
+  form.content = restored.content || ''
+  form.tags = [...(restored.tags || [])]
+  form.status = restored.status
+  form.parentID = restored.parentID ?? null
+  form.categoryID = restored.categoryID ?? null
+  form.pinned = restored.pinned
+  form.openComment = restored.openComment !== false
+  form.sort = restored.sort || 0
+  savedSnapshot.value = snapshot()
+  draftAvailable.value = null
+  try {
+    localStorage.removeItem(draftKey())
+  } catch {
+    /* ignore */
+  }
+  revisionOpen.value = false
+  toast('已恢复历史版本')
+}
+
 function goBack() {
   if (isEdit.value) router.push(`/${form.kind === 'doc' ? 'docs' : 'articles'}/${editingId.value}`)
   else router.back()
@@ -501,6 +527,7 @@ onBeforeUnmount(() => {
           <span class="editor-status" :class="[form.status, { dirty }]">
             {{ dirty ? '未保存' : form.status === 'published' ? '已发布' : '草稿' }}
           </span>
+          <button v-if="isEdit" class="btn btn-ghost btn-sm" type="button" @click="revisionOpen = true">历史版本</button>
           <button class="btn btn-ghost btn-sm" type="button" :disabled="Boolean(saving)" @click="save('draft')">
             {{ saving === 'draft' ? '保存中…' : '存为草稿' }}
           </button>
@@ -664,6 +691,7 @@ onBeforeUnmount(() => {
           </div>
         </div>
       </div>
+      <RevisionHistory v-if="revisionOpen" :doc-id="editingId" @close="revisionOpen = false" @restored="onRevisionRestored" />
     </div>
   </div>
 </template>

@@ -1281,3 +1281,162 @@
   text-align: center;
   pointer-events: none;
 }
+
+/* ---------- 历史版本 ---------- */
+
+.revision-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 175;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: color-mix(in srgb, var(--ink) 28%, transparent);
+  backdrop-filter: blur(3px);
+}
+
+.revision-panel {
+  display: flex;
+  flex-direction: column;
+  width: min(1040px, 100%);
+  max-height: min(82vh, 760px);
+  padding: 18px;
+  border: 1.4px solid var(--line-strong);
+  border-radius: 14px 7px 16px 8px / 8px 16px 7px 14px;
+  background: var(--surface);
+  box-shadow: 0 26px 70px rgba(0, 0, 0, 0.24), 5px 5px 0 rgba(30, 30, 26, 0.1);
+}
+
+.revision-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.revision-head h2 {
+  margin-top: 3px;
+  font-family: var(--hand);
+  font-size: 1.35rem;
+  font-weight: 500;
+}
+
+.revision-body {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: 16px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.revision-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 62vh;
+  overflow-y: auto;
+  padding-right: 4px;
+  border-right: 1.2px dashed var(--line);
+}
+
+.revision-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 9px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--sketch-sm);
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.revision-item:hover {
+  background: var(--surface-2);
+}
+
+.revision-item.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.revision-item strong {
+  font-family: var(--hand);
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.revision-item span {
+  color: var(--ink-faint);
+  font-size: 10.5px;
+}
+
+.revision-item small {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--ink-faint);
+  font-size: 10.5px;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.revision-preview {
+  min-width: 0;
+  max-height: 62vh;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.revision-preview-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1.2px dashed var(--line);
+}
+
+.revision-preview-head h3 {
+  margin-top: 5px;
+  font-family: var(--hand);
+  font-size: 1.2rem;
+  font-weight: 500;
+}
+
+.revision-preview-head p {
+  color: var(--ink-faint);
+  font-size: 11px;
+}
+
+.revision-content .prose {
+  max-width: none;
+  font-size: 15px;
+  line-height: 1.85;
+}
+
+@media (max-width: 760px) {
+  .revision-overlay {
+    padding: 10px;
+  }
+
+  .revision-panel {
+    max-height: 92vh;
+  }
+
+  .revision-body {
+    grid-template-columns: 1fr;
+  }
+
+  .revision-list {
+    max-height: 160px;
+    border-right: 0;
+    border-bottom: 1.2px dashed var(--line);
+  }
+
+  .revision-preview {
+    max-height: 48vh;
+  }
+}

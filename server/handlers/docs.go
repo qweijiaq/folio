@@ -465,6 +465,12 @@ func (a *API) DocUpdate(c *gin.Context) {
 	if abstract == "" {
 		abstract = plainText(in.Content)
 	}
+	if a.documentChanged(&doc, in, abstract, categoryID) {
+		if err := a.saveRevision(&doc, u); err != nil {
+			fail(c, http.StatusInternalServerError, "保存历史版本失败")
+			return
+		}
+	}
 	doc.Title = in.Title
 	doc.Abstract = abstract
 	doc.Content = in.Content
@@ -529,6 +535,7 @@ func deleteDocumentsTx(tx *gorm.DB, ids []uint) error {
 	tx.Where("doc_id IN ?", ids).Delete(&models.Favorite{})
 	tx.Where("doc_id IN ?", ids).Delete(&models.Notification{})
 	tx.Where("doc_id IN ?", ids).Delete(&models.DocDailyStat{})
+	tx.Where("doc_id IN ?", ids).Delete(&models.DocumentRevision{})
 	return tx.Where("id IN ?", ids).Delete(&models.Document{}).Error
 }
 

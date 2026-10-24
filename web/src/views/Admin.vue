@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { api } from '../api/client'
+import { api, getToken } from '../api/client'
 import { auth, refreshMe } from '../stores/auth'
 import { toast, toastError } from '../stores/toast'
 import { formatBytes, roleLabel, shortDate } from '../utils/format'
@@ -32,6 +32,7 @@ const inviteNote = ref('')
 const inviteDays = ref(7)
 const creatingInvite = ref(false)
 const creatingUser = ref(false)
+const exporting = ref(false)
 const newUser = reactive({ username: '', nickname: '', email: '', password: '', role: 'user' })
 const images = ref([])
 const categories = ref([])
@@ -125,6 +126,40 @@ async function loadStats() {
     stats.value = await api.get('/admin/stats')
   } catch (err) {
     toastError(err)
+  }
+}
+
+async function exportContent() {
+  exporting.value = true
+  try {
+    const response = await fetch('/api/admin/export', {
+      headers: { Accept: 'application/zip', Authorization: `Bearer ${getToken()}` }
+    })
+    if (!response.ok) {
+      let message = '导出失败'
+      try {
+        const data = await response.json()
+        message = data.error || message
+      } catch {
+        /* ignore */
+      }
+      toast(message, 'error')
+      return
+    }
+    const blob = await response.blob()
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `folio-export-${new Date().toISOString().slice(0, 10)}.zip`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(url)
+    toast('导出已开始')
+  } catch {
+    toast('导出失败，请检查网络', 'error')
+  } finally {
+    exporting.value = false
   }
 }
 
@@ -824,6 +859,9 @@ onMounted(async () => {
               <p>{{ isSuper ? '全站内容都在这里，可以编辑或删除。' : '这里只显示你创建的内容。' }}</p>
             </div>
             <div class="admin-actions">
+              <button class="btn btn-ghost btn-sm" type="button" :disabled="exporting" @click="exportContent">
+                {{ exporting ? '导出中…' : '导出 Markdown' }}
+              </button>
               <RouterLink to="/write" class="btn btn-ghost btn-sm">写文章</RouterLink>
               <RouterLink to="/write?kind=doc" class="btn btn-primary btn-sm">新建文档</RouterLink>
             </div>

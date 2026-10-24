@@ -54,7 +54,7 @@ folio/
 │   ├── db/                 # SQLite / MySQL / 内存数据库
 │   ├── cache/              # Redis：JWT 黑名单、浏览量去重
 │   ├── mail/               # SMTP 发信与本地调试邮件
-│   ├── models/             # 21 张表的模型
+│   ├── models/             # 22 张表的模型
 │   ├── art/                # 生成式封面与头像
 │   ├── storage/            # 本地磁盘 / 七牛云存储抽象
 │   ├── handlers/           # 路由、接口与集成测试
@@ -239,7 +239,7 @@ Go 服务会自动托管 `../web/dist`，访问 <http://localhost:8080> 即可�
 
 ## 数据模型
 
-只有 21 张表：
+只有 22 张表：
 
 | 表 | 用途 |
 | --- | --- |
@@ -259,6 +259,7 @@ Go 服务会自动托管 `../web/dist`，访问 <http://localhost:8080> 即可�
 | `view_histories` | 登录用户的浏览历史（用户 + 内容唯一） |
 | `doc_daily_stats` | 内容每日阅读量（内容 + 日期唯一），用于数据看板 |
 | `invite_codes` | 一次性邀请码：备注、有效期、创建者、使用者和使用时间 |
+| `document_revisions` | 内容历史版本：标题、摘要、正文、标签、状态、编辑者与时间 |
 | `email_codes` | 邮箱验证码：用途、HMAC 摘要、过期时间、尝试次数、消费时间 |
 | `site_settings` | 单行站点设置：名称、描述、维护者、注册开关、图形验证码 |
 | `operation_logs` | 操作日志：操作者、动作、对象、详情、IP、User-Agent |
@@ -422,6 +423,21 @@ FOLIO_SMTP_FROM=you@qq.com
 
 管理员在 `/admin` 的「全站通知」里发布公告，内容会显示在每个登录用户的「消息 → 通知」顶部，并计入顶栏未读徽标。公告支持一个站内或站外链接，已读状态按用户分别记录在 `notice_reads`。删除公告时会同时清理对应的已读记录。
 
+## 版本历史与导出
+
+编辑已有内容后，编辑器顶部会出现「历史版本」：
+
+- 每次实际修改并保存时，保存前的版本会写入 `document_revisions`；
+- 历史面板可以查看旧标题、状态、正文和编辑者，并一键恢复；
+- 恢复前会先把当前内容再存一条历史，不会覆盖掉唯一副本；
+- 删除内容时会一并清理它的历史版本。
+
+管理后台「内容管理」提供「导出 Markdown」：
+
+- 下载 zip，按 `articles/` 与 `docs/` 分目录；
+- 每篇带 YAML frontmatter（标题、类型、状态、作者、分类、标签、时间、上级文档）和正文；
+- 图片不会被复制进 zip，仍引用站内 `/uploads` 或对象存储地址，备份时需要连同图片一起保存。
+
 ## 数据看板
 
 管理后台的「数据看板」提供 7 / 30 / 90 天视图：
@@ -470,10 +486,10 @@ FOLIO_SITE_URL=https://your-domain.com
 - `/docs/:id` 文档详情：目录树、面包屑、正文与右侧目录、上一篇/下一篇、点赞收藏、评论
 - `/search` 全站搜索：关键词搜索；点击任意标签进入该标签的全站聚合
 - `/u/:username` 公开主页：文章、文档、关注、粉丝、公开收藏夹和作者置顶文章；可按隐私设置隐藏关注/粉丝/收藏，并支持封面、紧凑、纯文字三种头部样式
-- `/write`、`/write/:id` 编辑器：Markdown 分栏预览、图片上传/粘贴/拖拽、分类、自动封面预览、标签、评论开关、草稿/发布、文档树父级与排序（仅超级管理员和管理员）
+- `/write`、`/write/:id` 编辑器：Markdown 分栏预览、图片上传/粘贴/拖拽、分类、自动封面预览、标签、评论开关、历史版本、草稿/发布、文档树父级与排序（仅超级管理员和管理员）
 - `/messages` 私信与通知：会话列表、WebSocket 实时消息、图片与表情、轮询兜底、全站公告与通知已读
 - `/me` 我的空间：资料、密码、隐私与消息、最近登录记录、收藏夹、浏览历史；管理员额外看到自己的文章与文档，并可以把一篇文章置顶到公开主页
-- `/admin` 管理后台：概览、数据看板、内容管理、分类管理、图片管理、全站通知；超级管理员额外拥有用户与权限、邀请注册、站点设置和操作日志
+- `/admin` 管理后台：概览、数据看板、内容管理、分类管理、图片管理、全站通知；内容管理支持导出全部 Markdown；超级管理员额外拥有用户与权限、邀请注册、站点设置和操作日志
 - `/login`、`/register` 登录注册：密码登录、邮箱验证码登录、QQ 登录、注册；关闭注册后可通过一次性邀请链接注册
 - `/forgot` 通过邮箱验证码重置密码
 
@@ -501,7 +517,7 @@ FOLIO_SITE_URL=https://your-domain.com
 | --- | --- |
 | 认证 | `POST /auth/register`、`POST /auth/login`、`POST /auth/email/login`、`POST /auth/password/reset`、`POST /auth/email/code`、`GET /auth/email/status`、`GET /auth/captcha`、`GET /auth/qq/status`、`GET /auth/qq/url`、`GET /auth/qq/callback`、`POST /auth/qq/exchange`、`POST /auth/logout`、`GET /me`、`PUT /me/email` |
 | 用户 | `GET /users/:username`、`POST|DELETE /users/:username/follow`、`GET /users/:username/followers|following`、`GET /users/:username/favorite-folders`、`GET /users/:username/favorites` |
-| 内容 | `GET /docs`、`GET /docs/:id`、`GET /docs/:id/related`、`POST /docs`、`PUT /docs/:id`、`DELETE /docs/:id`、`GET /doc-tree` |
+| 内容 | `GET /docs`、`GET /docs/:id`、`GET /docs/:id/related`、`GET /docs/:id/revisions`、`GET /docs/:id/revisions/:revisionID`、`POST /docs/:id/revisions/:revisionID/restore`、`POST /docs`、`PUT /docs/:id`、`DELETE /docs/:id`、`GET /doc-tree` |
 | 分类 | `GET /categories`、`POST /categories`、`PUT /categories/:id`、`DELETE /categories/:id` |
 | 图片 | `POST /images`、`GET /images`、`DELETE /images/:id`；本地模式通过 `/uploads/*` 访问，七牛模式返回云存储 URL |
 | AI | `GET /ai/status`、`POST /ai/analyze`（仅管理员） |
@@ -511,7 +527,7 @@ FOLIO_SITE_URL=https://your-domain.com
 | 视觉 | `GET /art/cover.svg`、`GET /art/cover.png`、`GET /art/avatar.svg` |
 | SEO | `GET /feed.xml`、`GET /sitemap.xml`、`GET /robots.txt` |
 | 系统 | `GET /health` |
-| 管理 | `GET /admin/stats`、`GET /admin/dashboard`、`GET /admin/docs`、`GET /admin/users`、`POST /admin/users`、`DELETE /admin/users/:id`、`PUT /admin/users/:id/role`、`GET|POST /admin/invites`、`DELETE /admin/invites/:id`、`GET|PUT /admin/settings`、`GET /admin/logs`、`GET|POST /admin/notices`、`DELETE /admin/notices/:id` |
+| 管理 | `GET /admin/stats`、`GET /admin/dashboard`、`GET /admin/docs`、`GET /admin/users`、`POST /admin/users`、`DELETE /admin/users/:id`、`PUT /admin/users/:id/role`、`GET|POST /admin/invites`、`DELETE /admin/invites/:id`、`GET|PUT /admin/settings`、`GET /admin/logs`、`GET|POST /admin/notices`、`DELETE /admin/notices/:id`、`GET /admin/export` |
 
 ## 一些实现约定
 
