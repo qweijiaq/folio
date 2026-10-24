@@ -123,6 +123,7 @@ func (a *API) Routes(r *gin.Engine) {
 	authed.DELETE("/favorite-folders/:id", a.FavoriteFolderDelete)
 	authed.GET("/ai/status", a.StaffOnly(), a.AIStatus)
 	authed.POST("/ai/analyze", a.StaffOnly(), a.AIAnalyze)
+	authed.POST("/ai/ask", a.AIAsk)
 	authed.GET("/inbox", a.Inbox)
 
 	authed.POST("/users/:username/follow", a.FollowUser)

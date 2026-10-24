@@ -20,6 +20,7 @@ const routes = [
     meta: { title: '写作', auth: true, staff: true }
   },
   { path: '/messages', name: 'messages', component: () => import('../views/Messages.vue'), meta: { title: '消息', auth: true } },
+  { path: '/ask', name: 'ask', component: () => import('../views/Ask.vue'), meta: { title: '问 AI', auth: true } },
   { path: '/me', name: 'me', component: () => import('../views/Me.vue'), meta: { title: '我的', auth: true } },
   {
     path: '/admin',

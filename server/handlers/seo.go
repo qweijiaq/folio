@@ -206,6 +206,7 @@ func (a *API) Robots(c *gin.Context) {
 		"Disallow: /register",
 		"Disallow: /forgot",
 		"Disallow: /search",
+		"Disallow: /ask",
 		"",
 		"Sitemap: " + base + "/sitemap.xml",
 		"",
@@ -320,6 +321,9 @@ func (a *API) pageMetaFor(c *gin.Context, path string) pageMeta {
 				},
 			}
 		}
+	case strings.HasPrefix(path, "/ask"):
+		meta.Title = "问 AI"
+		meta.NoIndex = true
 	case strings.HasPrefix(path, "/login"), strings.HasPrefix(path, "/register"), strings.HasPrefix(path, "/forgot"),
 		strings.HasPrefix(path, "/me"), strings.HasPrefix(path, "/write"), strings.HasPrefix(path, "/messages"), strings.HasPrefix(path, "/admin"):
 		meta.NoIndex = true

@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -1699,5 +1700,63 @@ func TestRevisionsAndExport(t *testing.T) {
 	status, _, _ = s.raw(t, "GET", "/api/admin/export", readerToken)
 	if status != http.StatusForbidden {
 		t.Fatalf("读者不应能导出内容, 实际 %d", status)
+	}
+}
+
+func TestAIAskUsesUserKey(t *testing.T) {
+	var seenKey, seenBody string
+	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seenKey = r.Header.Get("x-api-key")
+		body, _ := io.ReadAll(r.Body)
+		seenBody = string(body)
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"id":"msg_qa","type":"message","role":"assistant","model":"claude-sonnet-5-5","content":[{"type":"text","text":"这是基于知识库的回答。"}],"stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":10,"output_tokens":10}}`)
+	}))
+	defer fake.Close()
+
+	s := newTestAPI(t, func(cfg *config.Config) {
+		cfg.AIAPIKey = "site-key-must-not-be-used"
+		cfg.AIBaseURL = fake.URL
+	})
+	ownerToken, _ := s.register(t, "qaowner")
+	readerToken, _ := s.register(t, "qareader")
+	status, created := s.do(t, "POST", "/api/docs", ownerToken, map[string]any{
+		"kind": "article", "title": "知识库使用指南", "content": "这篇内容介绍知识库的整理方式。", "status": "published",
+	})
+	if status != http.StatusCreated {
+		t.Fatalf("创建问答资料失败: %d %v", status, created)
+	}
+
+	status, _ = s.do(t, "POST", "/api/ai/ask", readerToken, map[string]string{
+		"question": "知识库怎么整理？", "model": "claude-sonnet-5-5",
+	})
+	if status != http.StatusBadRequest {
+		t.Fatalf("未提供用户 Key 时应拒绝，实际 %d", status)
+	}
+	if seenKey != "" {
+		t.Fatalf("本站 Key 不应被用于问答: %s", seenKey)
+	}
+
+	status, answer := s.do(t, "POST", "/api/ai/ask", readerToken, map[string]string{
+		"question": "知识库怎么整理？", "apiKey": "user-secret-key", "model": "claude-sonnet-5-5",
+	})
+	if status != http.StatusOK {
+		t.Fatalf("AI 问答失败: %d %v", status, answer)
+	}
+	if answer["answer"] != "这是基于知识库的回答。" || len(list(answer, "sources")) != 1 {
+		t.Fatalf("AI 问答结果不正确: %v", answer)
+	}
+	if seenKey != "user-secret-key" {
+		t.Fatalf("应使用用户提供的 Key，实际 %q", seenKey)
+	}
+	if !strings.Contains(seenBody, "知识库") {
+		t.Fatalf("请求上下文没有检索到资料: %s", seenBody)
+	}
+
+	status, _ = s.do(t, "POST", "/api/ai/ask", "", map[string]string{
+		"question": "知识库怎么整理？", "apiKey": "user-secret-key", "model": "claude-sonnet-5-5",
+	})
+	if status != http.StatusUnauthorized {
+		t.Fatalf("未登录不应能使用 AI 问答，实际 %d", status)
 	}
 }

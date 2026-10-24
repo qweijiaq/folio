@@ -129,6 +129,7 @@ onBeforeUnmount(() => {
           >
             热门
           </RouterLink>
+          <RouterLink v-if="auth.user" to="/ask" class="nav-link" active-class="is-active">问 AI</RouterLink>
         </nav>
 
         <div class="header-actions">
@@ -175,6 +176,9 @@ onBeforeUnmount(() => {
                 <RouterLink to="/messages" class="dropdown-item">
                   <Icon name="message" :size="16" /> 消息
                   <span v-if="unreadTotal" class="inline-badge">{{ unreadTotal }}</span>
+                </RouterLink>
+                <RouterLink to="/ask" class="dropdown-item">
+                  <Icon name="spark" :size="16" /> 问 AI
                 </RouterLink>
                 <button class="dropdown-item dropdown-item--danger" type="button" @click="doLogout">
                   <Icon name="logout" :size="16" /> 退出登录
@@ -232,6 +236,7 @@ onBeforeUnmount(() => {
               <RouterLink v-if="staff" to="/write">写文章</RouterLink>
               <RouterLink v-if="staff" to="/admin">管理后台</RouterLink>
               <RouterLink to="/messages">消息</RouterLink>
+              <RouterLink v-if="auth.user" to="/ask">问 AI</RouterLink>
               <RouterLink to="/me">我的主页</RouterLink>
             </div>
           </div>

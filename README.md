@@ -12,6 +12,7 @@
 - **三种数据模式**：SQLite（默认）、MySQL、进程内内存 Mock。Redis 可选，用于登出黑名单与浏览量去重。图片默认落本地磁盘，也可以切换到七牛云。
 - **保留内容能力**：正文图片上传与图库、粘贴/拖拽插图、文章分类、文章推荐、收藏夹分组、浏览历史、评论、点赞、收藏、关注、私信、通知都已恢复。
 - **邮箱能力**：配置 SMTP 后支持邮箱验证码注册、验证码登录、绑定/更换邮箱和自助找回密码。
+- **AI 问答**：登录用户可以使用自己的 Anthropic API Key 向站内文章与文档提问，回答会带回引用；本站不提供、不保存 Key。
 - **站点设置与审计**：超级管理员可以在后台修改站点名称、描述、维护者、注册开关和登录图形验证码；登录、内容、分类、图片、角色等关键动作都会写入操作日志。
 - **隐私与消息偏好**：每个人都可以决定是否公开关注/粉丝列表、是否接收私信和点赞/评论通知，并选择公开主页的封面样式。
 - **删繁就简**：去掉复杂的角色表、文档权限、文档密码与试看、审核流、Banner、Elasticsearch；只保留一个极简的三级角色字段。
@@ -147,6 +148,7 @@ cd web && npm install && npm run dev
 | 能力 | 超级管理员 | 管理员 | 读者 |
 | --- | --- | --- | --- |
 | 阅读、评论、点赞、收藏、关注、私信 | ✓ | ✓ | ✓ |
+| 使用自己的 API Key 进行 AI 问答 | ✓ | ✓ | ✓ |
 | 上传图片（正文或私信） | ✓ | ✓ | ✓ |
 | 发布、编辑、删除自己的内容 | ✓ | ✓ | — |
 | 编辑、删除任何人的内容 | ✓ | — | — |
@@ -366,6 +368,17 @@ FOLIO_QQ_REDIRECT=http://localhost:8080/api/auth/qq/callback
 
 流程是服务端回调：QQ 授权后跳回 `/api/auth/qq/callback`，服务端校验签名与 state，再用 5 分钟有效的一次性票据把浏览器送回 `/login` 并换取登录 token，token 不出现在 URL 里。本地 Vite 开发时把 `FOLIO_WEB_URL` 设为 `http://localhost:5173`；Docker 或同源部署留空即可。
 
+## AI 问答（用户自备 Key）
+
+`/ask` 页面允许任何登录用户向站内知识库提问：
+
+- 用户必须自己填写 Anthropic API Key，**本站不提供 Key，也不会用站点的 `FOLIO_AI_API_KEY` 代替**；
+- Key 只保存在当前浏览器标签页的 sessionStorage，提交时发送到服务端用于这一次请求，不写入数据库、不写日志；
+- 服务端先按问题检索已发布文章/文档，截取相关段落作为上下文，再调用 Anthropic；
+- 回答要求只依据站内资料，并返回来源列表；资料不足时会明确说明没有找到；
+- 可选模型：Claude Sonnet 5.5（默认）、Opus 5.5、Haiku 5.5；
+- 如果通过反向代理部署，请使用 HTTPS，避免 Key 在传输过程中暴露。
+
 ## 隐私与消息偏好
 
 「我的空间 → 隐私与消息」里可以设置：
@@ -488,6 +501,7 @@ FOLIO_SITE_URL=https://your-domain.com
 - `/u/:username` 公开主页：文章、文档、关注、粉丝、公开收藏夹和作者置顶文章；可按隐私设置隐藏关注/粉丝/收藏，并支持封面、紧凑、纯文字三种头部样式
 - `/write`、`/write/:id` 编辑器：Markdown 分栏预览、图片上传/粘贴/拖拽、分类、自动封面预览、标签、评论开关、历史版本、草稿/发布、文档树父级与排序（仅超级管理员和管理员）
 - `/messages` 私信与通知：会话列表、WebSocket 实时消息、图片与表情、轮询兜底、全站公告与通知已读
+- `/ask` 问 AI：用户自带 Anthropic API Key，检索站内资料后回答并给出引用
 - `/me` 我的空间：资料、密码、隐私与消息、最近登录记录、收藏夹、浏览历史；管理员额外看到自己的文章与文档，并可以把一篇文章置顶到公开主页
 - `/admin` 管理后台：概览、数据看板、内容管理、分类管理、图片管理、全站通知；内容管理支持导出全部 Markdown；超级管理员额外拥有用户与权限、邀请注册、站点设置和操作日志
 - `/login`、`/register` 登录注册：密码登录、邮箱验证码登录、QQ 登录、注册；关闭注册后可通过一次性邀请链接注册
@@ -520,7 +534,7 @@ FOLIO_SITE_URL=https://your-domain.com
 | 内容 | `GET /docs`、`GET /docs/:id`、`GET /docs/:id/related`、`GET /docs/:id/revisions`、`GET /docs/:id/revisions/:revisionID`、`POST /docs/:id/revisions/:revisionID/restore`、`POST /docs`、`PUT /docs/:id`、`DELETE /docs/:id`、`GET /doc-tree` |
 | 分类 | `GET /categories`、`POST /categories`、`PUT /categories/:id`、`DELETE /categories/:id` |
 | 图片 | `POST /images`、`GET /images`、`DELETE /images/:id`；本地模式通过 `/uploads/*` 访问，七牛模式返回云存储 URL |
-| AI | `GET /ai/status`、`POST /ai/analyze`（仅管理员） |
+| AI | `GET /ai/status`、`POST /ai/analyze`（仅管理员）、`POST /ai/ask`（登录用户，需自带 Key） |
 | 互动 | `POST /docs/:id/like`、`POST /docs/:id/favorite`、`GET|POST /docs/:id/comments`、`POST /comments/:id/like` |
 | 消息 | `GET /messages/conversations`、`GET|POST /messages/with/:username`、`GET /notifications`、`GET /notices`、`POST /notices/read`、`GET /ws`（WebSocket，token 查询参数） |
 | 我的 | `GET /me/docs`、`GET /me/favorites`、`GET|DELETE /me/history`、`GET|POST /favorite-folders`、`PUT|DELETE /favorite-folders/:id`、`PUT /me`、`PUT /me/password`、`GET|PUT /me/settings`、`PUT /me/featured-doc`、`GET /me/login-records`、`GET /inbox` |
