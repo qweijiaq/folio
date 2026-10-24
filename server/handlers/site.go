@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"sort"
+	"strings"
 
 	"folio/server/models"
 
@@ -16,9 +17,13 @@ type tagCount struct {
 	Count int    `json:"count"`
 }
 
-func (a *API) tagStats(limit int) []tagCount {
+func (a *API) tagStats(limit int, kind string) []tagCount {
 	var raw []string
-	a.DB.Model(&models.Document{}).Where("status = ?", models.StatusPublished).Pluck("tags", &raw)
+	q := a.DB.Model(&models.Document{}).Where("status = ?", models.StatusPublished)
+	if kind == models.KindArticle || kind == models.KindDoc {
+		q = q.Where("kind = ?", kind)
+	}
+	q.Pluck("tags", &raw)
 	counts := map[string]int{}
 	for _, s := range raw {
 		var tags []string
@@ -46,7 +51,11 @@ func (a *API) tagStats(limit int) []tagCount {
 }
 
 func (a *API) Tags(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"items": a.tagStats(60)})
+	kind := strings.ToLower(strings.TrimSpace(c.Query("kind")))
+	if kind != models.KindArticle && kind != models.KindDoc {
+		kind = ""
+	}
+	c.JSON(http.StatusOK, gin.H{"items": a.tagStats(60, kind)})
 }
 
 func (a *API) SiteHome(c *gin.Context) {
@@ -92,7 +101,7 @@ func (a *API) SiteHome(c *gin.Context) {
 		"stats":  gin.H{"articles": articles, "docs": docs, "users": users, "views": views},
 		"recent": recent,
 		"docs":   recentDocs,
-		"tags":   a.tagStats(16),
+		"tags":   a.tagStats(16, ""),
 		"people": people,
 	}
 	if featured.ID != 0 {

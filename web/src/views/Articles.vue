@@ -61,7 +61,7 @@ async function load() {
 
 async function loadTags() {
   try {
-    const data = await api.get('/tags')
+    const data = await api.get('/tags', { kind: 'article' })
     tags.value = data.items.slice(0, 14)
   } catch {
     /* ignore */
@@ -143,6 +143,7 @@ onMounted(() => {
             class="tag"
             :class="{ 'tag--active': activeTag === tag.name }"
             type="button"
+            :title="`全部文章中使用「${tag.name}」的数量`"
             @click="setTag(tag.name)"
           >
             {{ tag.name }}

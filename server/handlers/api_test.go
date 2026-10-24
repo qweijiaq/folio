@@ -2343,3 +2343,42 @@ func TestQQLoginSwitch(t *testing.T) {
 		t.Fatalf("QQ 登录状态应重新开启: %d %v", status, data)
 	}
 }
+
+func TestTagCountsByKind(t *testing.T) {
+	s := newTestAPI(t)
+	token, _ := s.register(t, "tagcountowner")
+	for _, doc := range []map[string]any{
+		{"kind": "article", "title": "带共用标签的文章", "content": "正文", "tags": []string{"共用"}, "status": "published"},
+		{"kind": "doc", "title": "带共用标签的文档", "content": "正文", "tags": []string{"共用"}, "status": "published"},
+		{"kind": "article", "title": "只有文章标签", "content": "正文", "tags": []string{"只文章"}, "status": "published"},
+	} {
+		status, created := s.do(t, "POST", "/api/docs", token, doc)
+		if status != http.StatusCreated {
+			t.Fatalf("创建标签测试内容失败: %d %v", status, created)
+		}
+	}
+	counts := func(query string) map[string]int {
+		status, data := s.do(t, "GET", "/api/tags"+query, "", nil)
+		if status != http.StatusOK {
+			t.Fatalf("读取标签失败: %d %v", status, data)
+		}
+		out := map[string]int{}
+		for _, item := range list(data, "items") {
+			tag := item.(map[string]any)
+			out[tag["name"].(string)] = int(number(tag["count"]))
+		}
+		return out
+	}
+	articles := counts("?kind=article")
+	if articles["共用"] != 1 || articles["只文章"] != 1 {
+		t.Fatalf("文章标签计数不正确: %v", articles)
+	}
+	docs := counts("?kind=doc")
+	if docs["共用"] != 1 || docs["只文章"] != 0 {
+		t.Fatalf("文档标签计数不正确: %v", docs)
+	}
+	all := counts("")
+	if all["共用"] != 2 {
+		t.Fatalf("全站标签计数不正确: %v", all)
+	}
+}
