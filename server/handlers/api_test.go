@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -27,7 +28,7 @@ type testAPI struct {
 	uploadDir string
 }
 
-func newTestAPI(t *testing.T) *testAPI {
+func newTestAPI(t *testing.T, configure ...func(*config.Config)) *testAPI {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 	uploadDir := filepath.Join(t.TempDir(), "uploads")
@@ -40,6 +41,9 @@ func newTestAPI(t *testing.T) *testAPI {
 		SiteOwner:   "tester",
 		UploadDir:   uploadDir,
 		MaxUploadMB: 10,
+	}
+	for _, fn := range configure {
+		fn(&cfg)
 	}
 	gdb, err := db.Open(cfg)
 	if err != nil {
@@ -573,6 +577,52 @@ func TestHistoryAndRelated(t *testing.T) {
 	status, history = s.do(t, "GET", "/api/me/history", readerToken, nil)
 	if status != http.StatusOK || len(list(history, "items")) != 0 {
 		t.Fatalf("清空后历史不为空: %d %v", status, history)
+	}
+}
+
+func TestAIAnalysis(t *testing.T) {
+	payloadText := `{"title":"测试标题","abstract":"测试摘要","tags":["Go","测试"]}`
+	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"id":"msg_test","type":"message","role":"assistant","model":"claude-opus-5-5","content":[{"type":"text","text":%s}],"stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":10,"output_tokens":20}}`, strconv.Quote(payloadText))
+	}))
+	defer fake.Close()
+
+	s := newTestAPI(t, func(cfg *config.Config) {
+		cfg.AIAPIKey = "test-key"
+		cfg.AIBaseURL = fake.URL
+		cfg.AIModel = "claude-opus-5-5"
+	})
+	ownerToken, _ := s.register(t, "aiowner")
+	readerToken, _ := s.register(t, "aireader")
+
+	status, aiStatus := s.do(t, "GET", "/api/ai/status", ownerToken, nil)
+	if status != http.StatusOK || aiStatus["enabled"] != true {
+		t.Fatalf("AI 状态异常: %d %v", status, aiStatus)
+	}
+	status, _ = s.do(t, "GET", "/api/ai/status", readerToken, nil)
+	if status != http.StatusForbidden {
+		t.Fatalf("读者不应能访问 AI 状态，实际 %d", status)
+	}
+	status, result := s.do(t, "POST", "/api/ai/analyze", ownerToken, map[string]any{
+		"title":   "",
+		"content": "这是一篇关于 Go 与个人知识库的文章，正文足够长，可以用来测试 AI 摘要接口是否正常工作。",
+	})
+	if status != http.StatusOK || result["title"] != "测试标题" || len(result["tags"].([]any)) != 2 {
+		t.Fatalf("AI 摘要结果异常: %d %v", status, result)
+	}
+	status, _ = s.do(t, "POST", "/api/ai/analyze", readerToken, map[string]any{
+		"content": "这是一篇关于 Go 与个人知识库的文章，正文足够长，可以用来测试 AI 摘要接口是否正常工作。",
+	})
+	if status != http.StatusForbidden {
+		t.Fatalf("读者不应能使用 AI 摘要，实际 %d", status)
+	}
+
+	plain := newTestAPI(t)
+	plainToken, _ := plain.register(t, "plainowner")
+	status, plainStatus := plain.do(t, "GET", "/api/ai/status", plainToken, nil)
+	if status != http.StatusOK || plainStatus["enabled"] != false {
+		t.Fatalf("未配置时应为 disabled: %d %v", status, plainStatus)
 	}
 }
 

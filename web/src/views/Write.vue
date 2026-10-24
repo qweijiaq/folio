@@ -34,6 +34,8 @@ const loading = ref(true)
 const saving = ref('')
 const preview = ref(true)
 const uploading = ref(false)
+const aiEnabled = ref(false)
+const aiLoading = ref(false)
 
 const editingId = computed(() => (route.params.id ? Number(route.params.id) : 0))
 const isEdit = computed(() => Boolean(editingId.value))
@@ -68,6 +70,11 @@ async function load() {
       api.get('/categories')
     ])
     categories.value = categoryData.items
+    api.get('/ai/status').then((data) => {
+      aiEnabled.value = Boolean(data.enabled)
+    }).catch(() => {
+      aiEnabled.value = false
+    })
     const map = new Map()
     ;[...treeData.items, ...mine.items].forEach((item) => map.set(item.id, item))
     parentItems.value = flattenTree(buildTree([...map.values()]))
@@ -215,6 +222,43 @@ function onDrop(event) {
 function onDragOver(event) {
   if (Array.from(event.dataTransfer?.types || []).includes('Files')) {
     event.preventDefault()
+  }
+}
+
+async function aiAnalyze() {
+  if (!form.content.trim()) {
+    toast('先写一点正文，再让 AI 提炼')
+    return
+  }
+  aiLoading.value = true
+  try {
+    const data = await api.post('/ai/analyze', { content: form.content, title: form.title })
+    const changed = []
+    if (!form.title.trim() && data.title) {
+      form.title = data.title
+      changed.push('标题')
+    }
+    if (!form.abstract.trim() && data.abstract) {
+      form.abstract = data.abstract
+      changed.push('摘要')
+    }
+    if (Array.isArray(data.tags) && data.tags.length) {
+      let added = 0
+      for (const tag of data.tags) {
+        if (form.tags.length >= 6) break
+        const value = String(tag).trim()
+        if (!value) continue
+        if (form.tags.some((item) => item.toLowerCase() === value.toLowerCase())) continue
+        form.tags.push(value)
+        added += 1
+      }
+      if (added) changed.push(`${added} 个标签`)
+    }
+    toast(changed.length ? `AI 已生成${changed.join('、')}` : 'AI 没有需要补充的内容')
+  } catch (err) {
+    toastError(err)
+  } finally {
+    aiLoading.value = false
   }
 }
 
@@ -415,6 +459,9 @@ onBeforeUnmount(() => {
             <button type="button" title="链接" @click="insertLink">链接</button>
             <button type="button" title="上传图片（也支持粘贴、拖拽）" :disabled="uploading" @click="fileInput?.click()">
               {{ uploading ? '上传中…' : '图片' }}
+            </button>
+            <button v-if="aiEnabled" type="button" title="根据正文生成标题、摘要和标签" :disabled="aiLoading" @click="aiAnalyze">
+              {{ aiLoading ? '思考中…' : 'AI 摘要' }}
             </button>
             <button type="button" title="无序列表" @click="prefix('- ')">列表</button>
             <button type="button" title="代码块" @click="insertSnippet('\n```go\n\n```\n')">代码块</button>

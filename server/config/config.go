@@ -24,6 +24,11 @@ type Config struct {
 	UploadDir   string
 	MaxUploadMB int
 
+	// AI（可选，官方 Anthropic API）
+	AIAPIKey  string
+	AIModel   string
+	AIBaseURL string
+
 	// Redis 可选：地址为空时自动降级为无缓存模式
 	RedisAddr     string
 	RedisPassword string
@@ -35,6 +40,10 @@ func getenv(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+func (c Config) AIEnabled() bool {
+	return strings.TrimSpace(c.AIAPIKey) != ""
 }
 
 func Load() Config {
@@ -75,6 +84,10 @@ func Load() Config {
 
 		UploadDir:   getenv("FOLIO_UPLOAD_DIR", "./data/uploads"),
 		MaxUploadMB: uploadMB,
+
+		AIAPIKey:  getenv("FOLIO_AI_API_KEY", getenv("ANTHROPIC_API_KEY", "")),
+		AIModel:   getenv("FOLIO_AI_MODEL", "claude-opus-5-5"),
+		AIBaseURL: getenv("FOLIO_AI_BASE_URL", ""),
 
 		RedisAddr:     getenv("FOLIO_REDIS_ADDR", ""),
 		RedisPassword: getenv("FOLIO_REDIS_PASSWORD", ""),

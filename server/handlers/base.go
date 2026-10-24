@@ -15,6 +15,8 @@ import (
 	"folio/server/config"
 	"folio/server/models"
 
+	"github.com/anthropics/anthropic-sdk-go"
+	"github.com/anthropics/anthropic-sdk-go/option"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
@@ -25,13 +27,23 @@ type API struct {
 	DB    *gorm.DB
 	Cfg   config.Config
 	Cache *cache.Cache
+	AI    *anthropic.Client
 }
 
 func New(db *gorm.DB, cfg config.Config, rc *cache.Cache) *API {
 	if rc == nil {
 		rc = &cache.Cache{}
 	}
-	return &API{DB: db, Cfg: cfg, Cache: rc}
+	var aiClient *anthropic.Client
+	if cfg.AIEnabled() {
+		options := []option.RequestOption{option.WithAPIKey(cfg.AIAPIKey)}
+		if strings.TrimSpace(cfg.AIBaseURL) != "" {
+			options = append(options, option.WithBaseURL(strings.TrimRight(cfg.AIBaseURL, "/")))
+		}
+		client := anthropic.NewClient(options...)
+		aiClient = &client
+	}
+	return &API{DB: db, Cfg: cfg, Cache: rc, AI: aiClient}
 }
 
 func fail(c *gin.Context, status int, msg string) {

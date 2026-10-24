@@ -188,6 +188,9 @@ Go 服务会自动托管 `../web/dist`，访问 <http://localhost:8080> 即可�
 | `FOLIO_REDIS_DB` | `0` | Redis 库编号 |
 | `FOLIO_UPLOAD_DIR` | `./data/uploads` | 正文图片的保存目录 |
 | `FOLIO_UPLOAD_MAX_MB` | `10` | 单张图片大小上限（MB） |
+| `FOLIO_AI_API_KEY` | 空 | Anthropic API Key；留空则关闭 AI 摘要 |
+| `FOLIO_AI_MODEL` | `claude-opus-5-5` | AI 摘要使用的模型 |
+| `FOLIO_AI_BASE_URL` | 空 | 可选，Anthropic 兼容网关地址 |
 | `FOLIO_WEB` | `../web/dist` | 前端构建产物目录 |
 | `FOLIO_DEMO` | `1` | 是否在空库时写入演示数据；`0` 关闭 |
 | `FOLIO_SITE_NAME` | `知微` | 站点名 |
@@ -269,6 +272,20 @@ MySQL 与 SQLite 共用同一套模型和迁移代码；Redis 不保存业务数
 
 Docker 全栈使用独立的 `uploads-data` 卷保存图片，重建容器不会丢失。
 
+## AI 摘要（可选）
+
+编辑器里的「AI 摘要」按钮会用正文生成标题、摘要和标签。它通过官方 Anthropic Go SDK 调用 Messages API，默认模型是 `claude-opus-5-5`。
+
+- 配置 `FOLIO_AI_API_KEY` 后启用；不配置时按钮不会出现，其他功能不受影响；
+- 只会补空字段，不会覆盖你已经写好的标题、摘要或标签；
+- 正文会发送到 Anthropic（或你通过 `FOLIO_AI_BASE_URL` 指定的兼容网关）；
+- 正文少于 20 字或超过 6 万字时会拒绝请求，避免误触和过长计费；
+- 只有超级管理员和管理员可以使用。
+
+```bash
+FOLIO_AI_API_KEY=sk-ant-... FOLIO_AI_MODEL=claude-opus-5-5 ./dev.sh
+```
+
 ## 页面与功能
 
 - `/` 首页：首屏、置顶文章、最近文章、知识库入口、标签与最近加入
@@ -302,6 +319,7 @@ Docker 全栈使用独立的 `uploads-data` 卷保存图片，重建容器不会
 | 内容 | `GET /docs`、`GET /docs/:id`、`GET /docs/:id/related`、`POST /docs`、`PUT /docs/:id`、`DELETE /docs/:id`、`GET /doc-tree` |
 | 分类 | `GET /categories`、`POST /categories`、`PUT /categories/:id`、`DELETE /categories/:id` |
 | 图片 | `POST /images`、`GET /images`、`DELETE /images/:id`，文件通过 `/uploads/*` 访问 |
+| AI | `GET /ai/status`、`POST /ai/analyze`（仅管理员） |
 | 互动 | `POST /docs/:id/like`、`POST /docs/:id/favorite`、`GET|POST /docs/:id/comments`、`POST /comments/:id/like` |
 | 消息 | `GET /messages/conversations`、`GET|POST /messages/with/:username`、`GET /notifications` |
 | 我的 | `GET /me/docs`、`GET /me/favorites`、`GET|DELETE /me/history`、`GET|POST /favorite-folders`、`PUT|DELETE /favorite-folders/:id`、`PUT /me`、`PUT /me/password`、`GET /inbox` |

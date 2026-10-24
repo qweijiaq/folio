@@ -46,6 +46,8 @@ services:
       FOLIO_MYSQL_DSN: "folio:folio_pass@tcp(db:3306)/folio?charset=utf8mb4&parseTime=True&loc=Local"
       FOLIO_UPLOAD_DIR: "/app/data/uploads"
       FOLIO_REDIS_ADDR: "redis:6379"
+      FOLIO_AI_API_KEY: "${FOLIO_AI_API_KEY:-}"
+      FOLIO_AI_MODEL: "${FOLIO_AI_MODEL:-claude-opus-5-5}"
       FOLIO_SECRET: "${FOLIO_SECRET:-please-change-this-secret}"
       FOLIO_DEMO: "${FOLIO_DEMO:-1}"
       FOLIO_SITE_NAME: "知微"
