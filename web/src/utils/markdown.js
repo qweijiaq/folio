@@ -43,7 +43,7 @@ md.renderer.rules.fence = (tokens, idx, options, env, self) => {
     body = md.utils.escapeHtml(token.content)
   }
   const label = lang ? md.utils.escapeHtml(lang) : 'text'
-  return `<div class="code-block"><div class="code-head"><span class="code-lang">${label}</span><button class="code-copy" type="button">复制</button></div><pre class="hljs"><code class="language-${label}">${body}</code></pre></div>`
+  return `<div class="code-block"><div class="code-head"><span class="code-lang">${label}</span><span class="code-actions"><button class="code-toggle" type="button" aria-expanded="true">收起</button><button class="code-copy" type="button">复制</button></span></div><pre class="hljs"><code class="language-${label}">${body}</code></pre></div>`
 }
 
 md.renderer.rules.link_open = (tokens, idx, options, env, self) => {

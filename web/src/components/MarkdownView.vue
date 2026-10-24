@@ -16,6 +16,15 @@ watch(
 )
 
 function onClick(event) {
+  const toggle = event.target.closest('.code-toggle')
+  if (toggle) {
+    const block = toggle.closest('.code-block')
+    if (!block) return
+    const collapsed = block.classList.toggle('is-collapsed')
+    toggle.textContent = collapsed ? '展开' : '收起'
+    toggle.setAttribute('aria-expanded', String(!collapsed))
+    return
+  }
   const button = event.target.closest('.code-copy')
   if (!button) return
   const code = button.closest('.code-block')?.querySelector('code')?.innerText || ''

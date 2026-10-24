@@ -306,3 +306,151 @@
     padding: 7px 12px;
   }
 }
+
+/* ---------- 代码块主题与折叠 ---------- */
+
+:root {
+  --code-bg: #ffffff;
+  --code-head-bg: #f6f4ed;
+  --code-border: #d7d4c9;
+  --code-head-text: #6f6d62;
+  --code-text: #1e1e1a;
+  --code-button-border: #d7d4c9;
+  --code-button-text: #56554d;
+  --code-button-hover: #2f4f9e;
+  --hl-comment: #807a6e;
+  --hl-keyword: #a64232;
+  --hl-string: #3f6b57;
+  --hl-number: #8a5a1f;
+  --hl-title: #2f4f9e;
+  --hl-type: #7b4f7a;
+  --hl-variable: #57564f;
+  --hl-tag: #4f5d6b;
+  --hl-deletion: #a64232;
+}
+
+html[data-theme="dark"] {
+  --code-bg: #1e1c19;
+  --code-head-bg: #26231f;
+  --code-border: #2f2c27;
+  --code-head-text: #9d968a;
+  --code-text: #e7e0d2;
+  --code-button-border: #3a352e;
+  --code-button-text: #b8b0a2;
+  --code-button-hover: #e7e0d2;
+  --hl-comment: #7f786c;
+  --hl-keyword: #e58e73;
+  --hl-string: #a9c18f;
+  --hl-number: #d9b26a;
+  --hl-title: #8fb3c9;
+  --hl-type: #c9a3c0;
+  --hl-variable: #d7c6a3;
+  --hl-tag: #9aa6b2;
+  --hl-deletion: #d97b6c;
+}
+
+.code-block {
+  border-color: var(--code-border);
+  background: var(--code-bg);
+}
+
+.code-head {
+  border-bottom-color: var(--code-border);
+  background: var(--code-head-bg);
+  color: var(--code-head-text);
+}
+
+.code-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.code-copy,
+.code-toggle {
+  padding: 3px 10px;
+  border: 1px solid var(--code-button-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--code-button-text);
+  font-family: var(--sans);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.code-copy:hover,
+.code-toggle:hover {
+  border-color: var(--code-button-hover);
+  color: var(--code-button-hover);
+}
+
+.code-block.is-collapsed pre {
+  display: none;
+}
+
+.code-block.is-collapsed .code-head {
+  border-bottom-color: transparent;
+}
+
+.prose pre {
+  background: var(--code-bg);
+  color: var(--code-text);
+}
+
+.hljs-comment,
+.hljs-quote {
+  color: var(--hl-comment);
+}
+
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-literal,
+.hljs-section,
+.hljs-link,
+.hljs-doctag {
+  color: var(--hl-keyword);
+}
+
+.hljs-string,
+.hljs-attribute,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-addition,
+.hljs-regexp {
+  color: var(--hl-string);
+}
+
+.hljs-number,
+.hljs-meta,
+.hljs-built_in,
+.hljs-builtin-name,
+.hljs-params {
+  color: var(--hl-number);
+}
+
+.hljs-title,
+.hljs-name,
+.hljs-selector-id,
+.hljs-selector-class {
+  color: var(--hl-title);
+}
+
+.hljs-type,
+.hljs-class .hljs-title,
+.hljs-title.class_ {
+  color: var(--hl-type);
+}
+
+.hljs-variable,
+.hljs-template-variable,
+.hljs-attr {
+  color: var(--hl-variable);
+}
+
+.hljs-tag {
+  color: var(--hl-tag);
+}
+
+.hljs-deletion {
+  color: var(--hl-deletion);
+}
