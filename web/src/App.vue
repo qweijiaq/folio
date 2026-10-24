@@ -40,6 +40,12 @@ function onScroll() {
   scrolled.value = window.scrollY > 8
 }
 
+function onNavClick(path) {
+  if (route.path === path) {
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+}
+
 function onKeydown(event) {
   const tag = (event.target.tagName || '').toLowerCase()
   const typing = tag === 'input' || tag === 'textarea' || tag === 'select' || event.target.isContentEditable
@@ -110,14 +116,16 @@ onBeforeUnmount(() => {
             to="/articles"
             class="nav-link"
             :class="{ 'is-active': route.path.startsWith('/articles') && !(route.path === '/articles' && route.query.sort === 'popular') }"
+            @click="onNavClick('/articles')"
           >
             文章
           </RouterLink>
-          <RouterLink to="/docs" class="nav-link" active-class="is-active">文档</RouterLink>
+          <RouterLink to="/docs" class="nav-link" active-class="is-active" @click="onNavClick('/docs')">文档</RouterLink>
           <RouterLink
             to="/articles?sort=popular"
             class="nav-link"
             :class="{ 'is-active': route.path === '/articles' && route.query.sort === 'popular' }"
+            @click="onNavClick('/articles')"
           >
             热门
           </RouterLink>
@@ -198,11 +206,7 @@ onBeforeUnmount(() => {
     </header>
 
     <main id="main" class="site-main">
-      <RouterView v-slot="{ Component }">
-        <Transition name="page" mode="out-in">
-          <component :is="Component" :key="route.path" />
-        </Transition>
-      </RouterView>
+      <RouterView />
     </main>
 
     <footer class="site-footer">
