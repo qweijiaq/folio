@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
 	"strings"
 
@@ -175,7 +176,7 @@ func (a *API) AdminDeleteUser(c *gin.Context) {
 
 // purgeUser 删除用户及其全部痕迹：文档树、评论、互动、关注、私信和通知。
 func (a *API) purgeUser(userID uint) error {
-	var imagePaths []string
+	var images []models.Image
 	err := a.DB.Transaction(func(tx *gorm.DB) error {
 		// 该用户创建的文档（含子文档）
 		var ownDocs []uint
@@ -291,7 +292,7 @@ func (a *API) purgeUser(userID uint) error {
 			tx.Model(&models.Comment{}).Where("id = ?", commentID).UpdateColumn("like_count", likes)
 		}
 
-		tx.Model(&models.Image{}).Where("user_id = ?", userID).Pluck("path", &imagePaths)
+		tx.Model(&models.Image{}).Where("user_id = ?", userID).Find(&images)
 		tx.Where("user_id = ?", userID).Delete(&models.Image{})
 
 		return tx.Delete(&models.User{}, userID).Error
@@ -299,8 +300,8 @@ func (a *API) purgeUser(userID uint) error {
 	if err != nil {
 		return err
 	}
-	for _, path := range imagePaths {
-		a.removeImageFileIfUnused(path)
+	for _, img := range images {
+		a.removeImageIfUnused(context.Background(), img.Provider, img.Path)
 	}
 	return nil
 }

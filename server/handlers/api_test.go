@@ -303,6 +303,16 @@ func TestUnifiedDocumentFlow(t *testing.T) {
 		t.Fatalf("删除后应返回 404，实际 %d", status)
 	}
 
+	pngData, err := base64.StdEncoding.DecodeString("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgwJ/lK3Q6wAAAABJRU5ErkJggg==")
+	if err != nil {
+		t.Fatalf("解码测试图片失败: %v", err)
+	}
+	status, bobImage := s.upload(t, bobToken, "file", "bob.png", pngData)
+	if status != http.StatusCreated {
+		t.Fatalf("测试用户上传图片失败: %d %v", status, bobImage)
+	}
+	bobImagePath := filepath.Join(s.uploadDir, strings.TrimPrefix(bobImage["url"].(string), "/uploads/"))
+
 	status, _ = s.do(t, "DELETE", "/api/admin/users/"+itoa(bobID), aliceToken, nil)
 	if status != http.StatusOK {
 		t.Fatalf("管理员删除用户失败: %d", status)
@@ -311,12 +321,15 @@ func TestUnifiedDocumentFlow(t *testing.T) {
 	if status != http.StatusNotFound {
 		t.Fatalf("删除用户后应返回 404，实际 %d", status)
 	}
-	for _, model := range []any{&models.FavoriteFolder{}, &models.ViewHistory{}, &models.UserSetting{}, &models.NoticeRead{}} {
+	for _, model := range []any{&models.FavoriteFolder{}, &models.ViewHistory{}, &models.UserSetting{}, &models.NoticeRead{}, &models.Image{}} {
 		var remaining int64
 		s.api.DB.Model(model).Where("user_id = ?", bobID).Count(&remaining)
 		if remaining != 0 {
 			t.Fatalf("删除用户后仍残留 %T: %d", model, remaining)
 		}
+	}
+	if _, err := os.Stat(bobImagePath); !os.IsNotExist(err) {
+		t.Fatalf("删除用户后图片文件仍然存在: %v", err)
 	}
 }
 
@@ -408,6 +421,9 @@ func TestImageUpload(t *testing.T) {
 	image, _ := first["image"].(map[string]any)
 	imageURL, _ := first["url"].(string)
 	imageID := uint(number(image["id"]))
+	if image["provider"] != "local" {
+		t.Fatalf("默认图片应存本地，实际 %v", image["provider"])
+	}
 	if !strings.HasPrefix(imageURL, "/uploads/") {
 		t.Fatalf("图片 URL 异常: %s", imageURL)
 	}

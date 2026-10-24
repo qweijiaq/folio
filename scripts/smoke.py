@@ -292,6 +292,10 @@ def main():
     )
     image_status, image_data = upload_image("/api/images", admin_token, "smoke.png", png)
     check("上传图片", image_status in (200, 201) and bool(image_data.get("url")), f"{image_status} {image_data}")
+    provider = image_data["image"].get("provider")
+    check("图片存储提供方", provider in ("local", "qiniu"), provider)
+    if provider == "local":
+        check("本地图片 URL", image_data["url"].startswith("/uploads/"), image_data["url"])
     image_id = image_data["image"]["id"]
     image_url = image_data["url"]
     image_fetch_status, image_content_type, _ = fetch_url(image_url)

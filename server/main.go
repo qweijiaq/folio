@@ -18,11 +18,17 @@ import (
 
 func main() {
 	cfg := config.Load()
+	if cfg.StorageProvider != "local" && cfg.StorageProvider != "qiniu" {
+		log.Fatalf("FOLIO_STORAGE 只能是 local 或 qiniu，当前为 %q", cfg.StorageProvider)
+	}
+	if cfg.StorageProvider == "qiniu" && !cfg.QiniuEnabled() {
+		log.Fatal("FOLIO_STORAGE=qiniu 需要配置 FOLIO_QINIU_ACCESS_KEY、FOLIO_QINIU_SECRET_KEY、FOLIO_QINIU_BUCKET、FOLIO_QINIU_DOMAIN")
+	}
 	gdb, err := db.Open(cfg)
 	if err != nil {
 		log.Fatalf("数据库初始化失败: %v", err)
 	}
-	log.Printf("数据库模式: %s", cfg.DBDriver)
+	log.Printf("数据库模式: %s，图片存储: %s", cfg.DBDriver, cfg.StorageProvider)
 
 	if cfg.Demo {
 		if err := seed.Run(gdb, cfg); err != nil {

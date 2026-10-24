@@ -146,7 +146,9 @@ type Image struct {
 	UserID   uint   `gorm:"index" json:"userID"`
 	User     User   `gorm:"foreignKey:UserID" json:"user"`
 	Filename string `gorm:"size:255" json:"filename"`
-	Path     string `gorm:"size:300" json:"-"`
+	Provider string `gorm:"size:16;index" json:"provider"`
+	Path     string `gorm:"size:512" json:"-"`
+	URL      string `gorm:"size:512" json:"-"`
 	MIME     string `gorm:"size:64" json:"mime"`
 	Size     int64  `json:"size"`
 	Hash     string `gorm:"size:64;index" json:"-"`

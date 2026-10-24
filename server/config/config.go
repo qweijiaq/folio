@@ -20,9 +20,17 @@ type Config struct {
 	DBPath   string
 	MySQLDSN string
 
-	// 上传
-	UploadDir   string
-	MaxUploadMB int
+	// 上传与对象存储：local（默认）| qiniu
+	StorageProvider string
+	UploadDir       string
+	MaxUploadMB     int
+
+	QiniuAccessKey string
+	QiniuSecretKey string
+	QiniuBucket    string
+	QiniuDomain    string
+	QiniuRegion    string
+	QiniuPrefix    string
 
 	// AI（可选，官方 Anthropic API）
 	AIAPIKey  string
@@ -75,6 +83,13 @@ func (c Config) AIEnabled() bool {
 	return strings.TrimSpace(c.AIAPIKey) != ""
 }
 
+func (c Config) QiniuEnabled() bool {
+	return strings.TrimSpace(c.QiniuAccessKey) != "" &&
+		strings.TrimSpace(c.QiniuSecretKey) != "" &&
+		strings.TrimSpace(c.QiniuBucket) != "" &&
+		strings.TrimSpace(c.QiniuDomain) != ""
+}
+
 func (c Config) QQEnabled() bool {
 	return strings.TrimSpace(c.QQAppID) != "" &&
 		strings.TrimSpace(c.QQAppKey) != "" &&
@@ -104,6 +119,7 @@ func Load() Config {
 	if uploadMB < 1 {
 		uploadMB = 10
 	}
+	provider := strings.ToLower(getenv("FOLIO_STORAGE", "local"))
 	smtpPort, _ := strconv.Atoi(getenv("FOLIO_SMTP_PORT", "587"))
 	if smtpPort <= 0 || smtpPort > 65535 {
 		smtpPort = 587
@@ -121,8 +137,16 @@ func Load() Config {
 		DBPath:   dbPath,
 		MySQLDSN: getenv("FOLIO_MYSQL_DSN", ""),
 
-		UploadDir:   getenv("FOLIO_UPLOAD_DIR", "./data/uploads"),
-		MaxUploadMB: uploadMB,
+		StorageProvider: provider,
+		UploadDir:       getenv("FOLIO_UPLOAD_DIR", "./data/uploads"),
+		MaxUploadMB:     uploadMB,
+
+		QiniuAccessKey: getenv("FOLIO_QINIU_ACCESS_KEY", ""),
+		QiniuSecretKey: getenv("FOLIO_QINIU_SECRET_KEY", ""),
+		QiniuBucket:    getenv("FOLIO_QINIU_BUCKET", ""),
+		QiniuDomain:    strings.TrimRight(getenv("FOLIO_QINIU_DOMAIN", ""), "/"),
+		QiniuRegion:    getenv("FOLIO_QINIU_REGION", ""),
+		QiniuPrefix:    strings.Trim(getenv("FOLIO_QINIU_PREFIX", "folio"), "/"),
 
 		AIAPIKey:  getenv("FOLIO_AI_API_KEY", getenv("ANTHROPIC_API_KEY", "")),
 		AIModel:   getenv("FOLIO_AI_MODEL", "claude-opus-5-5"),

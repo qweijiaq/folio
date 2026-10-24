@@ -1,12 +1,13 @@
 package handlers
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -29,10 +30,28 @@ func imageURL(path string) string {
 	return "/uploads/" + strings.TrimLeft(filepath.ToSlash(path), "/")
 }
 
+func (a *API) imageURLFor(img models.Image) string {
+	if img.Provider == "qiniu" {
+		if a.Storage.QiniuConfigured() {
+			return a.Storage.For("qiniu").URL(img.Path)
+		}
+		return img.URL
+	}
+	if img.URL != "" {
+		return img.URL
+	}
+	return imageURL(img.Path)
+}
+
 func (a *API) imagePayload(img models.Image) gin.H {
+	provider := img.Provider
+	if provider == "" {
+		provider = "local"
+	}
 	return gin.H{
 		"id":        img.ID,
-		"url":       imageURL(img.Path),
+		"url":       a.imageURLFor(img),
+		"provider":  provider,
 		"filename":  img.Filename,
 		"mime":      img.MIME,
 		"size":      img.Size,
@@ -103,38 +122,38 @@ func (a *API) ImageUpload(c *gin.Context) {
 		if existing.User.ID == 0 {
 			existing.User = *user
 		}
-		c.JSON(http.StatusOK, gin.H{"image": a.imagePayload(existing), "url": imageURL(existing.Path)})
+		c.JSON(http.StatusOK, gin.H{"image": a.imagePayload(existing), "url": a.imageURLFor(existing)})
 		return
 	}
 
-	relPath := filepath.Join(time.Now().Format("2006/01"), hash[:24]+ext)
-	fullPath := filepath.Join(a.Cfg.UploadDir, relPath)
-	if _, err := os.Stat(fullPath); err != nil {
-		if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
-			fail(c, http.StatusInternalServerError, "创建图片目录失败")
-			return
-		}
-		if err := os.WriteFile(fullPath, data, 0o644); err != nil {
-			fail(c, http.StatusInternalServerError, "保存图片失败")
-			return
-		}
+	relPath := filepath.ToSlash(filepath.Join(time.Now().Format("2006/01"), hash[:24]+ext))
+	object, err := a.Storage.Put(c.Request.Context(), relPath, data, mimeType)
+	if err != nil {
+		log.Printf("保存图片失败: %v", err)
+		fail(c, http.StatusInternalServerError, "保存图片失败")
+		return
 	}
 
 	img := models.Image{
 		UserID:   user.ID,
 		Filename: safeImageName(fileHeader.Filename, ext),
-		Path:     filepath.ToSlash(relPath),
+		Provider: object.Provider,
+		Path:     object.Key,
+		URL:      object.URL,
 		MIME:     mimeType,
 		Size:     int64(len(data)),
 		Hash:     hash,
 	}
 	if err := a.DB.Create(&img).Error; err != nil {
+		if cleanupErr := a.Storage.For(object.Provider).Delete(context.Background(), object.Key); cleanupErr != nil {
+			log.Printf("回滚图片对象失败: %v", cleanupErr)
+		}
 		fail(c, http.StatusInternalServerError, "保存图片记录失败")
 		return
 	}
 	img.User = *user
 	a.logAction(c, "上传图片", "image", img.ID, img.Filename)
-	c.JSON(http.StatusCreated, gin.H{"image": a.imagePayload(img), "url": imageURL(img.Path)})
+	c.JSON(http.StatusCreated, gin.H{"image": a.imagePayload(img), "url": a.imageURLFor(img)})
 }
 
 func (a *API) ImageList(c *gin.Context) {
@@ -160,25 +179,15 @@ func (a *API) ImageList(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"items": items, "total": total, "page": page, "pageSize": size})
 }
 
-func (a *API) removeImageFileIfUnused(path string) {
+func (a *API) removeImageIfUnused(ctx context.Context, provider, path string) {
 	var count int64
 	a.DB.Model(&models.Image{}).Where("path = ?", path).Count(&count)
 	if count > 0 {
 		return
 	}
-	dir, err := filepath.Abs(a.Cfg.UploadDir)
-	if err != nil {
-		return
+	if err := a.Storage.For(provider).Delete(ctx, path); err != nil {
+		log.Printf("删除图片对象失败 (%s %s): %v", provider, path, err)
 	}
-	full, err := filepath.Abs(filepath.Join(a.Cfg.UploadDir, filepath.FromSlash(path)))
-	if err != nil {
-		return
-	}
-	rel, err := filepath.Rel(dir, full)
-	if err != nil || strings.HasPrefix(rel, "..") {
-		return
-	}
-	_ = os.Remove(full)
 }
 
 func (a *API) ImageDelete(c *gin.Context) {
@@ -196,12 +205,12 @@ func (a *API) ImageDelete(c *gin.Context) {
 		fail(c, http.StatusForbidden, "没有删除权限")
 		return
 	}
-	path := img.Path
+	provider, path := img.Provider, img.Path
 	if err := a.DB.Delete(&img).Error; err != nil {
 		fail(c, http.StatusInternalServerError, "删除失败")
 		return
 	}
-	a.removeImageFileIfUnused(path)
+	a.removeImageIfUnused(c.Request.Context(), provider, path)
 	a.logAction(c, "删除图片", "image", img.ID, img.Filename)
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }

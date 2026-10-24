@@ -9,7 +9,7 @@
 - **一张用户表、一张内容表**：所有内容都在 `documents` 表，用 `kind` 区分 `article`（文章）与 `doc`（文档）。文档用 `parent_id` 组成目录树，文章始终是平的。
 - **不做封面上传**：封面与头像由 rough.js 在浏览器里实时绘制。封面是一条极简的几何线稿，头像是一个手绘圆加昵称首字；同一篇内容永远得到同一张封面。服务端 `/api/art/*` 保留同风格的轻量 SVG 版本，供接口和分享图使用。
 - **CSS 全部手写**：不引入 Arco 或其他组件库，也不使用预处理器。四个 CSS 文件构成设计系统，支持明暗主题。
-- **三种数据模式**：SQLite（默认）、MySQL、进程内内存 Mock。Redis 可选，用于登出黑名单与浏览量去重。
+- **三种数据模式**：SQLite（默认）、MySQL、进程内内存 Mock。Redis 可选，用于登出黑名单与浏览量去重。图片默认落本地磁盘，也可以切换到七牛云。
 - **保留内容能力**：正文图片上传与图库、粘贴/拖拽插图、文章分类、文章推荐、收藏夹分组、浏览历史、评论、点赞、收藏、关注、私信、通知都已恢复。
 - **邮箱能力**：配置 SMTP 后支持邮箱验证码注册、验证码登录、绑定/更换邮箱和自助找回密码。
 - **站点设置与审计**：超级管理员可以在后台修改站点名称、描述、维护者、注册开关和登录图形验证码；登录、内容、分类、图片、角色等关键动作都会写入操作日志。
@@ -35,6 +35,7 @@ Mock 模式每次启动都会重新写入演示数据，退出即清空，适合
 | 后端 | Go 1.24 · Gin · GORM |
 | 数据库 | SQLite（默认）/ MySQL 8.4 |
 | 缓存 | Redis 7（可选） |
+| 图片存储 | 本地磁盘（默认）/ 七牛云对象存储（可选） |
 | 登录 | 用户名密码 / 邮箱验证码 / 可选 QQ 登录；可选图形验证码；JWT（30 天）+ 可选 Redis 黑名单 |
 | 前端 | Vue 3 · Vite · Vue Router |
 | 手绘视觉 | rough.js（Canvas 封面/头像 + SVG 装饰线） |
@@ -54,6 +55,7 @@ folio/
 │   ├── mail/               # SMTP 发信与本地调试邮件
 │   ├── models/             # 19 张表的模型
 │   ├── art/                # 生成式封面与头像
+│   ├── storage/            # 本地磁盘 / 七牛云存储抽象
 │   ├── handlers/           # 路由、接口与集成测试
 │   └── seed/               # 演示数据
 ├── web/
@@ -192,7 +194,14 @@ Go 服务会自动托管 `../web/dist`，访问 <http://localhost:8080> 即可�
 | `FOLIO_REDIS_ADDR` | 空 | Redis 地址，留空则关闭 Redis 功能 |
 | `FOLIO_REDIS_PASSWORD` | 空 | Redis 密码 |
 | `FOLIO_REDIS_DB` | `0` | Redis 库编号 |
-| `FOLIO_UPLOAD_DIR` | `./data/uploads` | 正文图片的保存目录 |
+| `FOLIO_STORAGE` | `local` | 图片存储：`local`（本地磁盘）或 `qiniu`（七牛云） |
+| `FOLIO_UPLOAD_DIR` | `./data/uploads` | 本地模式的正文图片保存目录 |
+| `FOLIO_QINIU_ACCESS_KEY` | 空 | 七牛 AccessKey |
+| `FOLIO_QINIU_SECRET_KEY` | 空 | 七牛 SecretKey |
+| `FOLIO_QINIU_BUCKET` | 空 | 七牛空间名 |
+| `FOLIO_QINIU_DOMAIN` | 空 | 七牛绑定域名，例如 `https://image.example.com` |
+| `FOLIO_QINIU_REGION` | 空 | 空间区域；留空自动查询 |
+| `FOLIO_QINIU_PREFIX` | `folio` | 对象键前缀 |
 | `FOLIO_UPLOAD_MAX_MB` | `10` | 单张图片大小上限（MB） |
 | `FOLIO_AI_API_KEY` | 空 | Anthropic API Key；留空则关闭 AI 摘要 |
 | `FOLIO_AI_MODEL` | `claude-opus-5-5` | AI 摘要使用的模型 |
@@ -238,7 +247,7 @@ Go 服务会自动托管 `../web/dist`，访问 <http://localhost:8080> 即可�
 | `follows` | 关注关系 |
 | `messages` | 私信：类型（文字/图片）、正文、图片地址、已读时间 |
 | `notifications` | 点赞 / 评论 / 关注通知 |
-| `images` | 上传图片：文件名、路径、MIME、大小、内容哈希、上传者 |
+| `images` | 上传图片：文件名、存储提供方、对象键、URL、MIME、大小、内容哈希、上传者 |
 | `view_histories` | 登录用户的浏览历史（用户 + 内容唯一） |
 | `email_codes` | 邮箱验证码：用途、HMAC 摘要、过期时间、尝试次数、消费时间 |
 | `site_settings` | 单行站点设置：名称、描述、维护者、注册开关、图形验证码 |
@@ -286,18 +295,37 @@ MySQL 与 SQLite 共用同一套模型和迁移代码；Redis 不保存业务数
 
 封面、头像、装饰线都会在切换明暗主题时重新绘制，颜色从当前主题的 CSS 变量读取。
 
-## 图片
+## 图片与对象存储
+
+默认使用本地磁盘；也可以把新图片切换到七牛云。两种模式共用同一个上传接口、去重逻辑和管理后台图库：
+
+- `FOLIO_STORAGE=local`（默认）：文件写到 `FOLIO_UPLOAD_DIR`，通过 `/uploads/*` 访问；
+- `FOLIO_STORAGE=qiniu`：文件由服务端上传到七牛，返回 `FOLIO_QINIU_DOMAIN` 下的 URL；
+- 已存在的图片继续按各自记录的存储方式访问和删除，切换模式不会丢历史图片；
+- 删除图片时会先检查是否还有其他记录引用同一个对象，没有引用才删除七牛或本地文件；
+- 目前面向公开读取的 Bucket；私有 Bucket 需要额外的签名代理，暂未启用。
+
+七牛配置示例：
+
+```bash
+FOLIO_STORAGE=qiniu
+FOLIO_QINIU_ACCESS_KEY=你的AccessKey
+FOLIO_QINIU_SECRET_KEY=你的SecretKey
+FOLIO_QINIU_BUCKET=your-bucket
+FOLIO_QINIU_DOMAIN=https://image.example.com
+FOLIO_QINIU_REGION=z0
+```
 
 正文图片使用本站上传，不再要求外链：
 
 - 编辑器支持**选择文件、粘贴剪贴板图片、拖拽图片**三种方式；
-- 上传后自动插入 Markdown，例如 `![图片](/uploads/2026/10/xxxx.png)`；
+- 上传后自动插入 Markdown：本地模式是 `/uploads/2026/10/xxxx.png`，七牛模式是完整的云存储 URL；
 - 支持 JPG、PNG、GIF、WebP，默认单张上限 10MB；
 - 文件按内容哈希命名，同一张图重复上传只会存一份；
 - 管理后台的「图片管理」可以预览、复制链接、下载和删除图片；超级管理员看全站，管理员只看自己上传的；
 - 封面与头像仍然由 rough.js 自动生成，不提供上传。
 
-Docker 全栈使用独立的 `uploads-data` 卷保存图片，重建容器不会丢失。私信里的图片也走同一套上传接口，登录读者即可上传聊天图片。
+Docker 全栈使用独立的 `uploads-data` 卷保存本地图片，重建容器不会丢失；切换到七牛后新图不再落这个卷。私信里的图片也走同一套上传接口，登录读者即可上传聊天图片。
 
 ## AI 摘要（可选）
 
@@ -409,7 +437,7 @@ FOLIO_SMTP_FROM=you@qq.com
 互动说明：
 
 - 私信通过 WebSocket 实时推送；连接不可用或断开时，页面每 10 秒轮询兜底。打开会话时会标记已读；
-- 私信支持发送图片和常用表情，图片仍使用本站上传与 `/uploads` 静态访问；
+- 私信支持发送图片和常用表情，图片走同一套上传接口，按当前存储模式返回本地或七牛 URL；
 - 普通通知只针对点赞、评论/回复、关注三种行为；管理员还可以发布全站公告，公告单独显示在通知页顶部。
 - 收藏是私密的，只有自己能在「我的收藏」里看到；收藏可以分到不同收藏夹，默认收藏夹不能删除；
 - 评论只有两级，回复会显示「回复 @某某」；编辑器里关掉「允许读者评论」后，接口会拒绝新评论，已有评论仍可阅读和点赞。
@@ -424,7 +452,7 @@ FOLIO_SMTP_FROM=you@qq.com
 | 用户 | `GET /users/:username`、`POST|DELETE /users/:username/follow`、`GET /users/:username/followers|following` |
 | 内容 | `GET /docs`、`GET /docs/:id`、`GET /docs/:id/related`、`POST /docs`、`PUT /docs/:id`、`DELETE /docs/:id`、`GET /doc-tree` |
 | 分类 | `GET /categories`、`POST /categories`、`PUT /categories/:id`、`DELETE /categories/:id` |
-| 图片 | `POST /images`、`GET /images`、`DELETE /images/:id`，文件通过 `/uploads/*` 访问 |
+| 图片 | `POST /images`、`GET /images`、`DELETE /images/:id`；本地模式通过 `/uploads/*` 访问，七牛模式返回云存储 URL |
 | AI | `GET /ai/status`、`POST /ai/analyze`（仅管理员） |
 | 互动 | `POST /docs/:id/like`、`POST /docs/:id/favorite`、`GET|POST /docs/:id/comments`、`POST /comments/:id/like` |
 | 消息 | `GET /messages/conversations`、`GET|POST /messages/with/:username`、`GET /notifications`、`GET /notices`、`POST /notices/read`、`GET /ws`（WebSocket，token 查询参数） |
@@ -438,8 +466,8 @@ FOLIO_SMTP_FROM=you@qq.com
 - **摘要**：不填时自动从 Markdown 正文提取前 120 字。
 - **计数**：点赞、收藏、评论写入后重新 `COUNT(*)` 回写，避免增量漂移。
 - **删除**：删除文档会递归删除子文档及其评论、点赞、收藏、通知；删除根评论会连同回复一起删除；删除用户会清理其全部内容、互动、图片和浏览历史。
-- **图片**：支持上传、粘贴与拖拽，文件保存在 `FOLIO_UPLOAD_DIR`；封面与头像仍然是自动生成，不能上传。
-- **备份**：SQLite 可用 `sqlite3 folio.db ".backup 'backup.db'"`；MySQL 使用 `mysqldump`；图片目录/`uploads-data` 卷需要一起备份。
+- **图片**：支持上传、粘贴与拖拽；默认保存在 `FOLIO_UPLOAD_DIR`，设置 `FOLIO_STORAGE=qiniu` 后新图上传到七牛；封面与头像仍然是自动生成，不能上传。
+- **备份**：SQLite 可用 `sqlite3 folio.db ".backup 'backup.db'"`；MySQL 使用 `mysqldump`；本地图片目录/`uploads-data` 卷需要一起备份，七牛图片由对象存储侧负责备份与生命周期。
 - **主题**：默认跟随系统明暗偏好，切换后记住选择。
 
 ## 已知边界
