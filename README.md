@@ -12,7 +12,8 @@
 - **三种数据模式**：SQLite（默认）、MySQL、进程内内存 Mock。Redis 可选，用于登出黑名单与浏览量去重。图片默认落本地磁盘，也可以切换到七牛云。
 - **保留内容能力**：正文图片上传与图库、粘贴/拖拽插图、文章分类、文章推荐、收藏夹分组、浏览历史、评论、点赞、收藏、关注、私信、通知都已恢复。
 - **邮箱能力**：配置 SMTP 后支持邮箱验证码注册、验证码登录、绑定/更换邮箱和自助找回密码。
-- **AI 问答**：登录用户可以使用自己的 API Key 向站内文章与文档提问，可选 Anthropic、DeepSeek、智谱 GLM、Kimi、通义千问；回答会带回引用，本站不提供、不保存 Key。
+- **AI 问答**：登录用户可以使用自己的 API Key 向站内文章、文档和站点帮助提问，可选 Anthropic、DeepSeek、智谱 GLM、Kimi、通义千问；支持分块检索、严格/通用模式、多轮追问和流式回答，回答会带回引用，本站不提供、不保存 Key。
+- **关于页与站点帮助**：`/about` 按场景介绍全部功能，目录同时作为 AI 的站点帮助知识库；新增功能只需补充一条目录记录。
 - **站点设置与审计**：超级管理员可以在后台修改站点名称、描述、维护者、注册开关和登录图形验证码；登录、内容、分类、图片、角色等关键动作都会写入操作日志。
 - **隐私与消息偏好**：每个人都可以决定是否公开关注/粉丝列表、是否接收私信和点赞/评论通知，并选择公开主页的封面样式。
 - **删繁就简**：去掉复杂的角色表、文档权限、文档密码与试看、审核流、Banner、Elasticsearch；只保留一个极简的三级角色字段。
@@ -398,9 +399,14 @@ FOLIO_QQ_REDIRECT=http://localhost:8080/api/auth/qq/callback
 - 用户必须自己填写所选服务商的 API Key，**本站不提供 Key，也不会用站点的 `FOLIO_AI_API_KEY` 代替**；
 - 可选服务商：Anthropic、DeepSeek、智谱 GLM、Kimi、通义千问；每个服务商自带常用模型，也可以手动填写新模型名称；
 - Key 只保存在当前浏览器标签页的 sessionStorage（按服务商分别记忆），提交时发送到服务端用于这一次请求，不写入数据库、不写日志；
-- 服务端先按问题检索已发布文章/文档，截取相关段落作为上下文，再调用所选服务商；除 Anthropic 使用 Messages API 外，其余服务商走各自的 OpenAI 兼容接口；
-- 回答要求只依据站内资料，并返回来源列表；资料不足时会明确说明没有找到；
+- 知识库由已发布的文章、文档和「站点帮助」目录共同组成。文章会切成分块，标题、摘要、标签、分类和正文一起参与检索，取最相关的片段而不是整篇塞给模型；
+- 「站点帮助」是一份可扩展的功能目录，同时驱动公开的 `/about` 关于页；每条功能带标题、摘要、步骤、路由、关键词和适用角色，管理员专属功能只对管理员检索；
+- 回答支持两种模式：严格站内（只依据资料）和通用知识（资料不足时补充站外常识并明确标注）；
+- 支持多轮追问、SSE 流式输出、来源片段展开和知识库覆盖统计；对话只保存在当前标签页；
+- 回答要求优先引用站内资料，并返回来源列表；资料不足时会明确说明；
 - 如果通过反向代理部署，请使用 HTTPS，避免 Key 在传输过程中暴露。
+
+关于页与站点帮助来自同一份目录文件 `server/handlers/site_help.json`。新增功能时补充一条记录，关于页、AI 知识库和覆盖统计会一起更新。记录支持 `screenshots` 和 `video` 字段，关于页会自动渲染；目前首页、文章、文档、编辑器和问 AI 已配有截图。
 
 如果某个服务商需要通过代理或私有网关访问，可以在部署环境里覆盖它的地址（留空则使用官方地址）：
 
@@ -531,10 +537,11 @@ FOLIO_SITE_URL=https://your-domain.com
 - `/docs` 知识库总览：左侧目录树 + 文档卡片
 - `/docs/:id` 文档详情：目录树、面包屑、正文与右侧目录、上一篇/下一篇、点赞收藏、评论
 - `/search` 全站搜索：关键词搜索；点击任意标签进入该标签的全站聚合
+- `/about` 关于：按场景系统介绍站点全部功能，支持页面内搜索、角色标记和截图，也是 AI 问答的站点帮助目录
 - `/u/:username` 公开主页：文章、文档、关注、粉丝、公开收藏夹和作者置顶文章；可按隐私设置隐藏关注/粉丝/收藏，并支持封面、紧凑、纯文字三种头部样式
 - `/write`、`/write/:id` 编辑器：Markdown 分栏预览、图片上传/粘贴/拖拽、分类、自动封面预览、标签、评论开关、历史版本、草稿/发布、文档树父级与排序（仅超级管理员和管理员）
 - `/messages` 私信与通知：会话列表、WebSocket 实时消息、图片与表情、轮询兜底、全站公告与通知已读
-- `/ask` 问 AI：用户自带 API Key（Anthropic、DeepSeek、智谱 GLM、Kimi、通义千问），检索站内资料后回答并给出引用
+- `/ask` 问 AI：用户自带 API Key（Anthropic、DeepSeek、智谱 GLM、Kimi、通义千问），检索已发布内容与站点帮助，支持严格/通用模式、多轮追问和流式回答
 - `/me` 我的空间：资料、密码、隐私与消息、最近登录记录、收藏夹、浏览历史；管理员额外看到自己的文章与文档，并可以把一篇文章置顶到公开主页
 - `/admin` 管理后台：概览、数据看板、内容管理、分类管理、图片管理、全站通知；内容管理支持导出全部 Markdown；超级管理员额外拥有用户与权限、邀请注册、存储设置、站点设置和操作日志
 - `/login`、`/register` 登录注册：密码登录、邮箱验证码登录、QQ 登录、注册；关闭注册后可通过一次性邀请链接注册
@@ -567,11 +574,12 @@ FOLIO_SITE_URL=https://your-domain.com
 | 内容 | `GET /docs`、`GET /docs/:id`、`GET /docs/:id/related`、`GET /docs/:id/revisions`、`GET /docs/:id/revisions/:revisionID`、`POST /docs/:id/revisions/:revisionID/restore`、`POST /docs`、`PUT /docs/:id`、`DELETE /docs/:id`、`GET /doc-tree` |
 | 分类 | `GET /categories`、`POST /categories`、`PUT /categories/:id`、`DELETE /categories/:id` |
 | 图片 | `POST /images`、`GET /images`、`DELETE /images/:id`；本地模式通过 `/uploads/*` 访问，七牛模式返回云存储 URL |
-| AI | `GET /ai/status`、`POST /ai/analyze`（仅管理员）、`POST /ai/ask`（登录用户，需自带 Key） |
+| AI | `GET /ai/status`、`POST /ai/analyze`（仅管理员）、`GET /ai/providers`、`GET /ai/meta`、`POST /ai/ask`、`POST /ai/ask/stream`（SSE，登录用户需自带 Key） |
 | 互动 | `POST /docs/:id/like`、`POST /docs/:id/favorite`、`GET|POST /docs/:id/comments`、`POST /comments/:id/like` |
 | 消息 | `GET /messages/conversations`、`GET|POST /messages/with/:username`、`GET /notifications`、`GET /notices`、`POST /notices/read`、`GET /ws`（WebSocket，token 查询参数） |
 | 我的 | `GET /me/docs`、`GET /me/favorites`、`GET|DELETE /me/history`、`GET|POST /favorite-folders`、`PUT|DELETE /favorite-folders/:id`、`PUT /me`、`PUT /me/password`、`GET|PUT /me/settings`、`PUT /me/featured-doc`、`GET /me/login-records`、`GET /inbox` |
 | 视觉 | `GET /art/cover.svg`、`GET /art/cover.png`、`GET /art/avatar.svg` |
+| 站点 | `GET /site`、`GET /site/features`（公开的功能目录，关于页使用） |
 | SEO | `GET /feed.xml`、`GET /sitemap.xml`、`GET /robots.txt` |
 | 系统 | `GET /health` |
 | 管理 | `GET /admin/stats`、`GET /admin/dashboard`、`GET /admin/docs`、`GET /admin/users`、`POST /admin/users`、`DELETE /admin/users/:id`、`PUT /admin/users/:id/role`、`GET|POST /admin/invites`、`DELETE /admin/invites/:id`、`GET|PUT /admin/settings`、`GET|PUT /admin/storage`、`POST /admin/storage/test`、`GET /admin/logs`、`GET|POST /admin/notices`、`DELETE /admin/notices/:id`、`GET /admin/export` |

@@ -149,6 +149,7 @@ func (a *API) Sitemap(c *gin.Context) {
 		{Loc: base + "/", ChangeFreq: "daily", Priority: "1.0"},
 		{Loc: base + "/articles", ChangeFreq: "daily", Priority: "0.9"},
 		{Loc: base + "/docs", ChangeFreq: "weekly", Priority: "0.8"},
+		{Loc: base + "/about", ChangeFreq: "monthly", Priority: "0.6"},
 	}
 
 	var docs []models.Document
@@ -275,6 +276,17 @@ func (a *API) pageMetaFor(c *gin.Context, path string) pageMeta {
 		meta.Title = "文档"
 		meta.Description = "按主题整理的长期笔记：手册、速查、清单。"
 		meta.Image = base + "/api/art/cover.png?seed=docs&kind=site"
+	case path == "/about":
+		meta.Title = "关于"
+		meta.Description = "系统了解知微的功能：文章、知识库、写作、评论、私信、AI 问答、管理与存储。"
+		meta.Image = base + "/api/art/cover.png?seed=about&kind=site"
+		meta.JSONLD = map[string]any{
+			"@context":    "https://schema.org",
+			"@type":       "AboutPage",
+			"name":        "关于" + name,
+			"description": meta.Description,
+			"url":         base + "/about",
+		}
 	case path == "/search" || strings.HasPrefix(path, "/search/"):
 		meta.Title = "搜索"
 		meta.NoIndex = true

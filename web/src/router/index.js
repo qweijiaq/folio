@@ -9,6 +9,7 @@ const routes = [
   { path: '/docs', name: 'docs', component: () => import('../views/Docs.vue'), meta: { title: '文档' } },
   { path: '/docs/:id', name: 'doc', component: () => import('../views/DocDetail.vue'), meta: { title: '文档' } },
   { path: '/search', name: 'search', component: () => import('../views/Search.vue'), meta: { title: '搜索' } },
+  { path: '/about', name: 'about', component: () => import('../views/About.vue'), meta: { title: '关于' } },
   { path: '/u/:username', name: 'profile', component: () => import('../views/Profile.vue'), meta: { title: '主页' } },
   { path: '/login', name: 'login', component: () => import('../views/Login.vue'), meta: { title: '登录', guest: true } },
   { path: '/register', name: 'register', component: () => import('../views/Register.vue'), meta: { title: '注册', guest: true } },

@@ -48,6 +48,7 @@ func (a *API) Routes(r *gin.Engine) {
 
 	// 站点与发现
 	g.GET("/site", a.SiteHome)
+	g.GET("/site/features", a.SiteFeatures)
 	g.GET("/tags", a.Tags)
 	g.GET("/categories", a.CategoryList)
 	g.GET("/doc-tree", a.DocTree)
@@ -124,7 +125,9 @@ func (a *API) Routes(r *gin.Engine) {
 	authed.GET("/ai/status", a.StaffOnly(), a.AIStatus)
 	authed.POST("/ai/analyze", a.StaffOnly(), a.AIAnalyze)
 	authed.GET("/ai/providers", a.AIProviders)
+	authed.GET("/ai/meta", a.AIMeta)
 	authed.POST("/ai/ask", a.AIAsk)
+	authed.POST("/ai/ask/stream", a.AIAskStream)
 	authed.GET("/inbox", a.Inbox)
 
 	authed.POST("/users/:username/follow", a.FollowUser)

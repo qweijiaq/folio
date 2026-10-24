@@ -1,6 +1,6 @@
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
-import { api } from '../api/client'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { api, getToken } from '../api/client'
 import { toast } from '../stores/toast'
 import { usePageMeta } from '../composables/usePageMeta'
 import MarkdownView from '../components/MarkdownView.vue'
@@ -15,29 +15,32 @@ const PROVIDER_STORAGE = 'folio.ai.provider'
 const CUSTOM_MODEL = '__custom__'
 
 const providers = ref([])
+const aiMeta = ref(null)
 const providerId = ref('')
 const apiKey = ref('')
 const model = ref('')
 const customModel = ref('')
+const mode = ref('strict')
 const question = ref('')
-const askedQuestion = ref('')
-const answer = ref('')
-const sources = ref([])
+const thread = ref([])
 const loading = ref(false)
+const loadingStage = ref('')
 const providersLoading = ref(true)
 const providersError = ref('')
 const error = ref('')
-const answerModel = ref('')
-const answerProvider = ref('')
+const threadEl = ref(null)
+let abortController = null
 
 const examples = [
-  '这个站点是怎么统一博客和文档的？',
-  '有哪些关于手写 CSS 的内容？',
-  'Go 服务端有哪些约定？'
+  '这个站点怎么发布一篇文章？',
+  '邀请注册和公开注册有什么区别？',
+  '私信、收藏和关注的隐私怎么设置？',
+  '站点的七牛云存储怎么配置？'
 ]
 
 const currentProvider = computed(() => providers.value.find((item) => item.id === providerId.value) || null)
 const selectedModel = computed(() => (model.value === CUSTOM_MODEL ? customModel.value.trim() : model.value))
+const knowledge = computed(() => aiMeta.value?.knowledge || {})
 
 function readKey(id) {
   try {
@@ -77,6 +80,16 @@ function providerName(id) {
   return providers.value.find((item) => item.id === id)?.name || id
 }
 
+function modeLabel(value) {
+  return value === 'expanded' ? '通用知识' : '严格站内'
+}
+
+function sourceKindLabel(kind) {
+  if (kind === 'help') return '站点帮助'
+  if (kind === 'doc') return '文档'
+  return '文章'
+}
+
 function resetForProvider(id) {
   const provider = providers.value.find((item) => item.id === id)
   providerId.value = id
@@ -90,9 +103,6 @@ function onProviderChange(event) {
   storeKey(providerId.value, apiKey.value)
   error.value = ''
   resetForProvider(event.target.value)
-  answer.value = ''
-  sources.value = []
-  askedQuestion.value = ''
 }
 
 async function loadProviders() {
@@ -113,18 +123,102 @@ async function loadProviders() {
   }
 }
 
+async function loadMeta() {
+  try {
+    aiMeta.value = await api.get('/ai/meta')
+  } catch {
+    /* 知识库信息加载失败不影响提问 */
+  }
+}
+
 watch(apiKey, (value) => storeKey(providerId.value, value))
 
-onMounted(loadProviders)
+onMounted(() => {
+  loadProviders()
+  loadMeta()
+})
 
 function useExample(text) {
   question.value = text
+  nextTick(() => document.querySelector('#ask-question')?.focus())
 }
 
 function clearKey() {
   apiKey.value = ''
   storeKey(providerId.value, '')
   toast('已清除当前标签页的 API Key')
+}
+
+function buildHistory() {
+  return thread.value
+    .filter((item) => item.role === 'user' || item.role === 'assistant')
+    .filter((item) => !item.pending && item.content?.trim())
+    .slice(-6)
+    .map((item) => ({ role: item.role, content: item.content }))
+}
+
+async function scrollThread() {
+  await nextTick()
+  const el = threadEl.value
+  if (el) el.scrollTop = el.scrollHeight
+}
+
+function applyStreamEvent(raw, assistant) {
+  let event = 'message'
+  const dataLines = []
+  for (const line of raw.split('\n')) {
+    if (line.startsWith('event:')) event = line.slice(6).trim()
+    else if (line.startsWith('data:')) dataLines.push(line.slice(5).trim())
+  }
+  if (!dataLines.length) return
+  let payload
+  try {
+    payload = JSON.parse(dataLines.join('\n'))
+  } catch {
+    return
+  }
+  if (event === 'meta') {
+    assistant.sources = payload.sources || []
+    assistant.provider = payload.provider || assistant.provider
+    assistant.model = payload.model || assistant.model
+    assistant.mode = payload.mode || assistant.mode
+    assistant.retrieved = payload.retrieved || 0
+    loadingStage.value = assistant.retrieved
+      ? `已找到 ${assistant.retrieved} 段资料，正在生成回答…`
+      : '正在生成回答…'
+  } else if (event === 'delta') {
+    assistant.content += payload.text || ''
+    loadingStage.value = '正在生成回答…'
+    scrollThread()
+  } else if (event === 'done') {
+    if (!assistant.content && payload.answer) assistant.content = payload.answer
+    assistant.pending = false
+    loadingStage.value = ''
+  } else if (event === 'error') {
+    assistant.error = payload.error || '生成回答失败'
+    assistant.pending = false
+    loadingStage.value = ''
+  }
+}
+
+async function readStream(response, assistant) {
+  const reader = response.body?.getReader()
+  if (!reader) throw new Error('当前浏览器不支持流式回答')
+  const decoder = new TextDecoder()
+  let buffer = ''
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, '\n')
+    let split = buffer.indexOf('\n\n')
+    while (split >= 0) {
+      const raw = buffer.slice(0, split)
+      buffer = buffer.slice(split + 2)
+      applyStreamEvent(raw, assistant)
+      split = buffer.indexOf('\n\n')
+    }
+  }
+  if (buffer.trim()) applyStreamEvent(buffer, assistant)
 }
 
 async function ask() {
@@ -150,27 +244,89 @@ async function ask() {
     return
   }
   storeKey(providerId.value, key)
+  const history = buildHistory()
+  thread.value.push({ role: 'user', content: text })
+  const assistant = {
+    role: 'assistant',
+    content: '',
+    sources: [],
+    provider: providerId.value,
+    model: chosenModel,
+    mode: mode.value,
+    retrieved: 0,
+    pending: true,
+    error: ''
+  }
+  thread.value.push(assistant)
+  question.value = ''
   loading.value = true
-  answer.value = ''
-  sources.value = []
+  loadingStage.value = '正在检索站内资料…'
+  scrollThread()
+
+  abortController = new AbortController()
   try {
-    const data = await api.post('/ai/ask', {
-      question: text,
-      apiKey: key,
-      provider: providerId.value,
-      model: chosenModel
+    const response = await fetch('/api/ai/ask/stream', {
+      method: 'POST',
+      headers: {
+        Accept: 'text/event-stream',
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${getToken()}`
+      },
+      body: JSON.stringify({
+        question: text,
+        apiKey: key,
+        provider: providerId.value,
+        model: chosenModel,
+        mode: mode.value,
+        history
+      }),
+      signal: abortController.signal
     })
-    answer.value = data.answer || ''
-    sources.value = data.sources || []
-    askedQuestion.value = text
-    answerModel.value = data.model || chosenModel
-    answerProvider.value = data.provider || providerId.value
+    if (!response.ok) {
+      let message = 'AI 问答失败'
+      try {
+        const data = await response.json()
+        message = data.error || message
+      } catch {
+        /* ignore */
+      }
+      throw new Error(message)
+    }
+    await readStream(response, assistant)
+    if (!assistant.content && !assistant.error) {
+      assistant.error = '服务商没有返回有效回答'
+    }
   } catch (err) {
-    error.value = err.message || 'AI 问答失败'
+    if (err.name === 'AbortError') {
+      assistant.content = assistant.content || ''
+      assistant.error = assistant.error || '已停止生成'
+    } else {
+      assistant.error = err.message || 'AI 问答失败'
+    }
   } finally {
+    assistant.pending = false
     loading.value = false
+    loadingStage.value = ''
+    abortController = null
+    scrollThread()
   }
 }
+
+function stopAsk() {
+  if (abortController) abortController.abort()
+}
+
+function clearThread() {
+  if (abortController) abortController.abort()
+  thread.value = []
+  error.value = ''
+  loading.value = false
+  loadingStage.value = ''
+}
+
+onBeforeUnmount(() => {
+  if (abortController) abortController.abort()
+})
 </script>
 
 <template>
@@ -178,15 +334,24 @@ async function ask() {
     <header class="page-hero container">
       <span class="eyebrow">检索 · 提问</span>
       <h1>问 AI</h1>
-      <p class="page-lede">向这个站点里的文章和文档提问。AI 只根据站内资料回答，并给出引用。</p>
+      <p class="page-lede">向这个站点里的文章、文档和功能说明提问。AI 先检索站内资料，再结合你选择的服务商回答。</p>
     </header>
 
     <div class="container ask-layout">
       <section class="panel ask-form-panel">
         <header class="panel-head">
-          <h2>你的问题</h2>
+          <div class="ask-panel-title">
+            <h2>对话</h2>
+            <button v-if="thread.length" class="text-link" type="button" @click="clearThread">清空对话</button>
+          </div>
           <p>API Key 只保存在当前浏览器标签页，提交时用于调用所选服务商，不会写入数据库或日志。</p>
         </header>
+
+        <div v-if="aiMeta" class="ask-coverage">
+          <span class="ask-coverage-label">知识库覆盖</span>
+          <span>{{ knowledge.articles || 0 }} 篇文章 · {{ knowledge.docs || 0 }} 篇文档 · {{ knowledge.help || 0 }} 条站点帮助</span>
+          <RouterLink to="/about">查看关于页</RouterLink>
+        </div>
 
         <form class="ask-form" @submit.prevent="ask">
           <div class="field">
@@ -243,54 +408,98 @@ async function ask() {
           </div>
 
           <div class="field">
-            <label for="ask-question">问题</label>
+            <span class="ask-field-label">回答模式</span>
+            <div class="ask-mode" role="group" aria-label="回答模式">
+              <button type="button" :class="{ active: mode === 'strict' }" @click="mode = 'strict'">
+                严格站内
+                <small>只依据站内资料</small>
+              </button>
+              <button type="button" :class="{ active: mode === 'expanded' }" @click="mode = 'expanded'">
+                通用知识
+                <small>不足时补充站外常识</small>
+              </button>
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="ask-question">{{ thread.length ? '继续追问' : '问题' }}</label>
             <textarea
               id="ask-question"
               v-model="question"
-              rows="5"
+              rows="4"
               maxlength="500"
-              placeholder="例如：这个站点是怎么统一博客和文档的？"
+              :placeholder="thread.length ? '基于上面的回答继续问…' : '例如：这个站点怎么发布一篇文章？'"
             ></textarea>
             <span class="hint">{{ question.length }} / 500 · 会先从站内内容中检索相关资料</span>
           </div>
 
-          <div class="ask-examples">
+          <div v-if="!thread.length" class="ask-examples">
             <span>试试：</span>
             <button v-for="text in examples" :key="text" type="button" class="tag" @click="useExample(text)">{{ text }}</button>
           </div>
 
           <p v-if="error" class="form-error">{{ error }}</p>
 
-          <button class="btn btn-primary btn-block" type="submit" :disabled="loading || providersLoading || !currentProvider">
-            <Icon name="spark" :size="16" />
-            {{ loading ? '正在检索并回答…' : '提问' }}
-          </button>
+          <div class="ask-submit-row">
+            <button class="btn btn-primary btn-block" type="submit" :disabled="loading || providersLoading || !currentProvider">
+              <Icon name="spark" :size="16" />
+              {{ loading ? '正在回答…' : thread.length ? '继续提问' : '提问' }}
+            </button>
+            <button v-if="loading" class="btn btn-ghost btn-sm ask-stop" type="button" @click="stopAsk">停止</button>
+          </div>
         </form>
       </section>
 
       <section class="panel ask-answer-panel">
         <header class="panel-head">
-          <h2>回答</h2>
-          <p v-if="answerModel">由 {{ providerName(answerProvider) }} · {{ answerModel }} 生成，仅供阅读参考。</p>
-          <p v-else>回答会显示在这里。</p>
+          <div class="ask-panel-title">
+            <h2>回答</h2>
+            <span v-if="thread.length" class="hint">{{ thread.filter((item) => item.role === 'user').length }} 轮对话</span>
+          </div>
+          <p v-if="loading">{{ loadingStage }}</p>
+          <p v-else>回答会显示在这里，每轮都会重新检索站内资料。</p>
         </header>
 
-        <p v-if="loading" class="muted loading-line">正在检索资料并组织回答…</p>
-        <template v-else-if="answer">
-          <div class="ask-question-echo">{{ askedQuestion }}</div>
-          <div class="ask-answer">
-            <MarkdownView :source="answer" />
+        <div v-if="thread.length" ref="threadEl" class="ask-thread">
+          <div v-for="(message, index) in thread" :key="index" class="ask-message" :class="`ask-message--${message.role}`">
+            <template v-if="message.role === 'user'">
+              <div class="ask-user-bubble">{{ message.content }}</div>
+            </template>
+            <template v-else>
+              <div class="ask-answer-meta">
+                <span class="badge">{{ modeLabel(message.mode) }}</span>
+                <span v-if="message.provider">{{ providerName(message.provider) }} · {{ message.model }}</span>
+                <span v-if="message.retrieved"> · {{ message.retrieved }} 个来源</span>
+              </div>
+              <p v-if="message.pending && !message.content" class="muted loading-line">{{ loadingStage || '正在生成回答…' }}</p>
+              <div v-if="message.content" class="ask-answer">
+                <MarkdownView :source="message.content" />
+              </div>
+              <p v-if="message.error" class="form-error">{{ message.error }}</p>
+              <section v-if="message.sources?.length" class="ask-sources">
+                <h3>引用资料</h3>
+                <details v-for="source in message.sources" :key="source.ref" class="ask-source-item">
+                  <summary>
+                    <span class="badge">{{ sourceKindLabel(source.kind) }}</span>
+                    <span class="ask-source-title">{{ source.title }}</span>
+                    <span v-if="source.category" class="ask-source-category">{{ source.category }}</span>
+                    <Icon name="chevronDown" :size="14" />
+                  </summary>
+                  <p class="ask-source-excerpt">{{ source.excerpt }}</p>
+                  <a :href="source.url" class="text-link">打开原文</a>
+                </details>
+              </section>
+            </template>
           </div>
-          <section v-if="sources.length" class="ask-sources">
-            <h3>引用资料</h3>
-            <RouterLink v-for="source in sources" :key="source.id" :to="source.url" class="ask-source">
-              <span class="badge">{{ source.kind === 'doc' ? '文档' : '文章' }}</span>
-              <span>{{ source.title }}</span>
-              <Icon name="arrowRight" :size="14" />
-            </RouterLink>
-          </section>
-        </template>
-        <EmptyState v-else icon="spark" title="还没有回答" description="选择服务商，填写 Key 和问题，AI 会在站内资料中查找答案。" />
+        </div>
+
+        <p v-else-if="loading" class="muted loading-line">正在检索资料并组织回答…</p>
+        <EmptyState
+          v-else
+          icon="spark"
+          title="还没有回答"
+          description="选择服务商和回答模式，填写 Key 后提问。也可以先去关于页了解站点功能。"
+        />
       </section>
     </div>
   </div>

@@ -1378,7 +1378,7 @@ func TestSEOEndpoints(t *testing.T) {
 	if status != http.StatusOK {
 		t.Fatalf("sitemap 状态异常: %d", status)
 	}
-	for _, want := range []string{"/articles", "/docs", fmt.Sprintf("/articles/%d", articleID), fmt.Sprintf("/docs/%d", docID), "/u/seoowner"} {
+	for _, want := range []string{"/articles", "/docs", "/about", fmt.Sprintf("/articles/%d", articleID), fmt.Sprintf("/docs/%d", docID), "/u/seoowner"} {
 		if !strings.Contains(sitemap, want) {
 			t.Fatalf("sitemap 缺少 %s: %s", want, sitemap)
 		}
@@ -1414,6 +1414,16 @@ func TestSEOEndpoints(t *testing.T) {
 	}
 	if !strings.Contains(page, `property="og:image"`) || !strings.Contains(page, "application/ld+json") {
 		t.Fatalf("分享元信息不完整: %s", page)
+	}
+
+	rec = httptest.NewRecorder()
+	ctx, _ = gin.CreateTestContext(rec)
+	ctx.Request = httptest.NewRequest("GET", "/about", nil)
+	ctx.Request.Host = "example.com"
+	s.api.ServeIndex(ctx, dist)
+	aboutPage := rec.Body.String()
+	if rec.Code != http.StatusOK || !strings.Contains(aboutPage, "关于 · 测试站") || !strings.Contains(aboutPage, "AboutPage") {
+		t.Fatalf("关于页元信息不完整: %d %s", rec.Code, aboutPage)
 	}
 }
 
@@ -1744,8 +1754,18 @@ func TestAIAskUsesUserKey(t *testing.T) {
 	if status != http.StatusOK {
 		t.Fatalf("AI 问答失败: %d %v", status, answer)
 	}
-	if answer["answer"] != "这是基于知识库的回答。" || len(list(answer, "sources")) != 1 {
+	if answer["answer"] != "这是基于知识库的回答。" || len(list(answer, "sources")) == 0 {
 		t.Fatalf("AI 问答结果不正确: %v", answer)
+	}
+	foundArticle := false
+	for _, item := range list(answer, "sources") {
+		source := item.(map[string]any)
+		if source["kind"] == models.KindArticle && source["title"] == "知识库使用指南" {
+			foundArticle = true
+		}
+	}
+	if !foundArticle {
+		t.Fatalf("引用来源应包含命中的文章: %v", answer["sources"])
 	}
 	if seenKey != "user-secret-key" {
 		t.Fatalf("应使用用户提供的 Key，实际 %q", seenKey)
@@ -2025,5 +2045,215 @@ func TestStorageSettingsRejectsIncomplete(t *testing.T) {
 	})
 	if status != http.StatusBadRequest {
 		t.Fatalf("缺少七牛密钥时应拒绝，实际 %d", status)
+	}
+}
+
+func TestAIHelpRetrievalAndModes(t *testing.T) {
+	var calls int
+	var seenBody string
+	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		body, _ := io.ReadAll(r.Body)
+		seenBody = string(body)
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"id":"msg_help","type":"message","role":"assistant","model":"claude-sonnet-5-5","content":[{"type":"text","text":"按步骤操作即可。"}],"stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":10,"output_tokens":10}}`)
+	}))
+	defer fake.Close()
+
+	s := newTestAPI(t, func(cfg *config.Config) { cfg.AIBaseURL = fake.URL })
+	adminToken, _ := s.register(t, "helpstaff")
+	readerToken, _ := s.register(t, "helpreader")
+
+	status, answer := s.do(t, "POST", "/api/ai/ask", readerToken, map[string]any{
+		"question": "怎么邀请注册？", "apiKey": "user-secret-key", "model": "claude-sonnet-5-5",
+	})
+	if status != http.StatusOK {
+		t.Fatalf("帮助问答失败: %d %v", status, answer)
+	}
+	foundHelp := false
+	for _, item := range list(answer, "sources") {
+		source := item.(map[string]any)
+		if source["kind"] == "help" && source["title"] == "邀请注册与管理员建号" {
+			foundHelp = true
+		}
+	}
+	if !foundHelp {
+		t.Fatalf("应检索到邀请注册的站点帮助: %v", answer["sources"])
+	}
+	if !strings.Contains(seenBody, "邀请码") || !strings.Contains(seenBody, "站点帮助") {
+		t.Fatalf("请求上下文应包含站点帮助: %s", seenBody)
+	}
+
+	calls = 0
+	status, answer = s.do(t, "POST", "/api/ai/ask", readerToken, map[string]any{
+		"question": "火星土壤的化学成分是什么？", "apiKey": "user-secret-key", "model": "claude-sonnet-5-5", "mode": "strict",
+	})
+	if status != http.StatusOK || calls != 0 {
+		t.Fatalf("严格模式无资料时不应调用上游: status=%d calls=%d %v", status, calls, answer)
+	}
+	if len(list(answer, "sources")) != 0 {
+		t.Fatalf("严格模式无资料时不应返回来源: %v", answer)
+	}
+
+	calls = 0
+	status, answer = s.do(t, "POST", "/api/ai/ask", readerToken, map[string]any{
+		"question": "火星土壤的化学成分是什么？", "apiKey": "user-secret-key", "model": "claude-sonnet-5-5", "mode": "expanded",
+	})
+	if status != http.StatusOK || calls != 1 {
+		t.Fatalf("通用知识模式应调用上游: status=%d calls=%d %v", status, calls, answer)
+	}
+	if !strings.Contains(seenBody, "没有检索到站内资料") {
+		t.Fatalf("通用知识模式上下文不正确: %s", seenBody)
+	}
+
+	status, answer = s.do(t, "POST", "/api/ai/ask", readerToken, map[string]any{
+		"question": "七牛云存储怎么配置？", "apiKey": "user-secret-key", "model": "claude-sonnet-5-5", "mode": "expanded",
+		"history": []map[string]string{
+			{"role": "user", "content": "先问一句"},
+			{"role": "assistant", "content": "先答一句"},
+		},
+	})
+	if status != http.StatusOK {
+		t.Fatalf("带历史问答失败: %d %v", status, answer)
+	}
+	for _, item := range list(answer, "sources") {
+		source := item.(map[string]any)
+		if source["kind"] == "help" && source["title"] == "存储设置" {
+			t.Fatalf("普通读者不应检索到管理员存储帮助: %v", answer["sources"])
+		}
+	}
+	if !strings.Contains(seenBody, "先问一句") || !strings.Contains(seenBody, "先答一句") {
+		t.Fatalf("多轮历史没有传给模型: %s", seenBody)
+	}
+
+	status, answer = s.do(t, "POST", "/api/ai/ask", adminToken, map[string]any{
+		"question": "七牛云存储怎么配置？", "apiKey": "user-secret-key", "model": "claude-sonnet-5-5",
+	})
+	if status != http.StatusOK {
+		t.Fatalf("管理员帮助问答失败: %d %v", status, answer)
+	}
+	foundStaffHelp := false
+	for _, item := range list(answer, "sources") {
+		source := item.(map[string]any)
+		if source["kind"] == "help" && source["title"] == "存储设置" {
+			foundStaffHelp = true
+		}
+	}
+	if !foundStaffHelp {
+		t.Fatalf("管理员应检索到存储设置帮助: %v", answer["sources"])
+	}
+
+	status, meta := s.do(t, "GET", "/api/ai/meta", readerToken, nil)
+	if status != http.StatusOK {
+		t.Fatalf("读取 AI 知识库信息失败: %d %v", status, meta)
+	}
+	if number(obj(meta, "knowledge")["help"]) <= 0 || len(list(meta, "modes")) != 2 {
+		t.Fatalf("AI 知识库信息不完整: %v", meta)
+	}
+}
+
+func TestSiteFeaturesCatalog(t *testing.T) {
+	s := newTestAPI(t)
+	status, data := s.do(t, "GET", "/api/site/features", "", nil)
+	if status != http.StatusOK {
+		t.Fatalf("读取站点功能目录失败: %d %v", status, data)
+	}
+	catalog := obj(data, "catalog")
+	if catalog["version"] == "" || len(list(catalog, "categories")) < 8 {
+		t.Fatalf("站点功能目录不完整: %v", catalog)
+	}
+	found := false
+	for _, item := range list(catalog, "categories") {
+		category := item.(map[string]any)
+		for _, f := range list(category, "features") {
+			feature := f.(map[string]any)
+			if feature["id"] == "invite-register" {
+				found = true
+			}
+		}
+	}
+	if !found {
+		t.Fatal("站点功能目录缺少邀请注册")
+	}
+}
+
+func TestAIAskStream(t *testing.T) {
+	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("x-api-key") != "user-stream-key" {
+			t.Errorf("流式请求没有使用用户 Key: %q", r.Header.Get("x-api-key"))
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, "event: message_start\n")
+		fmt.Fprint(w, `data: {"type":"message_start","message":{"id":"msg_stream","type":"message","role":"assistant","model":"claude-sonnet-5-5","content":[],"stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":10,"output_tokens":0}}}`+"\n\n")
+		fmt.Fprint(w, "event: content_block_start\n")
+		fmt.Fprint(w, `data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`+"\n\n")
+		fmt.Fprint(w, "event: content_block_delta\n")
+		fmt.Fprint(w, `data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"流式"}}`+"\n\n")
+		fmt.Fprint(w, "event: content_block_delta\n")
+		fmt.Fprint(w, `data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"回答"}}`+"\n\n")
+		fmt.Fprint(w, "event: content_block_stop\n")
+		fmt.Fprint(w, `data: {"type":"content_block_stop","index":0}`+"\n\n")
+		fmt.Fprint(w, "event: message_delta\n")
+		fmt.Fprint(w, `data: {"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"output_tokens":2}}`+"\n\n")
+		fmt.Fprint(w, "event: message_stop\n")
+		fmt.Fprint(w, `data: {"type":"message_stop"}`+"\n\n")
+	}))
+	defer fake.Close()
+
+	s := newTestAPI(t, func(cfg *config.Config) { cfg.AIBaseURL = fake.URL })
+	readerToken, _ := s.register(t, "streamreader")
+	payload, _ := json.Marshal(map[string]any{
+		"question": "怎么邀请注册？", "apiKey": "user-stream-key", "model": "claude-sonnet-5-5",
+	})
+	req := httptest.NewRequest("POST", "/api/ai/ask/stream", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+readerToken)
+	rec := httptest.NewRecorder()
+	s.handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("流式问答失败: %d %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	for _, want := range []string{"event: meta", "邀请注册与管理员建号", "event: delta", "流式", "回答", "event: done"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("流式响应缺少 %q: %s", want, body)
+		}
+	}
+}
+
+func TestAIAskStreamOpenAICompatible(t *testing.T) {
+	var seenAuth string
+	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seenAuth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, `data: {"choices":[{"delta":{"content":"兼容"}}]}`+"\n\n")
+		fmt.Fprint(w, `data: {"choices":[{"delta":{"content":"流式"}}]}`+"\n\n")
+		fmt.Fprint(w, "data: [DONE]\n\n")
+	}))
+	defer fake.Close()
+
+	s := newTestAPI(t, func(cfg *config.Config) { cfg.DeepSeekBaseURL = fake.URL })
+	readerToken, _ := s.register(t, "streamcompat")
+	payload, _ := json.Marshal(map[string]any{
+		"question": "怎么邀请注册？", "apiKey": "user-compat-key", "provider": "deepseek", "model": "deepseek-chat",
+	})
+	req := httptest.NewRequest("POST", "/api/ai/ask/stream", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+readerToken)
+	rec := httptest.NewRecorder()
+	s.handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("兼容流式问答失败: %d %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if seenAuth != "Bearer user-compat-key" {
+		t.Fatalf("兼容流式请求没有使用用户 Key: %q", seenAuth)
+	}
+	for _, want := range []string{"event: meta", "event: delta", "兼容", "流式", "event: done"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("兼容流式响应缺少 %q: %s", want, body)
+		}
 	}
 }
