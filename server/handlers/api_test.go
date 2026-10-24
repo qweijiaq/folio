@@ -1223,3 +1223,25 @@ func TestQQDisabledByDefault(t *testing.T) {
 		t.Fatalf("未配置时获取 QQ 地址应返回 503，实际 %d", status)
 	}
 }
+
+func TestCaptchaDebugMode(t *testing.T) {
+	s := newTestAPI(t, func(cfg *config.Config) {
+		cfg.LoginCaptcha = true
+		cfg.CaptchaDebug = true
+	})
+	status, data := s.do(t, "GET", "/api/auth/captcha", "", nil)
+	if status != http.StatusOK {
+		t.Fatalf("读取调试验证码失败: %d", status)
+	}
+	id, _ := data["captchaId"].(string)
+	code, _ := data["debugCode"].(string)
+	if id == "" || code == "" {
+		t.Fatalf("调试模式应返回验证码答案: %v", data)
+	}
+	status, _ = s.do(t, "POST", "/api/auth/login", "", map[string]string{
+		"username": "nobody", "password": "password123", "captchaId": id, "captchaCode": code,
+	})
+	if status != http.StatusUnauthorized {
+		t.Fatalf("调试答案应能通过图形验证码，实际 %d", status)
+	}
+}

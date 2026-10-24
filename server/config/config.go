@@ -41,6 +41,7 @@ type Config struct {
 
 	// 登录图形验证码（可选）
 	LoginCaptcha bool
+	CaptchaDebug bool
 
 	// QQ 登录（可选）
 	QQAppID    string
@@ -137,6 +138,7 @@ func Load() Config {
 		MailDebug:    envBool("FOLIO_MAIL_DEBUG", false),
 
 		LoginCaptcha: envBool("FOLIO_LOGIN_CAPTCHA", false),
+		CaptchaDebug: envBool("FOLIO_CAPTCHA_DEBUG", false),
 
 		QQAppID:    getenv("FOLIO_QQ_APP_ID", ""),
 		QQAppKey:   getenv("FOLIO_QQ_APP_KEY", ""),

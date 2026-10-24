@@ -28,16 +28,21 @@ func (a *API) CaptchaImage(c *gin.Context) {
 		nil,
 	)
 	captcha := base64Captcha.NewCaptcha(driver, a.Captcha)
-	id, image, _, err := captcha.Generate()
+	id, image, answer, err := captcha.Generate()
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "生成图形验证码失败")
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{
+	payload := gin.H{
 		"enabled":   true,
 		"captchaId": id,
 		"image":     image,
-	})
+	}
+	if a.Cfg.CaptchaDebug {
+		// 仅开发/自测模式返回，方便没有 OCR 时验证流程；部署时必须关闭。
+		payload["debugCode"] = answer
+	}
+	c.JSON(http.StatusOK, payload)
 }
 
 // requireCaptcha 在开启图形验证码时校验并消费一次验证码。

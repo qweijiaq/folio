@@ -8,6 +8,7 @@ const captchaCode = defineModel('code', { type: String, default: '' })
 const enabled = ref(false)
 const image = ref('')
 const loading = ref(false)
+const debugCode = ref('')
 
 async function refresh() {
   loading.value = true
@@ -15,9 +16,11 @@ async function refresh() {
   try {
     const data = await api.get('/auth/captcha')
     enabled.value = Boolean(data.enabled)
+    debugCode.value = data.debugCode || ''
     if (enabled.value) {
       captchaId.value = data.captchaId
       image.value = data.image
+      if (debugCode.value) captchaCode.value = debugCode.value
     }
   } catch {
     enabled.value = false
@@ -55,6 +58,7 @@ onMounted(refresh)
         <span v-else>换一张</span>
       </button>
     </div>
-    <p class="hint">看不清？点击图片换一张</p>
+    <p v-if="debugCode" class="email-code-debug">开发模式验证码 <strong>{{ debugCode }}</strong>，已自动填入</p>
+    <p v-else class="hint">看不清？点击图片换一张</p>
   </div>
 </template>

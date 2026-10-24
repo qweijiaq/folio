@@ -57,7 +57,7 @@ folio/
 │   ├── handlers/           # 路由、接口与集成测试
 │   └── seed/               # 演示数据
 ├── web/
-│   ├── src/views/          # 14 个页面
+│   ├── src/views/          # 15 个页面
 │   ├── src/components/     # 卡片、评论、目录树等组件
 │   ├── src/styles/         # base / components / pages / markdown
 │   └── src/utils/          # API 客户端、Markdown、树结构、格式化
@@ -206,6 +206,7 @@ Go 服务会自动托管 `../web/dist`，访问 <http://localhost:8080> 即可�
 | `FOLIO_SMTP_TLS` | `465` 端口为 `1` | 是否使用隐式 TLS（465）；587 端口走 STARTTLS |
 | `FOLIO_MAIL_DEBUG` | `0` | 设为 `1` 时不发邮件，把验证码写进日志并在界面显示，仅用于自测 |
 | `FOLIO_LOGIN_CAPTCHA` | `0` | 设为 `1` 时，密码登录和发送邮箱验证码需要图形验证码 |
+| `FOLIO_CAPTCHA_DEBUG` | `0` | 设为 `1` 时接口返回图形验证码答案并在页面自动填入，**仅本地自测** |
 | `FOLIO_QQ_APP_ID` | 空 | QQ 互联应用 ID；三项都填才启用 QQ 登录 |
 | `FOLIO_QQ_APP_KEY` | 空 | QQ 互联应用密钥 |
 | `FOLIO_QQ_REDIRECT` | 空 | QQ 回调地址，例如 `http://localhost:8080/api/auth/qq/callback` |
@@ -354,7 +355,7 @@ FOLIO_QQ_REDIRECT=http://localhost:8080/api/auth/qq/callback
 FOLIO_LOGIN_CAPTCHA=1
 ```
 
-开启后密码登录和发送邮箱验证码都需要先输入图片上的 4 位字符；验证码一次性使用，5 分钟内有效。图形验证码由服务端生成 PNG，不依赖前端组件库。
+开启后密码登录和发送邮箱验证码都需要先输入图片上的 4 位字符；验证码一次性使用，5 分钟内有效。图形验证码由服务端生成 PNG，不依赖前端组件库。本地没有 OCR 时可以临时设置 `FOLIO_CAPTCHA_DEBUG=1`，接口和页面会直接显示答案；**部署时不要开启**。
 
 本地没有 SMTP 也可以自测，把 `FOLIO_MAIL_DEBUG` 设为 `1`：
 
