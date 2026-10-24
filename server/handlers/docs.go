@@ -561,6 +561,7 @@ func (a *API) DocDelete(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "删除失败")
 		return
 	}
+	a.DB.Model(&models.UserSetting{}).Where("featured_doc_id = ?", doc.ID).UpdateColumn("featured_doc_id", nil)
 	a.logAction(c, "删除内容", doc.Kind, doc.ID, doc.Title)
 	c.JSON(http.StatusOK, gin.H{"ok": true, "deleted": len(ids)})
 }

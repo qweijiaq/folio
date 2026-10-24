@@ -4260,3 +4260,19 @@
   justify-content: center;
   padding: 2px 0 12px;
 }
+
+.profile-featured {
+  margin-top: 42px;
+}
+
+.profile-featured .doc-card--row {
+  max-width: 760px;
+}
+
+.collection-chips {
+  margin-bottom: 20px;
+}
+
+.collection-grid {
+  margin-top: 4px;
+}

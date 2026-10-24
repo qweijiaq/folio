@@ -195,6 +195,8 @@ type UserSetting struct {
 	OpenPrivateChat    bool   `json:"openPrivateChat"`
 	OpenCommentMessage bool   `json:"openCommentMessage"`
 	OpenDiggMessage    bool   `json:"openDiggMessage"`
+	OpenCollect        bool   `json:"openCollect"`
+	FeaturedDocID      *uint  `gorm:"index" json:"featuredDocID"`
 	HomeStyle          string `gorm:"size:16" json:"homeStyle"`
 }
 

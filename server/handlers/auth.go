@@ -9,6 +9,7 @@ import (
 	"folio/server/models"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 var usernamePattern = regexp.MustCompile(`^[A-Za-z0-9_]{2,20}$`)
@@ -339,6 +340,20 @@ func (a *API) UserProfile(c *gin.Context) {
 		if !setting.OpenFans {
 			counts["followers"] = int64(0)
 		}
+		if !setting.OpenCollect {
+			counts["favorites"] = int64(0)
+		}
+	}
+	var topDoc *models.Document
+	if setting.FeaturedDocID != nil {
+		var doc models.Document
+		if err := a.DB.Preload("Category").Preload("Author", func(db *gorm.DB) *gorm.DB {
+			return db.Select("id", "username", "nickname", "bio", "role", "created_at")
+		}).Where("id = ? AND author_id = ? AND kind = ? AND status = ?",
+			*setting.FeaturedDocID, u.ID, models.KindArticle, models.StatusPublished).First(&doc).Error; err == nil {
+			doc.Content = ""
+			topDoc = &doc
+		}
 	}
 	payload := gin.H{
 		"user":        toBrief(u),
@@ -346,6 +361,7 @@ func (a *API) UserProfile(c *gin.Context) {
 		"settings":    publicUserSettings(setting),
 		"isSelf":      isSelf,
 		"isFollowing": isFollowing,
+		"topDoc":      topDoc,
 	}
 	if isSelf || isSuperAdmin(viewer) {
 		payload["email"] = u.Email

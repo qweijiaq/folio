@@ -1576,3 +1576,74 @@ func TestMessagePagination(t *testing.T) {
 		t.Fatalf("更早消息分页不正确: len=%d hasMore=%v", len(olderItems), older["hasMore"])
 	}
 }
+
+func TestFeaturedAndPublicCollections(t *testing.T) {
+	s := newTestAPI(t)
+	aliceToken, _ := s.register(t, "collectalice")
+	bobToken, _ := s.register(t, "collectbob")
+
+	status, created := s.do(t, "POST", "/api/docs", aliceToken, map[string]any{
+		"kind": "article", "title": "置顶文章", "content": "正文", "status": "published",
+	})
+	if status != http.StatusCreated {
+		t.Fatalf("创建文章失败: %d %v", status, created)
+	}
+	docID := uint(number(obj(created, "doc")["id"]))
+
+	status, _ = s.do(t, "PUT", "/api/me/featured-doc", aliceToken, map[string]any{"docID": docID})
+	if status != http.StatusOK {
+		t.Fatalf("设置置顶文章失败: %d", status)
+	}
+	status, profile := s.do(t, "GET", "/api/users/collectalice", bobToken, nil)
+	if status != http.StatusOK || obj(profile, "topDoc")["id"] != float64(docID) {
+		t.Fatalf("主页置顶文章不正确: %d %v", status, profile)
+	}
+	status, _ = s.do(t, "PUT", "/api/me/featured-doc", bobToken, map[string]any{"docID": docID})
+	if status != http.StatusForbidden {
+		t.Fatalf("读者不应能设置置顶文章, 实际 %d", status)
+	}
+
+	status, _ = s.do(t, "POST", "/api/docs/"+itoa(docID)+"/favorite", aliceToken, map[string]any{})
+	if status != http.StatusOK {
+		t.Fatalf("收藏失败: %d", status)
+	}
+	status, folders := s.do(t, "GET", "/api/users/collectalice/favorite-folders", bobToken, nil)
+	if status != http.StatusOK || folders["hidden"] != true {
+		t.Fatalf("未公开收藏时应隐藏: %d %v", status, folders)
+	}
+	status, _ = s.do(t, "PUT", "/api/me/settings", aliceToken, map[string]any{
+		"openFollow": true, "openFans": true, "openPrivateChat": true,
+		"openCommentMessage": true, "openDiggMessage": true, "openCollect": true, "homeStyle": "cover",
+	})
+	if status != http.StatusOK {
+		t.Fatalf("公开收藏设置失败: %d", status)
+	}
+	status, profile = s.do(t, "GET", "/api/users/collectalice", bobToken, nil)
+	if status != http.StatusOK || obj(profile, "topDoc")["id"] != float64(docID) {
+		t.Fatalf("修改隐私设置后置顶文章丢失: %v", profile)
+	}
+	if number(obj(profile, "counts")["favorites"]) != 1 {
+		t.Fatalf("公开收藏后收藏数不正确: %v", profile)
+	}
+	status, folders = s.do(t, "GET", "/api/users/collectalice/favorite-folders", bobToken, nil)
+	if status != http.StatusOK || folders["hidden"] != false || len(list(folders, "items")) == 0 {
+		t.Fatalf("公开收藏夹列表不正确: %d %v", status, folders)
+	}
+	folderID := uint(number(list(folders, "items")[0].(map[string]any)["id"]))
+	status, favorites := s.do(t, "GET", "/api/users/collectalice/favorites?folderID="+itoa(folderID), "", nil)
+	if status != http.StatusOK || len(list(favorites, "items")) != 1 || list(favorites, "items")[0].(map[string]any)["id"] != float64(docID) {
+		t.Fatalf("公开收藏列表不正确: %d %v", status, favorites)
+	}
+
+	status, _ = s.do(t, "PUT", "/api/me/settings", aliceToken, map[string]any{
+		"openFollow": true, "openFans": true, "openPrivateChat": true,
+		"openCommentMessage": true, "openDiggMessage": true, "openCollect": false, "homeStyle": "cover",
+	})
+	if status != http.StatusOK {
+		t.Fatalf("关闭公开收藏失败: %d", status)
+	}
+	status, favorites = s.do(t, "GET", "/api/users/collectalice/favorites", "", nil)
+	if status != http.StatusOK || favorites["hidden"] != true {
+		t.Fatalf("关闭后收藏应隐藏: %d %v", status, favorites)
+	}
+}

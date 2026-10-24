@@ -29,6 +29,7 @@ const editingFolderID = ref(0)
 const folderNameDraft = ref('')
 const history = ref([])
 const loginRecords = ref([])
+const featuredDocID = ref(null)
 const savingProfile = ref(false)
 const savingPassword = ref(false)
 const savingEmail = ref(false)
@@ -40,6 +41,7 @@ const privacySettings = reactive({
   openPrivateChat: true,
   openCommentMessage: true,
   openDiggMessage: true,
+  openCollect: false,
   homeStyle: 'cover'
 })
 
@@ -192,6 +194,10 @@ async function loadTab() {
         pageSize: 50
       })
       myDocs.value = data.items
+      if (tab.value === 'articles') {
+        const settings = await api.get('/me/settings')
+        featuredDocID.value = settings.settings?.featuredDocID || null
+      }
     } else if (tab.value === 'favorites') {
       await loadFavorites()
     } else if (tab.value === 'history') {
@@ -321,6 +327,17 @@ async function changePassword() {
     toastError(err)
   } finally {
     savingPassword.value = false
+  }
+}
+
+async function toggleFeatured(doc) {
+  const next = featuredDocID.value === doc.id ? 0 : doc.id
+  try {
+    await api.put('/me/featured-doc', { docID: next })
+    featuredDocID.value = next || null
+    toast(next ? '已置顶到公开主页' : '已取消置顶')
+  } catch (err) {
+    toastError(err)
   }
 }
 
@@ -579,6 +596,13 @@ onMounted(async () => {
                   <small>关闭后，别人点赞你的内容时不再生成站内通知。</small>
                 </span>
               </label>
+              <label class="switch-row">
+                <input v-model="privacySettings.openCollect" type="checkbox" />
+                <span>
+                  <strong>公开我的收藏夹</strong>
+                  <small>开启后，访客可以在你的公开主页看到收藏夹和已发布内容；默认保持私密。</small>
+                </span>
+              </label>
             </div>
 
             <div class="field">
@@ -636,6 +660,14 @@ onMounted(async () => {
                 </div>
               </div>
               <div class="content-row-actions">
+                <button
+                  v-if="tab === 'articles' && doc.status === 'published'"
+                  class="btn btn-ghost btn-sm"
+                  type="button"
+                  @click="toggleFeatured(doc)"
+                >
+                  {{ featuredDocID === doc.id ? '取消置顶' : '置顶' }}
+                </button>
                 <RouterLink :to="`/write/${doc.id}`" class="btn btn-ghost btn-sm">编辑</RouterLink>
                 <button class="icon-btn danger" type="button" aria-label="删除" @click="removeDoc(doc)">
                   <Icon name="trash" :size="17" />

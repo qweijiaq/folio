@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"strconv"
 
 	"folio/server/models"
 
@@ -152,4 +153,111 @@ func (a *API) FavoriteFolderDelete(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true, "moved": moved, "defaultFolderID": defaultFolder.ID})
+}
+
+func (a *API) canViewPublicCollections(target *models.User, viewer *models.User) (bool, bool) {
+	setting := a.userSetting(target.ID)
+	allowed := setting.OpenCollect || (viewer != nil && viewer.ID == target.ID) || isSuperAdmin(viewer)
+	return allowed, setting.OpenCollect
+}
+
+func (a *API) PublicFavoriteFolders(c *gin.Context) {
+	target, err := a.userByName(c.Param("username"))
+	if err != nil {
+		fail(c, http.StatusNotFound, "用户不存在")
+		return
+	}
+	viewer := currentUser(c)
+	allowed, _ := a.canViewPublicCollections(target, viewer)
+	if !allowed {
+		c.JSON(http.StatusOK, gin.H{"items": []gin.H{}, "hidden": true})
+		return
+	}
+	var folders []models.FavoriteFolder
+	a.DB.Where("user_id = ?", target.ID).Order("is_default DESC, sort ASC, id ASC").Find(&folders)
+	items := make([]gin.H, 0, len(folders))
+	for _, folder := range folders {
+		var count int64
+		a.DB.Table("favorites").
+			Joins("JOIN documents ON documents.id = favorites.doc_id").
+			Where("favorites.user_id = ? AND favorites.folder_id = ? AND documents.status = ?", target.ID, folder.ID, models.StatusPublished).
+			Count(&count)
+		items = append(items, gin.H{
+			"id":        folder.ID,
+			"name":      folder.Name,
+			"isDefault": folder.IsDefault,
+			"count":     count,
+		})
+	}
+	c.JSON(http.StatusOK, gin.H{"items": items, "hidden": false})
+}
+
+func (a *API) PublicFavorites(c *gin.Context) {
+	target, err := a.userByName(c.Param("username"))
+	if err != nil {
+		fail(c, http.StatusNotFound, "用户不存在")
+		return
+	}
+	viewer := currentUser(c)
+	allowed, _ := a.canViewPublicCollections(target, viewer)
+	if !allowed {
+		c.JSON(http.StatusOK, gin.H{"items": []gin.H{}, "total": 0, "hidden": true})
+		return
+	}
+	page, size := pageParams(c)
+	if size > 30 {
+		size = 30
+	}
+	var folder models.FavoriteFolder
+	if value := trim(c.Query("folderID")); value != "" {
+		id, err := strconv.ParseUint(value, 10, 64)
+		if err != nil || id == 0 {
+			bad(c, "收藏夹不存在")
+			return
+		}
+		if err := a.DB.Where("id = ? AND user_id = ?", uint(id), target.ID).First(&folder).Error; err != nil {
+			bad(c, "收藏夹不存在")
+			return
+		}
+	} else if err := a.DB.Where("user_id = ? AND is_default = ?", target.ID, true).First(&folder).Error; err != nil {
+		c.JSON(http.StatusOK, gin.H{"items": []gin.H{}, "total": 0, "hidden": false, "folderID": 0})
+		return
+	}
+
+	query := a.DB.Table("favorites").
+		Joins("JOIN documents ON documents.id = favorites.doc_id").
+		Where("favorites.user_id = ? AND favorites.folder_id = ? AND documents.status = ?", target.ID, folder.ID, models.StatusPublished)
+	var total int64
+	query.Count(&total)
+	var favorites []models.Favorite
+	query.Select("favorites.*").Order("favorites.id DESC").Offset((page - 1) * size).Limit(size).Find(&favorites)
+	ids := make([]uint, 0, len(favorites))
+	for _, favorite := range favorites {
+		ids = append(ids, favorite.DocID)
+	}
+	var docs []models.Document
+	if len(ids) > 0 {
+		a.DB.Preload("Category").Preload("Author", func(db *gorm.DB) *gorm.DB {
+			return db.Select("id", "username", "nickname", "bio", "role", "created_at")
+		}).Where("id IN ?", ids).Find(&docs)
+	}
+	byID := map[uint]models.Document{}
+	for _, doc := range docs {
+		byID[doc.ID] = doc
+	}
+	items := make([]models.Document, 0, len(ids))
+	for _, id := range ids {
+		if doc, ok := byID[id]; ok {
+			doc.Content = ""
+			items = append(items, doc)
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"items":    items,
+		"total":    total,
+		"page":     page,
+		"pageSize": size,
+		"folderID": folder.ID,
+		"hidden":   false,
+	})
 }

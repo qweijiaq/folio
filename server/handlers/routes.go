@@ -54,6 +54,8 @@ func (a *API) Routes(r *gin.Engine) {
 	g.GET("/users", a.UserSearch)
 	g.GET("/users/:username", a.OptionalAuth(), a.UserProfile)
 	g.GET("/users/:username/followers", a.OptionalAuth(), a.Followers)
+	g.GET("/users/:username/favorite-folders", a.OptionalAuth(), a.PublicFavoriteFolders)
+	g.GET("/users/:username/favorites", a.OptionalAuth(), a.PublicFavorites)
 	g.GET("/users/:username/following", a.OptionalAuth(), a.Following)
 
 	// 内容（统一文档表）。只有超级管理员和管理员可以创作。
@@ -103,6 +105,7 @@ func (a *API) Routes(r *gin.Engine) {
 	authed.PUT("/me/email", a.BindEmail)
 	authed.PUT("/me/password", a.MePassword)
 	authed.GET("/me/settings", a.MeSettings)
+	authed.PUT("/me/featured-doc", a.StaffOnly(), a.SetFeaturedDoc)
 	authed.GET("/me/login-records", a.MyLoginRecords)
 	authed.PUT("/me/settings", a.MeSettingsUpdate)
 	authed.GET("/me/docs", a.MyDocs)

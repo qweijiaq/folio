@@ -371,8 +371,11 @@ FOLIO_QQ_REDIRECT=http://localhost:8080/api/auth/qq/callback
 
 - 是否公开关注列表、粉丝列表（关闭后列表与数量都会隐藏，自己仍然看得到）；
 - 是否允许别人发送私信（关闭后新私信会被拒绝，已有对话仍可查看）；
+- 是否公开我的收藏夹（默认私密，开启后访客可以在公开主页按收藏夹浏览已发布内容）；
 - 是否生成评论/回复通知、点赞通知；
 - 公开主页头部样式：`cover`（封面）、`compact`（紧凑）、`plain`（纯文字）。
+
+在「我的文章」里可以把一篇已发布文章置顶到公开主页；每位作者最多一篇。
 
 「账号安全」里还会显示最近 12 条登录与安全动作（登录、注册、改密、找回密码、绑定邮箱），数据来自操作日志，只对本人可见。
 
@@ -466,10 +469,10 @@ FOLIO_SITE_URL=https://your-domain.com
 - `/docs` 知识库总览：左侧目录树 + 文档卡片
 - `/docs/:id` 文档详情：目录树、面包屑、正文与右侧目录、上一篇/下一篇、点赞收藏、评论
 - `/search` 全站搜索：关键词搜索；点击任意标签进入该标签的全站聚合
-- `/u/:username` 公开主页：文章、文档、关注、粉丝；可按隐私设置隐藏关注/粉丝，并支持封面、紧凑、纯文字三种头部样式
+- `/u/:username` 公开主页：文章、文档、关注、粉丝、公开收藏夹和作者置顶文章；可按隐私设置隐藏关注/粉丝/收藏，并支持封面、紧凑、纯文字三种头部样式
 - `/write`、`/write/:id` 编辑器：Markdown 分栏预览、图片上传/粘贴/拖拽、分类、自动封面预览、标签、评论开关、草稿/发布、文档树父级与排序（仅超级管理员和管理员）
 - `/messages` 私信与通知：会话列表、WebSocket 实时消息、图片与表情、轮询兜底、全站公告与通知已读
-- `/me` 我的空间：资料、密码、隐私与消息、最近登录记录、收藏夹、浏览历史；管理员额外看到自己的文章与文档
+- `/me` 我的空间：资料、密码、隐私与消息、最近登录记录、收藏夹、浏览历史；管理员额外看到自己的文章与文档，并可以把一篇文章置顶到公开主页
 - `/admin` 管理后台：概览、数据看板、内容管理、分类管理、图片管理、全站通知；超级管理员额外拥有用户与权限、邀请注册、站点设置和操作日志
 - `/login`、`/register` 登录注册：密码登录、邮箱验证码登录、QQ 登录、注册；关闭注册后可通过一次性邀请链接注册
 - `/forgot` 通过邮箱验证码重置密码
@@ -497,14 +500,14 @@ FOLIO_SITE_URL=https://your-domain.com
 | 分组 | 主要接口 |
 | --- | --- |
 | 认证 | `POST /auth/register`、`POST /auth/login`、`POST /auth/email/login`、`POST /auth/password/reset`、`POST /auth/email/code`、`GET /auth/email/status`、`GET /auth/captcha`、`GET /auth/qq/status`、`GET /auth/qq/url`、`GET /auth/qq/callback`、`POST /auth/qq/exchange`、`POST /auth/logout`、`GET /me`、`PUT /me/email` |
-| 用户 | `GET /users/:username`、`POST|DELETE /users/:username/follow`、`GET /users/:username/followers|following` |
+| 用户 | `GET /users/:username`、`POST|DELETE /users/:username/follow`、`GET /users/:username/followers|following`、`GET /users/:username/favorite-folders`、`GET /users/:username/favorites` |
 | 内容 | `GET /docs`、`GET /docs/:id`、`GET /docs/:id/related`、`POST /docs`、`PUT /docs/:id`、`DELETE /docs/:id`、`GET /doc-tree` |
 | 分类 | `GET /categories`、`POST /categories`、`PUT /categories/:id`、`DELETE /categories/:id` |
 | 图片 | `POST /images`、`GET /images`、`DELETE /images/:id`；本地模式通过 `/uploads/*` 访问，七牛模式返回云存储 URL |
 | AI | `GET /ai/status`、`POST /ai/analyze`（仅管理员） |
 | 互动 | `POST /docs/:id/like`、`POST /docs/:id/favorite`、`GET|POST /docs/:id/comments`、`POST /comments/:id/like` |
 | 消息 | `GET /messages/conversations`、`GET|POST /messages/with/:username`、`GET /notifications`、`GET /notices`、`POST /notices/read`、`GET /ws`（WebSocket，token 查询参数） |
-| 我的 | `GET /me/docs`、`GET /me/favorites`、`GET|DELETE /me/history`、`GET|POST /favorite-folders`、`PUT|DELETE /favorite-folders/:id`、`PUT /me`、`PUT /me/password`、`GET|PUT /me/settings`、`GET /me/login-records`、`GET /inbox` |
+| 我的 | `GET /me/docs`、`GET /me/favorites`、`GET|DELETE /me/history`、`GET|POST /favorite-folders`、`PUT|DELETE /favorite-folders/:id`、`PUT /me`、`PUT /me/password`、`GET|PUT /me/settings`、`PUT /me/featured-doc`、`GET /me/login-records`、`GET /inbox` |
 | 视觉 | `GET /art/cover.svg`、`GET /art/cover.png`、`GET /art/avatar.svg` |
 | SEO | `GET /feed.xml`、`GET /sitemap.xml`、`GET /robots.txt` |
 | 系统 | `GET /health` |

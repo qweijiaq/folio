@@ -16,6 +16,7 @@ func defaultUserSetting(userID uint) models.UserSetting {
 		OpenPrivateChat:    true,
 		OpenCommentMessage: true,
 		OpenDiggMessage:    true,
+		OpenCollect:        false,
 		HomeStyle:          "cover",
 	}
 }
@@ -37,6 +38,8 @@ func publicUserSettings(setting models.UserSetting) gin.H {
 		"openFollow":      setting.OpenFollow,
 		"openFans":        setting.OpenFans,
 		"openPrivateChat": setting.OpenPrivateChat,
+		"openCollect":     setting.OpenCollect,
+		"featuredDocID":   setting.FeaturedDocID,
 		"homeStyle":       setting.HomeStyle,
 	}
 }
@@ -54,6 +57,7 @@ func (a *API) MeSettingsUpdate(c *gin.Context) {
 		OpenPrivateChat    bool   `json:"openPrivateChat"`
 		OpenCommentMessage bool   `json:"openCommentMessage"`
 		OpenDiggMessage    bool   `json:"openDiggMessage"`
+		OpenCollect        bool   `json:"openCollect"`
 		HomeStyle          string `json:"homeStyle"`
 	}
 	if err := c.ShouldBindJSON(&in); err != nil {
@@ -74,9 +78,40 @@ func (a *API) MeSettingsUpdate(c *gin.Context) {
 	setting.OpenPrivateChat = in.OpenPrivateChat
 	setting.OpenCommentMessage = in.OpenCommentMessage
 	setting.OpenDiggMessage = in.OpenDiggMessage
+	setting.OpenCollect = in.OpenCollect
 	setting.HomeStyle = in.HomeStyle
 	if err := a.DB.Save(&setting).Error; err != nil {
 		fail(c, http.StatusInternalServerError, "保存隐私设置失败")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"settings": setting})
+}
+
+// SetFeaturedDoc 设置个人主页置顶文章；传 0 取消置顶。
+func (a *API) SetFeaturedDoc(c *gin.Context) {
+	me := currentUser(c)
+	var in struct {
+		DocID uint `json:"docID"`
+	}
+	if err := c.ShouldBindJSON(&in); err != nil {
+		bad(c, "请求格式错误")
+		return
+	}
+	setting := a.userSetting(me.ID)
+	if in.DocID == 0 {
+		setting.FeaturedDocID = nil
+	} else {
+		var doc models.Document
+		if err := a.DB.Where("id = ? AND author_id = ? AND kind = ? AND status = ?",
+			in.DocID, me.ID, models.KindArticle, models.StatusPublished).First(&doc).Error; err != nil {
+			bad(c, "只能置顶自己已发布的文章")
+			return
+		}
+		id := doc.ID
+		setting.FeaturedDocID = &id
+	}
+	if err := a.DB.Save(&setting).Error; err != nil {
+		fail(c, http.StatusInternalServerError, "设置置顶失败")
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"settings": setting})
