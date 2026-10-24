@@ -86,6 +86,10 @@ func (a *API) Routes(r *gin.Engine) {
 	authed.GET("/me/favorites", a.MyFavorites)
 	authed.GET("/me/history", a.MyHistory)
 	authed.DELETE("/me/history", a.ClearHistory)
+	authed.GET("/favorite-folders", a.FavoriteFolderList)
+	authed.POST("/favorite-folders", a.FavoriteFolderCreate)
+	authed.PUT("/favorite-folders/:id", a.FavoriteFolderUpdate)
+	authed.DELETE("/favorite-folders/:id", a.FavoriteFolderDelete)
 	authed.GET("/inbox", a.Inbox)
 
 	authed.POST("/users/:username/follow", a.FollowUser)

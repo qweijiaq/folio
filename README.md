@@ -10,8 +10,8 @@
 - **不做封面上传**：封面与头像由 rough.js 在浏览器里实时绘制。封面是一条极简的几何线稿，头像是一个手绘圆加昵称首字；同一篇内容永远得到同一张封面。服务端 `/api/art/*` 保留同风格的轻量 SVG 版本，供接口和分享图使用。
 - **CSS 全部手写**：不引入 Arco 或其他组件库，也不使用预处理器。四个 CSS 文件构成设计系统，支持明暗主题。
 - **三种数据模式**：SQLite（默认）、MySQL、进程内内存 Mock。Redis 可选，用于登出黑名单与浏览量去重。
-- **保留内容能力**：正文图片上传与图库、粘贴/拖拽插图、文章分类、文章推荐、浏览历史、评论、点赞、收藏、关注、私信、通知都已恢复。
-- **删繁就简**：去掉复杂的角色表、文档权限、文档密码与试看、审核流、收藏夹分组、QQ 与邮箱登录、验证码、Elasticsearch；只保留一个极简的三级角色字段。
+- **保留内容能力**：正文图片上传与图库、粘贴/拖拽插图、文章分类、文章推荐、收藏夹分组、浏览历史、评论、点赞、收藏、关注、私信、通知都已恢复。
+- **删繁就简**：去掉复杂的角色表、文档权限、文档密码与试看、审核流、QQ 与邮箱登录、验证码、Elasticsearch；只保留一个极简的三级角色字段。
 - **保留基本互动**：评论（两级）、评论点赞、内容点赞、收藏、关注/粉丝、私信、站内通知、管理后台。
 - **个人站点权限**：只有超级管理员和管理员可以发布文章与文档；普通读者可以评论、点赞、收藏、关注和私信。超级管理员可以在管理后台把读者设为管理员。
 
@@ -47,7 +47,7 @@ folio/
 │   ├── config/             # 环境变量配置
 │   ├── db/                 # SQLite / MySQL / 内存数据库
 │   ├── cache/              # Redis：JWT 黑名单、浏览量去重
-│   ├── models/             # 12 张表的模型
+│   ├── models/             # 13 张表的模型
 │   ├── art/                # 生成式封面与头像
 │   ├── handlers/           # 路由、接口与集成测试
 │   └── seed/               # 演示数据
@@ -198,7 +198,7 @@ Go 服务会自动托管 `../web/dist`，访问 <http://localhost:8080> 即可�
 
 ## 数据模型
 
-只有 12 张表：
+只有 13 张表：
 
 | 表 | 用途 |
 | --- | --- |
@@ -206,7 +206,8 @@ Go 服务会自动托管 `../web/dist`，访问 <http://localhost:8080> 即可�
 | `categories` | 文章分类 |
 | `documents` | 文章与文档共用：`kind`、`title`、`abstract`、`content`、`parent_id`、`category_id`、`tags`、`status`、计数字段 |
 | `likes` | 用户与内容点赞（唯一索引） |
-| `favorites` | 用户与内容收藏（唯一索引） |
+| `favorite_folders` | 用户自定义收藏夹 |
+| `favorites` | 用户与内容收藏（唯一索引，带 `folder_id`） |
 | `comments` | 两级评论：`parent_id` 为空是根评论，否则指向根评论 |
 | `comment_likes` | 评论点赞 |
 | `follows` | 关注关系 |
@@ -279,7 +280,7 @@ Docker 全栈使用独立的 `uploads-data` 卷保存图片，重建容器不会
 - `/u/:username` 公开主页：文章、文档、关注、粉丝
 - `/write`、`/write/:id` 编辑器：Markdown 分栏预览、图片上传/粘贴/拖拽、分类、自动封面预览、标签、草稿/发布、文档树父级与排序（仅超级管理员和管理员）
 - `/messages` 私信与通知：会话列表、消息轮询、通知已读
-- `/me` 我的空间：资料、密码、收藏、浏览历史；管理员额外看到自己的文章与文档
+- `/me` 我的空间：资料、密码、收藏夹、浏览历史；管理员额外看到自己的文章与文档
 - `/admin` 管理后台：概览、内容管理、分类管理、图片管理；超级管理员额外拥有用户与权限管理
 - `/login`、`/register` 登录注册
 
@@ -287,7 +288,7 @@ Docker 全栈使用独立的 `uploads-data` 卷保存图片，重建容器不会
 
 - 私信没有 WebSocket，页面每 10 秒拉取一次，并在打开会话时标记已读；
 - 通知只针对点赞、评论/回复、关注三种行为；
-- 收藏是私密的，只有自己能在「我的收藏」里看到；
+- 收藏是私密的，只有自己能在「我的收藏」里看到；收藏可以分到不同收藏夹，默认收藏夹不能删除；
 - 评论只有两级，回复会显示「回复 @某某」。
 
 ## API 概要
@@ -303,7 +304,7 @@ Docker 全栈使用独立的 `uploads-data` 卷保存图片，重建容器不会
 | 图片 | `POST /images`、`GET /images`、`DELETE /images/:id`，文件通过 `/uploads/*` 访问 |
 | 互动 | `POST /docs/:id/like`、`POST /docs/:id/favorite`、`GET|POST /docs/:id/comments`、`POST /comments/:id/like` |
 | 消息 | `GET /messages/conversations`、`GET|POST /messages/with/:username`、`GET /notifications` |
-| 我的 | `GET /me/docs`、`GET /me/favorites`、`GET|DELETE /me/history`、`PUT /me`、`PUT /me/password`、`GET /inbox` |
+| 我的 | `GET /me/docs`、`GET /me/favorites`、`GET|DELETE /me/history`、`GET|POST /favorite-folders`、`PUT|DELETE /favorite-folders/:id`、`PUT /me`、`PUT /me/password`、`GET /inbox` |
 | 视觉 | `GET /art/cover.svg`、`GET /art/avatar.svg` |
 | 系统 | `GET /health` |
 | 管理 | `GET /admin/stats`、`GET /admin/docs`、`GET /admin/users`、`DELETE /admin/users/:id`、`PUT /admin/users/:id/role` |

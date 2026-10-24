@@ -118,18 +118,44 @@ func (a *API) DocFavorite(c *gin.Context) {
 		return
 	}
 	viewer := currentUser(c)
+	var in struct {
+		FolderID *uint `json:"folderID"`
+	}
+	_ = c.ShouldBindJSON(&in)
+	defaultFolder, err := a.ensureDefaultFolder(viewer.ID)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "收藏夹不可用")
+		return
+	}
+	folderID := defaultFolder.ID
+	if in.FolderID != nil && *in.FolderID > 0 {
+		var folder models.FavoriteFolder
+		if err := a.DB.Where("id = ? AND user_id = ?", *in.FolderID, viewer.ID).First(&folder).Error; err != nil {
+			bad(c, "收藏夹不存在")
+			return
+		}
+		folderID = folder.ID
+	}
+
 	favorited := false
-	err := a.DB.Transaction(func(tx *gorm.DB) error {
+	moved := false
+	err = a.DB.Transaction(func(tx *gorm.DB) error {
 		var existing models.Favorite
 		err := tx.Where("user_id = ? AND doc_id = ?", viewer.ID, doc.ID).First(&existing).Error
 		switch {
 		case errors.Is(err, gorm.ErrRecordNotFound):
-			if err := tx.Create(&models.Favorite{UserID: viewer.ID, DocID: doc.ID}).Error; err != nil {
+			if err := tx.Create(&models.Favorite{UserID: viewer.ID, DocID: doc.ID, FolderID: folderID}).Error; err != nil {
 				return err
 			}
 			favorited = true
 		case err != nil:
 			return err
+		case in.FolderID != nil:
+			if err := tx.Model(&existing).UpdateColumn("folder_id", folderID).Error; err != nil {
+				return err
+			}
+			favorited = true
+			moved = true
 		default:
 			if err := tx.Delete(&existing).Error; err != nil {
 				return err
@@ -144,5 +170,10 @@ func (a *API) DocFavorite(c *gin.Context) {
 		return
 	}
 	n := a.recalcFavorites(doc.ID)
-	c.JSON(http.StatusOK, gin.H{"favorited": favorited, "favoriteCount": n})
+	c.JSON(http.StatusOK, gin.H{
+		"favorited":     favorited,
+		"favoriteCount": n,
+		"folderID":      folderID,
+		"moved":         moved,
+	})
 }

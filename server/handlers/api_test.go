@@ -420,6 +420,67 @@ func TestImageUpload(t *testing.T) {
 	}
 }
 
+func TestFavoriteFolders(t *testing.T) {
+	s := newTestAPI(t)
+	token, _ := s.register(t, "folderuser")
+
+	status, folders := s.do(t, "GET", "/api/favorite-folders", token, nil)
+	items := list(folders, "items")
+	if status != http.StatusOK || len(items) != 1 {
+		t.Fatalf("注册后应只有一个默认收藏夹: %d %v", status, folders)
+	}
+	defaultID := uint(number(items[0].(map[string]any)["id"]))
+	if items[0].(map[string]any)["isDefault"] != true {
+		t.Fatalf("第一个收藏夹应为默认收藏夹: %v", items[0])
+	}
+
+	status, _ = s.do(t, "POST", "/api/favorite-folders", token, map[string]any{"name": "待读"})
+	if status != http.StatusCreated {
+		t.Fatalf("创建收藏夹失败: %d", status)
+	}
+	status, folders = s.do(t, "GET", "/api/favorite-folders", token, nil)
+	items = list(folders, "items")
+	var customID uint
+	for _, item := range items {
+		folder := item.(map[string]any)
+		if folder["name"] == "待读" {
+			customID = uint(number(folder["id"]))
+		}
+	}
+	if customID == 0 {
+		t.Fatalf("新收藏夹未返回: %v", folders)
+	}
+
+	status, doc := s.do(t, "POST", "/api/docs", token, map[string]any{
+		"kind": "article", "title": "收藏夹测试", "content": "x", "status": "published",
+	})
+	if status != http.StatusCreated {
+		t.Fatalf("创建文章失败: %d", status)
+	}
+	docID := uint(number(obj(doc, "doc")["id"]))
+	status, faved := s.do(t, "POST", "/api/docs/"+itoa(docID)+"/favorite", token, map[string]any{"folderID": customID})
+	if status != http.StatusOK || faved["folderID"] != float64(customID) {
+		t.Fatalf("收藏到指定收藏夹失败: %d %v", status, faved)
+	}
+	status, listInCustom := s.do(t, "GET", "/api/me/favorites?folderID="+itoa(customID), token, nil)
+	if status != http.StatusOK || len(list(listInCustom, "items")) != 1 {
+		t.Fatalf("按收藏夹筛选失败: %d %v", status, listInCustom)
+	}
+
+	status, _ = s.do(t, "DELETE", "/api/favorite-folders/"+itoa(defaultID), token, nil)
+	if status != http.StatusBadRequest {
+		t.Fatalf("默认收藏夹不应能删除，实际 %d", status)
+	}
+	status, _ = s.do(t, "DELETE", "/api/favorite-folders/"+itoa(customID), token, nil)
+	if status != http.StatusOK {
+		t.Fatalf("删除收藏夹失败: %d", status)
+	}
+	status, listInDefault := s.do(t, "GET", "/api/me/favorites?folderID="+itoa(defaultID), token, nil)
+	if status != http.StatusOK || len(list(listInDefault, "items")) != 1 {
+		t.Fatalf("删除收藏夹后收藏未移动到默认收藏夹: %d %v", status, listInDefault)
+	}
+}
+
 func TestCategories(t *testing.T) {
 	s := newTestAPI(t)
 	ownerToken, _ := s.register(t, "catowner")

@@ -561,10 +561,17 @@ func (a *API) MyDocs(c *gin.Context) {
 func (a *API) MyFavorites(c *gin.Context) {
 	u := currentUser(c)
 	page, size := pageParams(c)
+	folderID := trim(c.Query("folderID"))
+	q := a.DB.Model(&models.Favorite{}).Where("user_id = ?", u.ID)
+	if folderID != "" {
+		if id, err := strconv.ParseUint(folderID, 10, 64); err == nil && id > 0 {
+			q = q.Where("folder_id = ?", uint(id))
+		}
+	}
 	var total int64
-	a.DB.Model(&models.Favorite{}).Where("user_id = ?", u.ID).Count(&total)
+	q.Count(&total)
 	var favs []models.Favorite
-	a.DB.Where("user_id = ?", u.ID).Order("id DESC").Offset((page - 1) * size).Limit(size).Find(&favs)
+	q.Order("id DESC").Offset((page - 1) * size).Limit(size).Find(&favs)
 	ids := make([]uint, 0, len(favs))
 	for _, f := range favs {
 		ids = append(ids, f.DocID)

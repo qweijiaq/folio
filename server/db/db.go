@@ -34,6 +34,7 @@ func migrate(gdb *gorm.DB) error {
 		&models.Category{},
 		&models.Document{},
 		&models.Like{},
+		&models.FavoriteFolder{},
 		&models.Favorite{},
 		&models.Comment{},
 		&models.CommentLike{},
@@ -66,6 +67,33 @@ func ensureSuperAdmin(gdb *gorm.DB) error {
 		}
 	}
 	return gdb.Model(&models.User{}).Where("id = ?", u.ID).UpdateColumn("role", models.RoleSuperAdmin).Error
+}
+
+// EnsureFavoriteFolders 为所有用户补齐默认收藏夹，并把旧收藏归入默认收藏夹。
+func EnsureFavoriteFolders(gdb *gorm.DB) error {
+	var users []models.User
+	if err := gdb.Select("id").Find(&users).Error; err != nil {
+		return err
+	}
+	for _, user := range users {
+		var folder models.FavoriteFolder
+		err := gdb.Where("user_id = ? AND is_default = ?", user.ID, true).First(&folder).Error
+		if err != nil {
+			folder = models.FavoriteFolder{UserID: user.ID, Name: "默认收藏夹", IsDefault: true}
+			if createErr := gdb.Create(&folder).Error; createErr != nil {
+				if findErr := gdb.Where("user_id = ? AND name = ?", user.ID, "默认收藏夹").First(&folder).Error; findErr != nil {
+					return createErr
+				}
+				gdb.Model(&folder).UpdateColumn("is_default", true)
+			}
+		}
+		if err := gdb.Model(&models.Favorite{}).
+			Where("user_id = ? AND (folder_id IS NULL OR folder_id = 0)", user.ID).
+			UpdateColumn("folder_id", folder.ID).Error; err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func openSQLite(path string) (*gorm.DB, error) {

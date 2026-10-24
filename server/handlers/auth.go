@@ -122,6 +122,7 @@ func (a *API) Register(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "注册失败")
 		return
 	}
+	_, _ = a.ensureDefaultFolder(u.ID)
 	token, err := a.issueToken(&u)
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "登录失败")

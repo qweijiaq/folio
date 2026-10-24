@@ -29,6 +29,9 @@ func main() {
 			log.Printf("演示数据初始化失败: %v", err)
 		}
 	}
+	if err := db.EnsureFavoriteFolders(gdb); err != nil {
+		log.Printf("收藏夹初始化失败: %v", err)
+	}
 
 	rcache := cache.New(cfg.RedisAddr, cfg.RedisPassword, cfg.RedisDB)
 	defer rcache.Close()

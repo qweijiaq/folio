@@ -6,7 +6,6 @@ import { auth, refreshMe } from '../stores/auth'
 import { toast, toastError } from '../stores/toast'
 import { roleLabel, shortDate, timeAgo } from '../utils/format'
 import UserAvatar from '../components/UserAvatar.vue'
-import DocCard from '../components/DocCard.vue'
 import EmptyState from '../components/EmptyState.vue'
 import Icon from '../components/Icon.vue'
 
@@ -18,6 +17,11 @@ const loading = ref(true)
 const tabLoading = ref(false)
 const myDocs = ref([])
 const favorites = ref([])
+const folders = ref([])
+const selectedFolderID = ref(null)
+const newFolderName = ref('')
+const editingFolderID = ref(0)
+const folderNameDraft = ref('')
 const history = ref([])
 const savingProfile = ref(false)
 const savingPassword = ref(false)
@@ -26,6 +30,9 @@ const profileForm = reactive({ nickname: '', bio: '', email: '' })
 const passwordForm = reactive({ oldPassword: '', newPassword: '', confirm: '' })
 
 const staff = computed(() => ['super_admin', 'admin'].includes(auth.user?.role))
+const currentFolder = computed(
+  () => folders.value.find((folder) => String(folder.id) === String(selectedFolderID.value)) || null
+)
 
 const tabs = computed(() => {
   const list = [
@@ -49,6 +56,111 @@ function normalizeTab() {
   }
 }
 
+async function loadFavorites() {
+  const folderData = await api.get('/favorite-folders')
+  folders.value = folderData.items
+  if (!folders.value.length) {
+    favorites.value = []
+    return
+  }
+  if (!folders.value.some((folder) => String(folder.id) === String(selectedFolderID.value))) {
+    const preferred = folders.value.find((folder) => folder.isDefault) || folders.value[0]
+    selectedFolderID.value = preferred.id
+  }
+  const data = await api.get('/me/favorites', { folderID: selectedFolderID.value, pageSize: 50 })
+  favorites.value = data.items
+}
+
+async function selectFolder(folder) {
+  if (String(folder.id) === String(selectedFolderID.value)) return
+  selectedFolderID.value = folder.id
+  editingFolderID.value = 0
+  try {
+    const data = await api.get('/me/favorites', { folderID: folder.id, pageSize: 50 })
+    favorites.value = data.items
+  } catch (err) {
+    toastError(err)
+  }
+}
+
+async function createFolder() {
+  const name = newFolderName.value.trim()
+  if (!name) {
+    toast('请输入收藏夹名称')
+    return
+  }
+  try {
+    const data = await api.post('/favorite-folders', { name })
+    newFolderName.value = ''
+    selectedFolderID.value = data.folder.id
+    await loadFavorites()
+    toast('收藏夹已创建')
+  } catch (err) {
+    toastError(err)
+  }
+}
+
+function startRenameFolder(folder) {
+  editingFolderID.value = folder.id
+  folderNameDraft.value = folder.name
+}
+
+function cancelRenameFolder() {
+  editingFolderID.value = 0
+  folderNameDraft.value = ''
+}
+
+async function saveFolderName(folder) {
+  const name = folderNameDraft.value.trim()
+  if (!name) {
+    toast('收藏夹名称不能为空')
+    return
+  }
+  try {
+    await api.put(`/favorite-folders/${folder.id}`, { name })
+    cancelRenameFolder()
+    await loadFavorites()
+    toast('收藏夹已重命名')
+  } catch (err) {
+    toastError(err)
+  }
+}
+
+async function removeFolder(folder) {
+  if (!window.confirm(`删除收藏夹「${folder.name}」？里面的收藏会移到默认收藏夹。`)) return
+  try {
+    await api.del(`/favorite-folders/${folder.id}`)
+    selectedFolderID.value = null
+    await loadFavorites()
+    toast('收藏夹已删除')
+  } catch (err) {
+    toastError(err)
+  }
+}
+
+async function moveFavorite(doc, event) {
+  const folderID = Number(event.target.value)
+  if (!folderID) return
+  try {
+    await api.post(`/docs/${doc.id}/favorite`, { folderID })
+    await loadFavorites()
+    toast('已移动收藏')
+  } catch (err) {
+    toastError(err)
+  }
+}
+
+async function removeFavorite(doc) {
+  if (!window.confirm(`取消收藏「${doc.title}」？`)) return
+  try {
+    await api.post(`/docs/${doc.id}/favorite`)
+    await loadFavorites()
+    toast('已取消收藏')
+  } catch (err) {
+    toastError(err)
+  }
+}
+
 async function loadTab() {
   if (!auth.user) return
   normalizeTab()
@@ -62,8 +174,7 @@ async function loadTab() {
       })
       myDocs.value = data.items
     } else if (tab.value === 'favorites') {
-      const data = await api.get('/me/favorites', { pageSize: 50 })
-      favorites.value = data.items
+      await loadFavorites()
     } else if (tab.value === 'history') {
       const data = await api.get('/me/history', { pageSize: 50 })
       history.value = data.items
@@ -349,21 +460,73 @@ onMounted(async () => {
         </div>
 
         <div v-else-if="tab === 'favorites'" class="panel">
-          <header class="panel-head">
-            <h2>我的收藏</h2>
-            <p>收藏是私密的，只有你能看到这份列表。</p>
+          <header class="panel-head panel-head--row">
+            <div>
+              <h2>我的收藏</h2>
+              <p>收藏是私密的。文章页点收藏会进入默认收藏夹，可以在这里整理到不同收藏夹。</p>
+            </div>
+            <form class="folder-create" @submit.prevent="createFolder">
+              <input v-model="newFolderName" maxlength="20" placeholder="新收藏夹名称" />
+              <button class="btn btn-primary btn-sm" type="submit">新建收藏夹</button>
+            </form>
           </header>
+
+          <div v-if="folders.length" class="folder-tools">
+            <div class="folder-chips">
+              <button
+                v-for="folder in folders"
+                :key="folder.id"
+                class="tag"
+                :class="{ 'tag--active': String(folder.id) === String(selectedFolderID) }"
+                type="button"
+                @click="selectFolder(folder)"
+              >
+                {{ folder.name }}
+                <span class="tag-count">{{ folder.count }}</span>
+              </button>
+            </div>
+            <div v-if="currentFolder && !currentFolder.isDefault" class="folder-manage">
+              <template v-if="editingFolderID === currentFolder.id">
+                <input v-model="folderNameDraft" class="folder-name-input" maxlength="20" />
+                <button class="btn btn-ghost btn-sm" type="button" @click="saveFolderName(currentFolder)">保存</button>
+                <button class="btn btn-ghost btn-sm" type="button" @click="cancelRenameFolder">取消</button>
+              </template>
+              <template v-else>
+                <button class="text-link" type="button" @click="startRenameFolder(currentFolder)">重命名</button>
+                <button class="text-link danger" type="button" @click="removeFolder(currentFolder)">删除收藏夹</button>
+              </template>
+            </div>
+          </div>
+
           <p v-if="tabLoading" class="muted loading-line">正在加载…</p>
           <EmptyState
             v-else-if="!favorites.length"
             icon="bookmark"
-            title="还没有收藏"
+            title="这个收藏夹还是空的"
             description="在文章或文档底部点一下收藏，它就会出现在这里。"
           >
             <RouterLink to="/articles" class="btn btn-ghost btn-sm">去读点什么</RouterLink>
           </EmptyState>
-          <div v-else class="doc-grid">
-            <DocCard v-for="doc in favorites" :key="doc.id" :doc="doc" />
+          <div v-else class="content-list">
+            <article v-for="doc in favorites" :key="doc.id" class="content-row">
+              <div class="content-row-main">
+                <RouterLink :to="docHref(doc)" class="content-row-title">{{ doc.title }}</RouterLink>
+                <div class="content-row-meta">
+                  <span>{{ doc.kind === 'doc' ? '文档' : '文章' }}</span>
+                  <span v-if="doc.category">{{ doc.category.name }}</span>
+                  <span>{{ doc.author?.nickname }}</span>
+                  <span>{{ shortDate(doc.updatedAt) }}</span>
+                </div>
+              </div>
+              <div class="content-row-actions">
+                <select class="folder-select" :value="selectedFolderID" aria-label="移动到收藏夹" @change="moveFavorite(doc, $event)">
+                  <option v-for="folder in folders" :key="folder.id" :value="folder.id">{{ folder.name }}</option>
+                </select>
+                <button class="icon-btn danger" type="button" aria-label="取消收藏" @click="removeFavorite(doc)">
+                  <Icon name="trash" :size="16" />
+                </button>
+              </div>
+            </article>
           </div>
         </div>
 

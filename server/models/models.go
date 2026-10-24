@@ -72,10 +72,19 @@ type Like struct {
 	DocID  uint `gorm:"uniqueIndex:idx_like_user_doc;index" json:"docID"`
 }
 
+type FavoriteFolder struct {
+	Base
+	UserID    uint   `gorm:"uniqueIndex:idx_folder_user_name" json:"userID"`
+	Name      string `gorm:"size:32;uniqueIndex:idx_folder_user_name" json:"name"`
+	IsDefault bool   `json:"isDefault"`
+	Sort      int    `json:"sort"`
+}
+
 type Favorite struct {
 	Base
-	UserID uint `gorm:"uniqueIndex:idx_fav_user_doc" json:"userID"`
-	DocID  uint `gorm:"uniqueIndex:idx_fav_user_doc;index" json:"docID"`
+	UserID   uint `gorm:"uniqueIndex:idx_fav_user_doc" json:"userID"`
+	DocID    uint `gorm:"uniqueIndex:idx_fav_user_doc;index" json:"docID"`
+	FolderID uint `gorm:"index" json:"folderID"`
 }
 
 // Comment 只有两级：ParentID 为空是根评论，否则指向根评论。
