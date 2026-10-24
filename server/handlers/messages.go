@@ -89,7 +89,12 @@ func (a *API) MessageThread(c *gin.Context) {
 		q = q.Where("id < ?", before)
 	}
 	var msgs []models.Message
-	q.Order("id DESC").Limit(50).Find(&msgs)
+	const pageSize = 50
+	q.Order("id DESC").Limit(pageSize + 1).Find(&msgs)
+	hasMore := len(msgs) > pageSize
+	if hasMore {
+		msgs = msgs[:pageSize]
+	}
 	for i, j := 0, len(msgs)-1; i < j; i, j = i+1, j-1 {
 		msgs[i], msgs[j] = msgs[j], msgs[i]
 	}
@@ -99,7 +104,7 @@ func (a *API) MessageThread(c *gin.Context) {
 		Where("sender_id = ? AND receiver_id = ? AND read_at IS NULL", peer.ID, me.ID).
 		UpdateColumn("read_at", now)
 
-	c.JSON(http.StatusOK, gin.H{"peer": toBrief(*peer), "items": msgs})
+	c.JSON(http.StatusOK, gin.H{"peer": toBrief(*peer), "items": msgs, "hasMore": hasMore})
 }
 
 func (a *API) MessageSend(c *gin.Context) {

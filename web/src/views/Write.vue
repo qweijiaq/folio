@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { api } from '../api/client'
+import { auth } from '../stores/auth'
 import { toast, toastError } from '../stores/toast'
 import { buildTree, flattenTree } from '../utils/tree'
 import CoverImage from '../components/CoverImage.vue'
@@ -41,6 +42,9 @@ const uploading = ref(false)
 const aiEnabled = ref(false)
 const aiLoading = ref(false)
 const savedSnapshot = ref('')
+const draftAvailable = ref(null)
+const draftSavedAt = ref(0)
+let autoSaveTimer = null
 
 const editingId = computed(() => (route.params.id ? Number(route.params.id) : 0))
 const isEdit = computed(() => Boolean(editingId.value))
@@ -64,6 +68,96 @@ function snapshot() {
 }
 
 const dirty = computed(() => !loading.value && snapshot() !== savedSnapshot.value)
+const draftTime = computed(() => {
+  if (!draftAvailable.value?.savedAt) return ''
+  return new Date(draftAvailable.value.savedAt).toLocaleString('zh-CN', {
+    month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit'
+  })
+})
+const autoSavedTime = computed(() => {
+  if (!draftSavedAt.value) return ''
+  return new Date(draftSavedAt.value).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+})
+
+function draftKey() {
+  const owner = auth.user?.id || 0
+  return editingId.value ? `folio.draft:${owner}:${editingId.value}` : `folio.draft:${owner}:new:${form.kind}`
+}
+
+function draftFields(source) {
+  return {
+    kind: source.kind,
+    title: source.title || '',
+    abstract: source.abstract || '',
+    content: source.content || '',
+    tags: Array.isArray(source.tags) ? source.tags : [],
+    status: source.status || 'draft',
+    parentID: source.parentID ?? null,
+    categoryID: source.categoryID ?? null,
+    pinned: Boolean(source.pinned),
+    openComment: source.openComment !== false,
+    sort: Number(source.sort) || 0
+  }
+}
+
+function loadLocalDraft() {
+  try {
+    const raw = localStorage.getItem(draftKey())
+    if (!raw) return
+    const data = JSON.parse(raw)
+    if (!data || !data.savedAt) {
+      localStorage.removeItem(draftKey())
+      return
+    }
+    if (isEdit.value && doc.value) {
+      const serverTime = new Date(doc.value.updatedAt).getTime()
+      if (Number(data.savedAt) < serverTime) {
+        localStorage.removeItem(draftKey())
+        return
+      }
+    }
+    if (JSON.stringify(draftFields(data)) === snapshot()) {
+      localStorage.removeItem(draftKey())
+      return
+    }
+    draftAvailable.value = { ...draftFields(data), savedAt: data.savedAt }
+  } catch {
+    localStorage.removeItem(draftKey())
+  }
+}
+
+function restoreLocalDraft() {
+  if (!draftAvailable.value) return
+  Object.assign(form, draftFields(draftAvailable.value))
+  draftAvailable.value = null
+  toast('已恢复本地草稿，记得保存')
+}
+
+function discardLocalDraft() {
+  draftAvailable.value = null
+  try {
+    localStorage.removeItem(draftKey())
+  } catch {
+    /* ignore */
+  }
+  toast('已丢弃本地草稿')
+}
+
+function autoSaveLocalDraft() {
+  try {
+    const key = draftKey()
+    if (loading.value || saving.value || !dirty.value) {
+      if (!loading.value && !draftAvailable.value) localStorage.removeItem(key)
+      if (!draftAvailable.value) draftSavedAt.value = 0
+      return
+    }
+    const savedAt = Date.now()
+    localStorage.setItem(key, JSON.stringify({ ...draftFields(form), savedAt }))
+    draftSavedAt.value = savedAt
+  } catch {
+    /* localStorage 不可用时静默降级 */
+  }
+}
 
 const parentOptions = computed(() => {
   if (form.kind !== 'doc') return []
@@ -123,6 +217,7 @@ async function load() {
   } finally {
     loading.value = false
     savedSnapshot.value = snapshot()
+    loadLocalDraft()
   }
 }
 
@@ -319,11 +414,23 @@ async function save(status = 'draft') {
       doc.value = data.doc
       form.status = status
       savedSnapshot.value = snapshot()
+      try {
+        localStorage.removeItem(draftKey())
+      } catch {
+        /* ignore */
+      }
+      draftSavedAt.value = 0
       toast(status === 'published' ? '已更新并保持发布' : '已转为草稿')
     } else {
       const data = await api.post('/docs', payload)
       form.status = status
       savedSnapshot.value = snapshot()
+      try {
+        localStorage.removeItem(draftKey())
+      } catch {
+        /* ignore */
+      }
+      draftSavedAt.value = 0
       toast(status === 'published' ? '已发布' : '草稿已保存')
       if (status === 'published') {
         router.push(`/${form.kind === 'doc' ? 'docs' : 'articles'}/${data.doc.id}`)
@@ -365,11 +472,13 @@ watch(editingId, load)
 
 onMounted(() => {
   load()
+  autoSaveTimer = window.setInterval(autoSaveLocalDraft, 3000)
   window.addEventListener('keydown', onKeydown)
   window.addEventListener('beforeunload', onBeforeUnload)
 })
 
 onBeforeUnmount(() => {
+  if (autoSaveTimer) window.clearInterval(autoSaveTimer)
   window.removeEventListener('keydown', onKeydown)
   window.removeEventListener('beforeunload', onBeforeUnload)
 })
@@ -400,6 +509,12 @@ onBeforeUnmount(() => {
           </button>
         </div>
       </header>
+
+      <div v-if="draftAvailable && !loading" class="draft-recover">
+        <span><Icon name="clock" :size="15" /> 发现 {{ draftTime }} 自动保存的本地草稿</span>
+        <button class="btn btn-primary btn-sm" type="button" @click="restoreLocalDraft">恢复草稿</button>
+        <button class="btn btn-ghost btn-sm" type="button" @click="discardLocalDraft">丢弃</button>
+      </div>
 
       <p v-if="loading" class="muted loading-line">正在准备编辑器…</p>
 
@@ -544,7 +659,7 @@ onBeforeUnmount(() => {
           />
 
           <div class="editor-foot">
-            <span>{{ wordCount }} 字</span>
+            <span>{{ wordCount }} 字<template v-if="autoSavedTime"> · 本地草稿已自动保存 {{ autoSavedTime }}</template></span>
             <span>支持 Markdown · 图片可粘贴/拖拽 · Ctrl/⌘ + S 保存草稿</span>
           </div>
         </div>

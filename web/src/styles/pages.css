@@ -4230,3 +4230,33 @@
     grid-column: 2;
   }
 }
+
+/* ---------- 编辑器本地草稿 ---------- */
+
+.draft-recover {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 20px;
+  padding: 11px 15px;
+  border: 1.2px dashed var(--accent);
+  border-radius: var(--sketch-sm);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 13px;
+}
+
+.draft-recover span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 180px;
+}
+
+.load-older {
+  display: flex;
+  justify-content: center;
+  padding: 2px 0 12px;
+}

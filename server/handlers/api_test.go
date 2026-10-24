@@ -1545,3 +1545,34 @@ func TestInvitesAndAdminCreateUser(t *testing.T) {
 		t.Fatalf("读者不应能创建邀请码, 实际 %d", status)
 	}
 }
+
+func TestMessagePagination(t *testing.T) {
+	s := newTestAPI(t)
+	senderToken, _ := s.register(t, "page_sender")
+	receiverToken, _ := s.register(t, "page_receiver")
+	for i := 0; i < 55; i++ {
+		status, _ := s.do(t, "POST", "/api/messages/with/page_receiver", senderToken, map[string]string{
+			"content": fmt.Sprintf("分页消息 %d", i+1),
+		})
+		if status != http.StatusCreated {
+			t.Fatalf("发送第 %d 条消息失败: %d", i+1, status)
+		}
+	}
+	status, first := s.do(t, "GET", "/api/messages/with/page_sender", receiverToken, nil)
+	if status != http.StatusOK {
+		t.Fatalf("读取消息失败: %d", status)
+	}
+	items := list(first, "items")
+	if len(items) != 50 || first["hasMore"] != true {
+		t.Fatalf("首批消息分页不正确: len=%d hasMore=%v", len(items), first["hasMore"])
+	}
+	oldest := uint(number(items[0].(map[string]any)["id"]))
+	status, older := s.do(t, "GET", "/api/messages/with/page_sender?before="+itoa(oldest), receiverToken, nil)
+	if status != http.StatusOK {
+		t.Fatalf("读取更早消息失败: %d", status)
+	}
+	olderItems := list(older, "items")
+	if len(olderItems) != 5 || older["hasMore"] != false {
+		t.Fatalf("更早消息分页不正确: len=%d hasMore=%v", len(olderItems), older["hasMore"])
+	}
+}

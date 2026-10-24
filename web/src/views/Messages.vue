@@ -23,6 +23,8 @@ const notifications = ref([])
 const notices = ref([])
 const notifUnread = ref(0)
 const messages = ref([])
+const hasMore = ref(false)
+const loadingOlder = ref(false)
 const peer = ref(null)
 const draft = ref('')
 const sending = ref(false)
@@ -69,7 +71,18 @@ async function loadThread(auto = false) {
   try {
     const data = await api.get(`/messages/with/${withUser.value}`)
     peer.value = data.peer
-    messages.value = data.items
+    if (auto && messages.value.length) {
+      const existing = new Set(messages.value.map((message) => message.id))
+      const merged = [...messages.value]
+      for (const message of data.items) {
+        if (!existing.has(message.id)) merged.push(message)
+      }
+      merged.sort((a, b) => a.id - b.id)
+      messages.value = merged
+    } else {
+      messages.value = data.items
+      hasMore.value = Boolean(data.hasMore)
+    }
     if (!auto || atBottom) {
       await nextTick()
       scrollBottom()
@@ -81,8 +94,30 @@ async function loadThread(auto = false) {
     toastError(err)
     peer.value = null
     messages.value = []
+    hasMore.value = false
   } finally {
     loadingThread.value = false
+  }
+}
+
+async function loadOlder() {
+  if (!peer.value || loadingOlder.value || !messages.value.length || !hasMore.value) return
+  const el = threadBody.value
+  const previousHeight = el?.scrollHeight || 0
+  const previousTop = el?.scrollTop || 0
+  loadingOlder.value = true
+  try {
+    const data = await api.get(`/messages/with/${peer.value.username}`, { before: messages.value[0].id })
+    const existing = new Set(messages.value.map((message) => message.id))
+    const older = data.items.filter((message) => !existing.has(message.id))
+    messages.value = [...older, ...messages.value]
+    hasMore.value = Boolean(data.hasMore)
+    await nextTick()
+    if (el) el.scrollTop = previousTop + (el.scrollHeight - previousHeight)
+  } catch (err) {
+    toastError(err)
+  } finally {
+    loadingOlder.value = false
   }
 }
 
@@ -392,6 +427,11 @@ onBeforeUnmount(() => {
               </header>
 
               <div ref="threadBody" class="thread-body">
+                <div v-if="hasMore && !loadingThread" class="load-older">
+                  <button class="btn btn-ghost btn-sm" type="button" :disabled="loadingOlder" @click="loadOlder">
+                    {{ loadingOlder ? '加载中…' : '加载更早的消息' }}
+                  </button>
+                </div>
                 <p v-if="loadingThread" class="muted loading-line">正在取回对话…</p>
                 <p v-else-if="!messages.length" class="empty-inline">还没有消息，先说声你好吧。</p>
                 <div
