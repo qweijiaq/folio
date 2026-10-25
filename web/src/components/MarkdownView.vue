@@ -60,6 +60,27 @@ onBeforeUnmount(() => {
 })
 
 function onClick(event) {
+  const anchor = event.target.closest('.heading-anchor')
+  if (anchor) {
+    event.preventDefault()
+    const id = (anchor.getAttribute('href') || '').replace(/^#/, '')
+    if (!id) return
+    const url = `${window.location.origin}${window.location.pathname}${window.location.search}#${id}`
+    try {
+      history.replaceState(null, '', `#${id}`)
+    } catch {
+      /* ignore */
+    }
+    if (!navigator.clipboard) {
+      toast('当前浏览器不支持复制', 'error')
+      return
+    }
+    navigator.clipboard
+      .writeText(url)
+      .then(() => toast('本节链接已复制'))
+      .catch(() => toast('复制失败', 'error'))
+    return
+  }
   const image = event.target.closest('.prose img')
   if (image) {
     openLightbox(image)

@@ -88,7 +88,7 @@ export function renderMarkdown(source, linkMap = {}) {
     const id = `h-${toc.length + 1}`
     const text = inner.replace(/<[^>]+>/g, '')
     toc.push({ level: Number(level), text, id })
-    return `<h${level} id="${id}">${inner}</h${level}>`
+    return `<h${level} id="${id}">${inner}<a class="heading-anchor" href="#${id}" aria-label="复制本节链接" title="复制本节链接">#</a></h${level}>`
   })
   html = html.replace(/<img /g, '<img loading="lazy" tabindex="0" ')
   return { html, toc }

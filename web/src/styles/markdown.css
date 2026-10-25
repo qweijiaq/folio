@@ -2,6 +2,12 @@
    知微 · 正文排版与代码高亮
    ============================================================ */
 
+.article-body .prose,
+.docs-article .prose {
+  max-width: var(--reading-width, 760px);
+  font-size: var(--reading-font-size, 17px);
+}
+
 .prose {
   max-width: 760px;
   color: var(--ink);
@@ -24,8 +30,33 @@
 .prose h2,
 .prose h3,
 .prose h4 {
+  position: relative;
   scroll-margin-top: 100px;
   line-height: 1.35;
+}
+
+.prose .heading-anchor {
+  position: absolute;
+  left: -1.15em;
+  top: 0.08em;
+  color: var(--ink-faint);
+  font-family: var(--mono);
+  font-size: 0.72em;
+  text-decoration: none;
+  opacity: 0;
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+
+.prose h1:hover .heading-anchor,
+.prose h2:hover .heading-anchor,
+.prose h3:hover .heading-anchor,
+.prose h4:hover .heading-anchor,
+.prose .heading-anchor:focus-visible {
+  opacity: 1;
+}
+
+.prose .heading-anchor:hover {
+  color: var(--accent);
 }
 
 .prose h1 {
@@ -553,5 +584,168 @@ html[data-theme="dark"] {
   .image-lightbox-enter-active,
   .image-lightbox-leave-active {
     transition: none;
+  }
+}
+
+
+@media (max-width: 760px) {
+  .prose .heading-anchor {
+    position: static;
+    margin-left: 0.25em;
+    opacity: 0.55;
+  }
+}
+
+.reading-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin: 0 0 20px;
+  padding: 7px 9px;
+  border: 1px dashed var(--line);
+  border-radius: var(--sketch-sm);
+  background: color-mix(in srgb, var(--surface-2) 60%, transparent);
+  color: var(--ink-faint);
+  font-size: 11.5px;
+}
+
+.reading-tools-label {
+  margin-right: 4px;
+  letter-spacing: 0.06em;
+}
+
+.reading-tools-size {
+  min-width: 18px;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.reading-tools button {
+  padding: 3px 8px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 11.5px;
+}
+
+.reading-tools button:hover:not(:disabled) {
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+
+.reading-tools button:disabled {
+  opacity: 0.35;
+}
+
+.reading-tools button.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent-soft) 55%, transparent);
+}
+
+body.reading-focus .site-header,
+body.reading-focus .site-footer,
+body.reading-focus .article-aside,
+body.reading-focus .docs-side,
+body.reading-focus .docs-toc,
+body.reading-focus .comment-section,
+body.reading-focus .article-cover,
+body.reading-focus .docs-cover,
+body.reading-focus .back-to-top,
+body.reading-focus .reading-bar,
+body.reading-focus .doc-actions,
+body.reading-focus .article-tags,
+body.reading-focus .author-card,
+body.reading-focus .docs-pager,
+body.reading-focus .article-pager,
+body.reading-focus .related-section,
+body.reading-focus .backlinks-section,
+body.reading-focus .toc-fab,
+body.reading-focus .toc-drawer-overlay {
+  display: none !important;
+}
+
+body.reading-focus .article-layout,
+body.reading-focus .docs-layout {
+  display: block;
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+body.reading-focus .article-body,
+body.reading-focus .docs-article {
+  max-width: var(--reading-width, 760px);
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+@media print {
+  .site-header,
+  .site-footer,
+  .article-aside,
+  .docs-side,
+  .docs-toc,
+  .comment-section,
+  .reading-bar,
+  .back-to-top,
+  .reading-tools,
+  .toc-fab,
+  .toc-drawer-overlay,
+  .doc-actions,
+  .share-overlay,
+  .revision-overlay {
+    display: none !important;
+  }
+
+  body {
+    background: #fff !important;
+  }
+
+  .article-layout,
+  .docs-layout {
+    display: block !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .article-body,
+  .docs-article {
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .prose {
+    max-width: none !important;
+    color: #000 !important;
+    font-size: 11.5pt !important;
+    line-height: 1.7 !important;
+  }
+
+  .prose a {
+    color: #000 !important;
+  }
+
+  .prose pre,
+  .prose img,
+  .prose blockquote,
+  .prose table {
+    break-inside: avoid;
+  }
+
+  .prose h1,
+  .prose h2,
+  .prose h3,
+  .prose h4 {
+    break-after: avoid;
+  }
+
+  .heading-anchor {
+    display: none !important;
   }
 }

@@ -4,8 +4,8 @@ import { renderMarkdown } from './markdown'
 describe('markdown rendering', () => {
   it('adds heading ids and a table of contents', () => {
     const { html, toc } = renderMarkdown('# 标题\n\n## 小节\n\n正文')
-    expect(html).toContain('<h1 id="h-1">标题</h1>')
-    expect(html).toContain('<h2 id="h-2">小节</h2>')
+    expect(html).toContain('<h1 id="h-1">标题<a class="heading-anchor"')
+    expect(html).toContain('<h2 id="h-2">小节<a class="heading-anchor"')
     expect(toc).toEqual([
       { level: 1, text: '标题', id: 'h-1' },
       { level: 2, text: '小节', id: 'h-2' }
