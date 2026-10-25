@@ -196,7 +196,10 @@ cd server && go test ./...
 python3 scripts/smoke.py
 ```
 
-- `go test ./...` 使用临时 SQLite，无需任何外部服务，覆盖注册登录、内容 CRUD、点赞收藏、两级评论、关注、私信、通知、搜索、权限、级联删除和健康检查。
+- `go test ./...` 使用临时 SQLite，无需任何外部服务，覆盖注册登录、内容 CRUD、点赞收藏、两级评论、关注、私信、通知、搜索、权限、会话管理、限流、级联删除和健康检查。
+- 前端单元测试使用 Vitest：`cd web && npm test`，覆盖日期/数字格式化、文档树、Markdown 渲染与代码块；`npm run build` 仍会做完整生产构建。
+- 端到端测试使用 Playwright：首次先执行 `cd web && npx playwright install chromium`，之后 `npm run test:e2e`。它会自动构建前端、在 `127.0.0.1:8091` 用全新的 SQLite 演示库启动服务，覆盖登录退出、写作发布、私密阅读申请、AI 必填自带 Key 和登录设备列表。
+- GitHub Actions 工作流 `.github/workflows/ci.yml` 会并行运行后端测试、Vitest + 构建和 Playwright；E2E 失败时上传报告。
 - `scripts/smoke.py` 对运行中的实例做端到端检查，会临时创建一个用户和一篇内容，测试结束后自动删除。Redis 在线时还会额外验证**登出黑名单**和**浏览量去重**。
 
 ## 生产构建

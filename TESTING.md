@@ -595,3 +595,18 @@ curl -s http://localhost:8080/api/health
 ```
 
 四条都通过，说明核心链路（数据库、认证、内容、互动、Redis 可选功能、静态前端）是通的。
+
+
+## 前端自动化测试
+
+```bash
+cd web
+npm test          # Vitest 单元测试
+npx playwright install chromium   # 首次需要
+npm run test:e2e  # Playwright，自动启动 8091 的独立演示库
+```
+
+- [ ] Vitest 覆盖格式化、文档树和 Markdown 渲染；
+- [ ] E2E 覆盖登录退出、写作发布、私密阅读申请、AI 未填 Key 提示和登录设备；
+- [ ] E2E 使用 `.run/e2e.db`，不会读写 Docker 或本地开发库；
+- [ ] CI 工作流能通过后端测试、前端单元测试与构建、Playwright。

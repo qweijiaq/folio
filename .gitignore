@@ -11,3 +11,7 @@ npm-debug.log*
 
 __pycache__/
 *.pyc
+
+web/playwright-report/
+web/test-results/
+web/blob-report/
