@@ -66,6 +66,18 @@
   text-decoration-color: var(--accent);
 }
 
+.prose a.wiki-link {
+  color: var(--accent);
+  text-decoration-style: dashed;
+  text-underline-offset: 3px;
+}
+
+.prose .wiki-link--missing {
+  color: var(--ink-faint);
+  border-bottom: 1px dashed var(--line-strong);
+  text-decoration: none;
+}
+
 .prose strong {
   font-weight: 600;
 }

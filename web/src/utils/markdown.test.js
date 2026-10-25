@@ -30,6 +30,16 @@ describe('markdown rendering', () => {
     expect(html).toContain('tabindex="0"')
   })
 
+  it('resolves wiki links and marks missing targets', () => {
+    const { html } = renderMarkdown('[[测试文档]] 和 [[不存在]]', {
+      '测试文档': { id: 7, kind: 'doc' }
+    })
+    expect(html).toContain('class="wiki-link" href="/docs/7"')
+    expect(html).toContain('测试文档')
+    expect(html).toContain('wiki-link--missing')
+    expect(html).toContain('[[不存在]]')
+  })
+
   it('escapes raw HTML', () => {
     const { html } = renderMarkdown('<script>alert(1)</script>')
     expect(html).toContain('&lt;script&gt;')

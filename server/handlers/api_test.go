@@ -3239,3 +3239,47 @@ func TestEmailNotifications(t *testing.T) {
 	case <-time.After(300 * time.Millisecond):
 	}
 }
+
+func TestWikiLinksAndBacklinks(t *testing.T) {
+	s := newTestAPI(t)
+	ownerToken, _ := s.register(t, "wikialice")
+
+	create := func(title, content, status string, private bool) uint {
+		statusCode, data := s.do(t, "POST", "/api/docs", ownerToken, map[string]any{
+			"kind": "article", "title": title, "content": content, "status": status, "private": private,
+		})
+		if statusCode != http.StatusCreated {
+			t.Fatalf("创建内容失败: %d %v", statusCode, data)
+		}
+		return uint(number(obj(data, "doc")["id"]))
+	}
+	targetID := create("目标文章", "这是目标内容。", "published", false)
+	sourceID := create("引用文章", "延伸阅读：[[目标文章]]。", "published", false)
+	create("草稿标题", "草稿内容", "draft", false)
+	statusCode, privateData := s.do(t, "POST", "/api/docs", ownerToken, map[string]any{
+		"kind": "doc", "title": "私密文档", "content": "私密内容", "status": "published", "private": true,
+	})
+	if statusCode != http.StatusCreated {
+		t.Fatalf("创建私密文档失败: %d %v", statusCode, privateData)
+	}
+	privateID := uint(number(obj(privateData, "doc")["id"]))
+
+	status, data := s.do(t, "GET", fmt.Sprintf("/api/docs/%d/backlinks", targetID), "", nil)
+	items := list(data, "items")
+	if status != http.StatusOK || len(items) != 1 || uint(number(items[0].(map[string]any)["id"])) != sourceID {
+		t.Fatalf("反向链接不正确: %d %v", status, data)
+	}
+
+	status, data = s.do(t, "GET", "/api/doc-links", "", nil)
+	links := list(data, "items")
+	titles := map[string]bool{}
+	for _, raw := range links {
+		titles[raw.(map[string]any)["title"].(string)] = true
+	}
+	if status != http.StatusOK || !titles["目标文章"] || !titles["引用文章"] || titles["草稿标题"] || titles["私密文档"] {
+		t.Fatalf("链接索引可见性不正确: %d %v", status, data)
+	}
+	if uint(number(items[0].(map[string]any)["id"])) == privateID {
+		t.Fatalf("私密内容不应出现在反向链接里")
+	}
+}

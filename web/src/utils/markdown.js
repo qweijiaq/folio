@@ -32,6 +32,32 @@ const md = new MarkdownIt({
 })
 md.enable(['table', 'strikethrough'])
 
+md.inline.ruler.before('link', 'wiki_link', (state, silent) => {
+  const start = state.pos
+  if (state.src.charCodeAt(start) !== 0x5b || state.src.charCodeAt(start + 1) !== 0x5b) return false
+  const end = state.src.indexOf(']]', start + 2)
+  if (end < 0) return false
+  const title = state.src.slice(start + 2, end).trim()
+  if (!title || /[\r\n]/.test(title)) return false
+  if (!silent) {
+    const token = state.push('wiki_link', 'a', 0)
+    token.content = title
+    token.markup = '[['
+  }
+  state.pos = end + 2
+  return true
+})
+
+md.renderer.rules.wiki_link = (tokens, idx, options, env) => {
+  const title = tokens[idx].content.trim()
+  const item = (env?.linkMap || {})[title.toLowerCase()]
+  if (!item) {
+    return `<span class="wiki-link wiki-link--missing" title="没有找到同名内容">[[${md.utils.escapeHtml(title)}]]</span>`
+  }
+  const kind = item.kind === 'doc' ? 'docs' : 'articles'
+  return `<a class="wiki-link" href="/${kind}/${item.id}">${md.utils.escapeHtml(title)}</a>`
+}
+
 md.renderer.rules.fence = (tokens, idx, options, env, self) => {
   const token = tokens[idx]
   const info = (token.info || '').trim()
@@ -55,8 +81,8 @@ md.renderer.rules.link_open = (tokens, idx, options, env, self) => {
   return self.renderToken(tokens, idx, options)
 }
 
-export function renderMarkdown(source) {
-  let html = md.render(source || '')
+export function renderMarkdown(source, linkMap = {}) {
+  let html = md.render(source || '', { linkMap })
   const toc = []
   html = html.replace(/<h([1-4])>(.*?)<\/h\1>/g, (match, level, inner) => {
     const id = `h-${toc.length + 1}`

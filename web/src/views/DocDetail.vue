@@ -11,6 +11,7 @@ import CoverImage from '../components/CoverImage.vue'
 import UserAvatar from '../components/UserAvatar.vue'
 import MarkdownView from '../components/MarkdownView.vue'
 import CommentSection from '../components/CommentSection.vue'
+import Backlinks from '../components/Backlinks.vue'
 import ArticleSkeleton from '../components/ArticleSkeleton.vue'
 import TagPill from '../components/TagPill.vue'
 import EmptyState from '../components/EmptyState.vue'
@@ -391,6 +392,8 @@ watch(
               <strong>{{ nextDoc.title }}</strong>
             </button>
           </nav>
+
+          <Backlinks :doc-id="doc.id" />
 
           <CommentSection :doc-id="doc.id" :open="doc.openComment !== false" @count="doc.commentCount = $event" />
         </article>

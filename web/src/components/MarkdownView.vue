@@ -1,19 +1,21 @@
 <script setup>
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { renderMarkdown } from '../utils/markdown'
 import { toast } from '../stores/toast'
 import Icon from './Icon.vue'
+import { useDocLinks } from '../composables/useDocLinks'
 
 const props = defineProps({
   source: { type: String, default: '' }
 })
 const emit = defineEmits(['toc'])
 
+const { linkMap, loadDocLinks } = useDocLinks()
 const lightbox = ref(null)
 let previousOverflow = ''
 let lastImage = null
 
-const rendered = computed(() => renderMarkdown(props.source))
+const rendered = computed(() => renderMarkdown(props.source, linkMap.value))
 watch(
   () => rendered.value.toc,
   (toc) => emit('toc', toc),
@@ -47,6 +49,8 @@ function onKeydown(event) {
     openLightbox(event.target)
   }
 }
+
+onMounted(loadDocLinks)
 
 onBeforeUnmount(() => {
   if (lightbox.value) {
