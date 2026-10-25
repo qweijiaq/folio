@@ -56,7 +56,7 @@ folio/
 │   ├── db/                 # SQLite / MySQL / 内存数据库
 │   ├── cache/              # Redis：JWT 黑名单、浏览量去重
 │   ├── mail/               # SMTP 发信与本地调试邮件
-│   ├── models/             # 26 张表的模型
+│   ├── models/             # 27 张表的模型
 │   ├── art/                # 生成式封面与头像
 │   ├── storage/            # 本地磁盘 / 七牛云存储抽象
 │   ├── handlers/           # 路由、接口与集成测试
@@ -264,12 +264,13 @@ Go 服务会自动托管 `../web/dist`，访问 <http://localhost:8080> 即可�
 
 ## 数据模型
 
-只有 26 张表：
+只有 27 张表：
 
 | 表 | 用途 |
 | --- | --- |
 | `users` | 用户名、昵称、邮箱、密码哈希、简介、角色、最后登录 |
 | `user_settings` | 隐私与消息偏好：关注/粉丝可见性、私信开关、评论/点赞/关注/阅读申请通知、主页样式 |
+| `user_sessions` | 登录会话：token 标识、IP、User-Agent、设备、最近活跃、过期与撤销时间 |
 | `categories` | 文章分类 |
 | `series` | 文章合集：标题、介绍、作者 |
 | `documents` | 文章与文档共用：`kind`、`title`、`abstract`、`content`、`parent_id`、`category_id`、`series_id`、`series_order`、`tags`、`status`、`private`、`open_comment`、计数字段 |
@@ -456,6 +457,8 @@ FOLIO_QQ_REDIRECT=http://localhost:8080/api/auth/qq/callback
 
 「账号安全」里还会显示最近 12 条登录与安全动作（登录、注册、改密、找回密码、绑定邮箱），数据来自操作日志，只对本人可见。
 
+同一页面的「登录设备」会列出当前有效会话、设备、IP 与最近活跃时间，可以退出单个设备、退出其他设备或退出所有设备。修改密码会退出其他设备；通过邮箱重置密码会让所有旧会话失效，需要重新登录。所有撤销都会立即生效，不依赖 Redis。
+
 这些设置保存在 `user_settings`，没有记录时按全部公开、全部通知处理；新增的通知开关带数据库默认值，老用户不需要迁移。
 
 ## 邮箱验证码（可选）
@@ -567,7 +570,7 @@ FOLIO_SITE_URL=https://your-domain.com
 - `/write`、`/write/:id` 编辑器：Markdown 分栏预览、图片上传/粘贴/拖拽、分类、自动封面预览、标签、评论开关、历史版本、草稿/定时/立即发布、文档树父级与排序（仅超级管理员和管理员）
 - `/messages` 私信与通知：会话列表、WebSocket 实时消息、图片与表情、轮询兜底、通知类型筛选、单条/全部已读、全站公告
 - `/ask` 问 AI：用户自带 API Key（Anthropic、DeepSeek、智谱 GLM、Kimi、通义千问），检索已发布内容与站点帮助，支持严格/通用模式、多轮追问和流式回答
-- `/me` 我的空间：资料、密码、隐私与消息、最近登录记录、收藏夹、浏览历史；管理员额外看到自己的文章与文档，并可以把一篇文章置顶到公开主页
+- `/me` 我的空间：资料、密码、隐私与消息、登录设备与会话撤销、最近登录记录、收藏夹、浏览历史；管理员额外看到自己的文章与文档，并可以把一篇文章置顶到公开主页
 - `/admin` 管理后台：概览、数据看板、内容管理、分类管理、合集管理、图片管理、阅读申请、全站通知；内容管理支持导出全部 Markdown；超级管理员额外拥有用户与权限、注册与邀请、存储设置、站点设置和操作日志
 - `/login`、`/register` 登录注册：密码登录、邮箱验证码登录、QQ 登录、注册；关闭注册后可通过一次性邀请链接注册
 - `/forgot` 通过邮箱验证码重置密码
@@ -603,7 +606,7 @@ FOLIO_SITE_URL=https://your-domain.com
 | AI | `GET /ai/status`、`POST /ai/analyze`（仅管理员）、`GET /ai/providers`、`GET /ai/meta`、`GET|PUT /ai/keys`、`DELETE /ai/keys/:provider`、`POST /ai/ask`、`POST /ai/ask/stream`（SSE，登录用户需自带 Key） |
 | 互动 | `POST /docs/:id/like`、`POST /docs/:id/favorite`、`GET|POST /docs/:id/comments`、`POST /comments/:id/like` |
 | 消息 | `GET /messages/conversations`、`GET|POST /messages/with/:username`、`GET /notifications?type=&unread=`、`POST /notifications/read`、`POST /notifications/:id/read`、`GET /notices`、`POST /notices/read`、`GET /ws`（WebSocket，token 查询参数） |
-| 我的 | `GET /me/docs`、`GET /me/favorites`、`GET|DELETE /me/history`、`GET /me/access-requests`、`GET /me/access-requests/outgoing`、`GET|POST /favorite-folders`、`PUT|DELETE /favorite-folders/:id`、`PUT /me`、`PUT /me/password`、`GET|PUT /me/settings`、`PUT /me/featured-doc`、`GET /me/login-records`、`GET /inbox` |
+| 我的 | `GET /me/docs`、`GET /me/favorites`、`GET|DELETE /me/history`、`GET /me/access-requests`、`GET /me/access-requests/outgoing`、`GET|POST /favorite-folders`、`PUT|DELETE /favorite-folders/:id`、`PUT /me`、`PUT /me/password`、`GET|PUT /me/settings`、`PUT /me/featured-doc`、`GET /me/login-records`、`GET /me/sessions`、`DELETE /me/sessions/:id`、`POST /me/sessions/revoke-others`、`POST /me/sessions/revoke-all`、`GET /inbox` |
 | 视觉 | `GET /art/cover.svg`、`GET /art/cover.png`、`GET /art/avatar.svg` |
 | 站点 | `GET /site`、`GET /site/features`（公开的功能目录，关于页使用） |
 | 搜索 | `GET /search`（相关度排序、摘要片段、标签建议、分页） |

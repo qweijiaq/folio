@@ -452,6 +452,8 @@ def main():
         peer_id = me.get("user", {}).get("id")
         if peer_id:
             request("DELETE", f"/api/admin/users/{peer_id}", admin_token)
+        # 撤销本次冒烟测试创建的登录会话，避免出现在管理员的“登录设备”列表里。
+        request("POST", "/api/auth/logout", admin_token)
 
     print(f"\n全部通过：{passed} 项检查")
     print("提示：如果 Redis 为 off，登出黑名单与浏览量去重的两项会跳过。")

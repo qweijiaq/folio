@@ -86,6 +86,7 @@ func pageParams(c *gin.Context) (page, size int) {
 type tokenClaims struct {
 	UserID uint   `json:"uid"`
 	Role   string `json:"role"`
+	Epoch  int    `json:"epoch"`
 	jwt.RegisteredClaims
 }
 
@@ -97,18 +98,38 @@ func randomTokenID() string {
 	return hex.EncodeToString(b)
 }
 
-func (a *API) issueToken(u *models.User) (string, error) {
+func (a *API) issueToken(c *gin.Context, u *models.User) (string, error) {
+	now := time.Now()
+	expiresAt := now.Add(30 * 24 * time.Hour)
 	claims := tokenClaims{
 		UserID: u.ID,
 		Role:   u.Role,
+		Epoch:  u.AuthEpoch,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ID:        randomTokenID(),
 			Subject:   u.Username,
-			IssuedAt:  jwt.NewNumericDate(time.Now()),
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(30 * 24 * time.Hour)),
+			IssuedAt:  jwt.NewNumericDate(now),
+			ExpiresAt: jwt.NewNumericDate(expiresAt),
 		},
 	}
-	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(a.Cfg.Secret))
+	token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(a.Cfg.Secret))
+	if err != nil {
+		return "", err
+	}
+	ua := c.GetHeader("User-Agent")
+	session := models.UserSession{
+		UserID:     u.ID,
+		TokenID:    claims.ID,
+		IP:         clipText(c.ClientIP(), 64),
+		UserAgent:  clipText(ua, 255),
+		Device:     clipText(deviceLabel(ua), 64),
+		LastSeenAt: now,
+		ExpiresAt:  expiresAt,
+	}
+	if err := a.DB.Create(&session).Error; err != nil {
+		return "", err
+	}
+	return token, nil
 }
 
 func (a *API) userFromToken(token string, ctx context.Context) (*models.User, *tokenClaims) {
@@ -133,6 +154,9 @@ func (a *API) userFromToken(token string, ctx context.Context) (*models.User, *t
 	if err := a.DB.First(&u, claims.UserID).Error; err != nil {
 		return nil, &claims
 	}
+	if claims.Epoch != u.AuthEpoch {
+		return nil, &claims
+	}
 	return &u, &claims
 }
 
@@ -142,9 +166,10 @@ func (a *API) userFromRequest(c *gin.Context) *models.User {
 		return nil
 	}
 	u, claims := a.userFromToken(strings.TrimPrefix(header, "Bearer "), c.Request.Context())
-	if claims != nil {
-		c.Set("claims", claims)
+	if u == nil || claims == nil || !a.sessionAllowed(c, u, claims) {
+		return nil
 	}
+	c.Set("claims", claims)
 	return u
 }
 

@@ -31,6 +31,7 @@ func Open(cfg config.Config) (*gorm.DB, error) {
 func migrate(gdb *gorm.DB) error {
 	if err := gdb.AutoMigrate(
 		&models.User{},
+		&models.UserSession{},
 		&models.Category{},
 		&models.Document{},
 		&models.DocumentRevision{},
@@ -109,6 +110,13 @@ func PublishScheduled(gdb *gorm.DB) error {
 			"published_at": gorm.Expr("publish_at"),
 			"publish_at":   nil,
 		}).Error
+}
+
+// CleanupSessions 删除已过期或撤销超过七天的登录会话。
+func CleanupSessions(gdb *gorm.DB) error {
+	now := time.Now()
+	return gdb.Where("expires_at < ? OR (revoked_at IS NOT NULL AND revoked_at < ?)", now, now.Add(-7*24*time.Hour)).
+		Delete(&models.UserSession{}).Error
 }
 
 // CleanupDailyStats 删除已不存在内容的每日统计，避免看板被历史测试数据污染。

@@ -11,8 +11,9 @@ import (
 )
 
 type wsClient struct {
-	conn *websocket.Conn
-	mu   sync.Mutex
+	conn    *websocket.Conn
+	mu      sync.Mutex
+	tokenID string
 }
 
 func (c *wsClient) writeJSON(value any) error {
@@ -48,6 +49,37 @@ func (h *wsHub) remove(userID uint, client *wsClient) {
 	if len(set) == 0 {
 		delete(h.clients, userID)
 	}
+}
+
+func (h *wsHub) closeMatching(userID uint, keepTokenID string, keep bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for client := range h.clients[userID] {
+		if (keep && client.tokenID != keepTokenID) || (!keep && client.tokenID == keepTokenID) {
+			_ = client.conn.Close()
+			delete(h.clients[userID], client)
+		}
+	}
+	if len(h.clients[userID]) == 0 {
+		delete(h.clients, userID)
+	}
+}
+
+func (h *wsHub) disconnectToken(userID uint, tokenID string) {
+	h.closeMatching(userID, tokenID, false)
+}
+
+func (h *wsHub) disconnectExcept(userID uint, keepTokenID string) {
+	h.closeMatching(userID, keepTokenID, true)
+}
+
+func (h *wsHub) disconnectAll(userID uint) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for client := range h.clients[userID] {
+		_ = client.conn.Close()
+	}
+	delete(h.clients, userID)
 }
 
 // send 把同一条事件推送给多个用户的所有在线连接。写失败只关闭连接，不重试。
@@ -97,8 +129,8 @@ func (a *API) WebSocket(c *gin.Context) {
 			token = header[7:]
 		}
 	}
-	user, _ := a.userFromToken(token, c.Request.Context())
-	if user == nil {
+	user, claims := a.userFromToken(token, c.Request.Context())
+	if user == nil || claims == nil || !a.sessionAllowed(c, user, claims) {
 		fail(c, http.StatusUnauthorized, "请先登录")
 		return
 	}
@@ -107,7 +139,7 @@ func (a *API) WebSocket(c *gin.Context) {
 	if err != nil {
 		return
 	}
-	client := &wsClient{conn: conn}
+	client := &wsClient{conn: conn, tokenID: claims.ID}
 	a.Hub.add(user.ID, client)
 	defer func() {
 		a.Hub.remove(user.ID, client)

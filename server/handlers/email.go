@@ -277,7 +277,7 @@ func (a *API) EmailLogin(c *gin.Context) {
 	}
 	a.DB.Model(&u).UpdateColumn("last_login_at", time.Now())
 	a.recordLog(c, &u, "登录", "user", u.ID, "邮箱验证码登录")
-	token, err := a.issueToken(&u)
+	token, err := a.issueToken(c, &u)
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "登录失败")
 		return
@@ -323,6 +323,11 @@ func (a *API) ResetPassword(c *gin.Context) {
 		return
 	}
 	a.DB.Model(&u).UpdateColumn("password", hash)
+	if err := a.revokeAllUserSessions(u.ID); err != nil {
+		fail(c, http.StatusInternalServerError, "重置密码失败")
+		return
+	}
+	a.Hub.disconnectAll(u.ID)
 	a.recordLog(c, &u, "重置密码", "user", u.ID, "通过邮箱验证码重置")
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }

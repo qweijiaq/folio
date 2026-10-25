@@ -51,6 +51,9 @@ func main() {
 	if err := db.PublishScheduled(gdb); err != nil {
 		log.Printf("发布定时内容失败: %v", err)
 	}
+	if err := db.CleanupSessions(gdb); err != nil {
+		log.Printf("清理登录会话失败: %v", err)
+	}
 	go func() {
 		ticker := time.NewTicker(time.Minute)
 		defer ticker.Stop()

@@ -2,7 +2,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '../api/client'
-import { auth, refreshMe } from '../stores/auth'
+import { auth, logoutLocal, refreshMe } from '../stores/auth'
 import { toast, toastError } from '../stores/toast'
 import { roleLabel, shortDate, timeAgo } from '../utils/format'
 import UserAvatar from '../components/UserAvatar.vue'
@@ -31,6 +31,9 @@ const history = ref([])
 const outgoingRequests = ref([])
 const cancellingRequest = ref(0)
 const loginRecords = ref([])
+const sessions = ref([])
+const sessionsLoading = ref(false)
+const sessionBusy = ref(0)
 const featuredDocID = ref(null)
 const savingProfile = ref(false)
 const savingPassword = ref(false)
@@ -54,6 +57,7 @@ const emailForm = reactive({ email: '', code: '' })
 const passwordForm = reactive({ oldPassword: '', newPassword: '', confirm: '' })
 
 const staff = computed(() => ['super_admin', 'admin'].includes(auth.user?.role))
+const otherSessions = computed(() => sessions.value.filter((session) => !session.current).length)
 const currentFolder = computed(
   () => folders.value.find((folder) => String(folder.id) === String(selectedFolderID.value)) || null
 )
@@ -214,7 +218,7 @@ async function loadTab() {
     } else if (tab.value === 'privacy') {
       await loadPrivacySettings()
     } else if (tab.value === 'security') {
-      await loadLoginRecords()
+      await Promise.all([loadLoginRecords(), loadSessions()])
     }
   } catch (err) {
     toastError(err)
@@ -275,6 +279,64 @@ async function loadLoginRecords() {
   try {
     const data = await api.get('/me/login-records')
     loginRecords.value = data.items
+  } catch (err) {
+    toastError(err)
+  }
+}
+
+async function loadSessions() {
+  sessionsLoading.value = true
+  try {
+    const data = await api.get('/me/sessions')
+    sessions.value = data.items || []
+  } catch (err) {
+    toastError(err)
+  } finally {
+    sessionsLoading.value = false
+  }
+}
+
+async function revokeSession(session) {
+  const label = session.device || '该设备'
+  const question = session.current ? '退出当前设备后需要重新登录，继续？' : `退出「${label}」这个登录会话？`
+  if (!window.confirm(question)) return
+  sessionBusy.value = session.id
+  try {
+    const data = await api.del(`/me/sessions/${session.id}`)
+    if (data?.current) {
+      logoutLocal()
+      toast('已退出当前设备')
+      router.push('/login')
+      return
+    }
+    await loadSessions()
+    toast('已退出该设备')
+  } catch (err) {
+    toastError(err)
+  } finally {
+    sessionBusy.value = 0
+  }
+}
+
+async function revokeOtherSessions() {
+  if (!otherSessions.value) return
+  if (!window.confirm(`退出其他 ${otherSessions.value} 个登录会话？`)) return
+  try {
+    const data = await api.post('/me/sessions/revoke-others')
+    await loadSessions()
+    toast(`已退出 ${data?.revoked || 0} 个设备`)
+  } catch (err) {
+    toastError(err)
+  }
+}
+
+async function revokeAllSessions() {
+  if (!window.confirm('退出所有设备后需要重新登录，确定继续？')) return
+  try {
+    await api.post('/me/sessions/revoke-all')
+    logoutLocal()
+    toast('已退出所有设备')
+    router.push('/login')
   } catch (err) {
     toastError(err)
   }
@@ -508,7 +570,7 @@ onMounted(async () => {
         <div v-else-if="tab === 'security'" class="panel">
           <header class="panel-head">
             <h2>账号安全</h2>
-            <p>修改密码后，当前登录状态会保留。</p>
+            <p>修改密码后当前设备保持登录，其他设备会退出。发现异常登录时可以立即撤销会话。</p>
           </header>
           <form class="security-form" @submit.prevent="changePassword">
             <div class="field">
@@ -559,6 +621,43 @@ onMounted(async () => {
               </div>
             </template>
             <p v-else class="hint">站点未配置邮件服务，暂时不能绑定或验证邮箱。</p>
+          </section>
+
+          <section class="session-manager">
+            <header>
+              <h3>登录设备</h3>
+              <p>每次登录都会生成一个会话。撤销后该设备的登录 token 立即失效。</p>
+            </header>
+            <p v-if="sessionsLoading" class="muted loading-line">正在加载登录设备…</p>
+            <p v-else-if="!sessions.length" class="muted">还没有可管理的登录会话。</p>
+            <ul v-else class="session-list">
+              <li v-for="session in sessions" :key="session.id" class="session-row">
+                <div class="session-main">
+                  <div class="session-device">
+                    <strong>{{ session.device || '未知设备' }}</strong>
+                    <span v-if="session.current" class="badge badge-live">当前设备</span>
+                  </div>
+                  <span class="session-meta">{{ session.ip || '未知 IP' }} · 最近活跃 {{ timeAgo(session.lastSeenAt) }}</span>
+                  <span class="session-ua">{{ session.userAgent || '没有浏览器信息' }}</span>
+                </div>
+                <button
+                  class="btn btn-ghost btn-sm"
+                  type="button"
+                  :disabled="sessionBusy === session.id"
+                  @click="revokeSession(session)"
+                >
+                  {{ sessionBusy === session.id ? '退出中…' : '退出' }}
+                </button>
+              </li>
+            </ul>
+            <div v-if="sessions.length" class="session-actions">
+              <button v-if="otherSessions" class="btn btn-ghost btn-sm" type="button" @click="revokeOtherSessions">
+                退出其他设备
+              </button>
+              <button class="btn btn-ghost btn-sm session-danger" type="button" @click="revokeAllSessions">
+                退出所有设备
+              </button>
+            </div>
           </section>
 
           <section class="login-records">

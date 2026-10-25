@@ -45,6 +45,20 @@ type User struct {
 	Role        string     `gorm:"size:16;not null;default:user" json:"role"`
 	QQOpenID    string     `gorm:"size:64;index" json:"-"`
 	LastLoginAt *time.Time `json:"lastLoginAt"`
+	AuthEpoch   int        `gorm:"not null;default:0" json:"-"`
+}
+
+// UserSession 记录每次签发的登录令牌，用于设备列表和会话撤销。
+type UserSession struct {
+	Base
+	UserID     uint       `gorm:"index;not null" json:"userID"`
+	TokenID    string     `gorm:"size:64;uniqueIndex;not null" json:"-"`
+	IP         string     `gorm:"size:64" json:"ip"`
+	UserAgent  string     `gorm:"size:255" json:"userAgent"`
+	Device     string     `gorm:"size:64" json:"device"`
+	LastSeenAt time.Time  `json:"lastSeenAt"`
+	ExpiresAt  time.Time  `gorm:"index" json:"expiresAt"`
+	RevokedAt  *time.Time `json:"revokedAt"`
 }
 
 // Document 同时承载博客文章（article）与知识库文档（doc）。

@@ -283,7 +283,7 @@ func (a *API) QQExchange(c *gin.Context) {
 		bad(c, "账号不存在")
 		return
 	}
-	token, err := a.issueToken(&user)
+	token, err := a.issueToken(c, &user)
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "登录失败")
 		return

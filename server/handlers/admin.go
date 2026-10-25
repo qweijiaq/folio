@@ -274,6 +274,7 @@ func (a *API) purgeUser(userID uint) error {
 		tx.Where("user_id = ?", userID).Delete(&models.UserSetting{})
 		tx.Where("user_id = ?", userID).Delete(&models.AIProviderKey{})
 		tx.Where("user_id = ?", userID).Delete(&models.NoticeRead{})
+		tx.Where("user_id = ?", userID).Delete(&models.UserSession{})
 		var email string
 		tx.Model(&models.User{}).Where("id = ?", userID).Pluck("email", &email)
 		if email != "" {

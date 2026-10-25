@@ -3795,6 +3795,91 @@
   font-size: 12px;
 }
 
+.session-manager {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 30px;
+  padding-top: 26px;
+  border-top: 1.2px dashed var(--line);
+}
+
+.session-manager header h3 {
+  margin: 0 0 5px;
+  font-family: var(--hand);
+  font-size: 17px;
+  font-weight: 500;
+}
+
+.session-manager header p {
+  margin: 0;
+  color: var(--ink-faint);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.session-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.session-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px dashed var(--line);
+}
+
+.session-main {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.session-device {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.session-device strong {
+  font-family: var(--hand);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.session-device .badge {
+  padding: 1px 7px;
+  font-size: 10px;
+}
+
+.session-meta,
+.session-ua {
+  color: var(--ink-faint);
+  font-size: 11.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.session-danger {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 35%, transparent);
+}
+
 .login-records {
   display: flex;
   flex-direction: column;
@@ -3861,6 +3946,11 @@
 }
 
 @media (max-width: 620px) {
+  .session-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
   .login-records li {
     grid-template-columns: 1fr auto;
   }

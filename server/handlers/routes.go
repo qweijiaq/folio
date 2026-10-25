@@ -146,6 +146,10 @@ func (a *API) Routes(r *gin.Engine) {
 	authed.POST("/ai/ask", a.AIAsk)
 	authed.POST("/ai/ask/stream", a.AIAskStream)
 	authed.GET("/inbox", a.Inbox)
+	authed.GET("/me/sessions", a.MySessions)
+	authed.DELETE("/me/sessions/:id", a.SessionRevoke)
+	authed.POST("/me/sessions/revoke-others", a.SessionsRevokeOthers)
+	authed.POST("/me/sessions/revoke-all", a.SessionsRevokeAll)
 
 	authed.POST("/users/:username/follow", a.FollowUser)
 	authed.DELETE("/users/:username/follow", a.UnfollowUser)

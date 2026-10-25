@@ -3017,3 +3017,80 @@ func TestNotificationReadAndFilters(t *testing.T) {
 		t.Fatalf("关闭关注通知后仍收到通知: %d %v", status, data)
 	}
 }
+
+func TestSessionManagement(t *testing.T) {
+	s := newTestAPI(t)
+	token1, _ := s.register(t, "sessionalice")
+
+	login := func() string {
+		status, data := s.do(t, "POST", "/api/auth/login", "", map[string]string{
+			"username": "sessionalice", "password": "password123",
+		})
+		if status != http.StatusOK {
+			t.Fatalf("登录失败: %d %v", status, data)
+		}
+		return data["token"].(string)
+	}
+	token2 := login()
+
+	status, data := s.do(t, "GET", "/api/me/sessions", token1, nil)
+	items := list(data, "items")
+	if status != http.StatusOK || len(items) != 2 {
+		t.Fatalf("登录设备列表不正确: %d %v", status, data)
+	}
+	currentCount := 0
+	otherID := uint(0)
+	for _, raw := range items {
+		item := raw.(map[string]any)
+		if item["current"] == true {
+			currentCount++
+		} else {
+			otherID = uint(number(item["id"]))
+		}
+		if item["device"] == "" || item["lastSeenAt"] == nil {
+			t.Fatalf("设备信息不完整: %v", item)
+		}
+	}
+	if currentCount != 1 || otherID == 0 {
+		t.Fatalf("当前设备标记不正确: %v", items)
+	}
+
+	if status, resp := s.do(t, "DELETE", fmt.Sprintf("/api/me/sessions/%d", otherID), token1, nil); status != http.StatusOK || resp["current"] != false {
+		t.Fatalf("退出指定设备失败: %d %v", status, resp)
+	}
+	if status, _ := s.do(t, "GET", "/api/me", token2, nil); status != http.StatusUnauthorized {
+		t.Fatalf("已撤销会话仍然有效，实际 %d", status)
+	}
+	if status, _ := s.do(t, "GET", "/api/me", token1, nil); status != http.StatusOK {
+		t.Fatalf("当前会话不应被撤销，实际 %d", status)
+	}
+
+	token3 := login()
+	if status, resp := s.do(t, "POST", "/api/me/sessions/revoke-others", token1, nil); status != http.StatusOK || number(resp["revoked"]) != 1 {
+		t.Fatalf("退出其他设备失败: %d %v", status, resp)
+	}
+	if status, _ := s.do(t, "GET", "/api/me", token3, nil); status != http.StatusUnauthorized {
+		t.Fatalf("其他设备会话仍然有效，实际 %d", status)
+	}
+	if status, _ := s.do(t, "GET", "/api/me", token1, nil); status != http.StatusOK {
+		t.Fatalf("退出其他设备不应影响当前会话，实际 %d", status)
+	}
+
+	if status, _ := s.do(t, "POST", "/api/me/sessions/revoke-all", token1, nil); status != http.StatusOK {
+		t.Fatalf("退出所有设备失败: %d", status)
+	}
+	if status, _ := s.do(t, "GET", "/api/me", token1, nil); status != http.StatusUnauthorized {
+		t.Fatalf("退出所有设备后旧 token 仍然有效，实际 %d", status)
+	}
+	token4 := login()
+	if status, _ := s.do(t, "GET", "/api/me", token4, nil); status != http.StatusOK {
+		t.Fatalf("退出所有设备后新登录应可用，实际 %d", status)
+	}
+
+	if status, _ := s.do(t, "POST", "/api/auth/logout", token4, nil); status != http.StatusOK {
+		t.Fatalf("登出失败: %d", status)
+	}
+	if status, _ := s.do(t, "GET", "/api/me", token4, nil); status != http.StatusUnauthorized {
+		t.Fatalf("无 Redis 时登出后 token 仍有效，实际 %d", status)
+	}
+}

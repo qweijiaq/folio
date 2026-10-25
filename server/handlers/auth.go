@@ -186,7 +186,7 @@ func (a *API) Register(c *gin.Context) {
 		method = "邀请码"
 	}
 	a.recordLog(c, &u, "注册账号", "user", u.ID, "注册方式："+method)
-	token, err := a.issueToken(&u)
+	token, err := a.issueToken(c, &u)
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "登录失败")
 		return
@@ -221,7 +221,7 @@ func (a *API) Login(c *gin.Context) {
 	now := time.Now()
 	a.DB.Model(&u).UpdateColumn("last_login_at", now)
 	a.recordLog(c, &u, "登录", "user", u.ID, "用户名密码登录")
-	token, err := a.issueToken(&u)
+	token, err := a.issueToken(c, &u)
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "登录失败")
 		return
@@ -230,9 +230,16 @@ func (a *API) Login(c *gin.Context) {
 }
 
 func (a *API) Logout(c *gin.Context) {
-	if claims := currentClaims(c); claims != nil && claims.ExpiresAt != nil {
-		ttl := time.Until(claims.ExpiresAt.Time)
-		_ = a.Cache.Blacklist(c.Request.Context(), claims.ID, ttl)
+	if claims := currentClaims(c); claims != nil {
+		if me := currentUser(c); me != nil {
+			now := time.Now()
+			a.DB.Model(&models.UserSession{}).Where("token_id = ? AND user_id = ?", claims.ID, me.ID).UpdateColumn("revoked_at", now)
+			a.Hub.disconnectToken(me.ID, claims.ID)
+		}
+		if claims.ExpiresAt != nil {
+			ttl := time.Until(claims.ExpiresAt.Time)
+			_ = a.Cache.Blacklist(c.Request.Context(), claims.ID, ttl)
+		}
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
@@ -296,6 +303,13 @@ func (a *API) MePassword(c *gin.Context) {
 		return
 	}
 	a.DB.Model(u).UpdateColumn("password", hash)
+	if claims := currentClaims(c); claims != nil {
+		now := time.Now()
+		a.DB.Model(&models.UserSession{}).
+			Where("user_id = ? AND token_id <> ? AND revoked_at IS NULL", u.ID, claims.ID).
+			UpdateColumn("revoked_at", now)
+		a.Hub.disconnectExcept(u.ID, claims.ID)
+	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
