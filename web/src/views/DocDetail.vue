@@ -355,7 +355,8 @@ watch(
               <div class="byline-meta">
                 <span><Icon name="eye" :size="15" /> {{ formatNumber(doc.viewCount) }}</span>
                 <span><Icon name="clock" :size="15" /> {{ readingTime(doc.content) }} 分钟</span>
-                <RouterLink v-if="canEdit" :to="`/write/${doc.id}`" class="text-link"><Icon name="edit" :size="14" /> 编辑</RouterLink>
+                <RouterLink v-if="auth.user" :to="{ name: 'ask', query: { doc: doc.id } }" class="text-link"><Icon name="spark" :size="14" /> 问 AI</RouterLink>
+            <RouterLink v-if="canEdit" :to="`/write/${doc.id}`" class="text-link"><Icon name="edit" :size="14" /> 编辑</RouterLink>
               </div>
             </div>
           </header>

@@ -203,6 +203,19 @@ type AIProviderKey struct {
 
 func (AIProviderKey) TableName() string { return "ai_provider_keys" }
 
+// AIFeedback 记录用户对 AI 回答是否有帮助的反馈，用于后续优化检索与提示词。
+type AIFeedback struct {
+	Base
+	UserID   uint   `gorm:"index;not null" json:"userID"`
+	Provider string `gorm:"size:32" json:"provider"`
+	Model    string `gorm:"size:100" json:"model"`
+	Question string `gorm:"size:500" json:"question"`
+	Answer   string `gorm:"size:800" json:"answer"`
+	Helpful  bool   `json:"helpful"`
+}
+
+func (AIFeedback) TableName() string { return "ai_feedback" }
+
 // DocumentRevision 保存内容的历史版本，用于查看和回滚。
 type DocumentRevision struct {
 	Base

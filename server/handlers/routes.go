@@ -147,6 +147,7 @@ func (a *API) Routes(r *gin.Engine) {
 	authed.DELETE("/ai/keys/:provider", a.AIDeleteKey)
 	authed.POST("/ai/ask", a.AIAsk)
 	authed.POST("/ai/ask/stream", a.AIAskStream)
+	authed.POST("/ai/feedback", a.AIFeedback)
 	authed.GET("/inbox", a.Inbox)
 	authed.GET("/me/sessions", a.MySessions)
 	authed.DELETE("/me/sessions/:id", a.SessionRevoke)

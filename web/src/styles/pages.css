@@ -4525,6 +4525,61 @@
   min-height: 520px;
 }
 
+.ask-context {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 18px;
+  padding: 9px 12px;
+  border: 1px dashed color-mix(in srgb, var(--accent) 45%, transparent);
+  border-radius: var(--sketch-sm);
+  background: color-mix(in srgb, var(--accent-soft) 40%, transparent);
+  color: var(--ink-soft);
+  font-size: 12.5px;
+}
+
+.ask-context a {
+  color: var(--accent);
+}
+
+.ask-context button {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.ask-feedback {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 12px;
+  color: var(--ink-faint);
+  font-size: 11.5px;
+}
+
+.ask-feedback button {
+  padding: 3px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 11.5px;
+}
+
+.ask-feedback button:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.ask-feedback button.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.ask-feedback button:disabled {
+  opacity: 0.55;
+}
+
 .ask-form {
   display: flex;
   flex-direction: column;

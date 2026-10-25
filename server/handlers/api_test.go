@@ -3326,3 +3326,33 @@ func TestCommentMentions(t *testing.T) {
 	}
 	_ = aliceID
 }
+
+func TestAIFeedbackAndDocContext(t *testing.T) {
+	s := newTestAPI(t)
+	token, _ := s.register(t, "aifeedback")
+
+	status, data := s.do(t, "POST", "/api/ai/feedback", token, map[string]any{
+		"provider": "deepseek", "model": "deepseek-chat", "question": "怎么发布文章？",
+		"answer": "在编辑器里发布。", "helpful": true,
+	})
+	if status != http.StatusOK {
+		t.Fatalf("提交 AI 反馈失败: %d %v", status, data)
+	}
+	var count int64
+	s.api.DB.Model(&models.AIFeedback{}).Where("user_id = (SELECT id FROM users WHERE username = ?)", "aifeedback").Count(&count)
+	if count != 1 {
+		t.Fatalf("AI 反馈没有落库，count=%d", count)
+	}
+	status, _ = s.do(t, "POST", "/api/ai/feedback", token, map[string]any{"provider": "deepseek"})
+	if status != http.StatusBadRequest {
+		t.Fatalf("不完整的 AI 反馈应被拒绝，实际 %d", status)
+	}
+
+	status, data = s.do(t, "POST", "/api/ai/ask", token, map[string]any{
+		"question": "针对不存在的内容提问", "provider": "deepseek", "model": "deepseek-chat",
+		"apiKey": "sk-test-1234567890abcdef", "mode": "strict", "docID": 999999,
+	})
+	if status != http.StatusNotFound {
+		t.Fatalf("针对不存在内容的提问应返回 404，实际 %d %v", status, data)
+	}
+}

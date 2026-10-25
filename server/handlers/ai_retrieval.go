@@ -45,6 +45,7 @@ type qaSource struct {
 	Category string   `json:"category,omitempty"`
 	Tags     []string `json:"tags,omitempty"`
 	Excerpt  string   `json:"excerpt"`
+	Context  string   `json:"-"`
 }
 
 type qaChunk struct {

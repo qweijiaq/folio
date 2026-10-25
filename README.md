@@ -12,7 +12,7 @@
 - **三种数据模式**：SQLite（默认）、MySQL、进程内内存 Mock。Redis 可选，用于登出黑名单与浏览量去重。图片默认落本地磁盘，也可以切换到七牛云。
 - **保留内容能力**：正文图片上传与图库、粘贴/拖拽插图、文章分类、文章推荐、收藏夹分组、浏览历史、评论、点赞、收藏、关注、私信、通知、双向链接都已恢复。
 - **邮箱能力**：配置 SMTP 后支持邮箱验证码注册、验证码登录、绑定/更换邮箱和自助找回密码。
-- **AI 问答**：登录用户可以使用自己的 API Key 向站内文章、文档和站点帮助提问，可选 Anthropic、DeepSeek、智谱 GLM、Kimi、通义千问；支持分块检索、严格/通用模式、多轮追问和流式回答，回答会带回引用。本站不提供 Key；用户可选择将自己的 Key 加密保存，方便下次使用。
+- **AI 问答**：登录用户可以使用自己的 API Key 向站内文章、文档和站点帮助提问，可选 Anthropic、DeepSeek、智谱 GLM、Kimi、通义千问；支持分块检索、严格/通用模式、多轮追问和流式回答，回答会带回引用；可以从文章/文档页带着当前内容提问，回答下可以标记有帮助或没帮助。本站不提供 Key；用户可选择将自己的 Key 加密保存，方便下次使用。
 - **关于页与站点帮助**：`/about` 按场景介绍全部功能，目录同时作为 AI 的站点帮助知识库；新增功能只需补充一条目录记录。
 - **站点设置与审计**：超级管理员可以在后台修改站点名称、描述、维护者和登录图形验证码；公开注册与 QQ 登录开关在「注册与邀请」；登录、内容、分类、图片、角色等关键动作都会写入操作日志。
 - **隐私与消息偏好**：每个人都可以决定是否公开关注/粉丝列表、是否接收私信和评论/点赞/关注/阅读申请通知，并选择公开主页的封面样式。
@@ -56,7 +56,7 @@ folio/
 │   ├── db/                 # SQLite / MySQL / 内存数据库
 │   ├── cache/              # Redis：JWT 黑名单、浏览量去重
 │   ├── mail/               # SMTP 发信与本地调试邮件
-│   ├── models/             # 27 张表的模型
+│   ├── models/             # 28 张表的模型
 │   ├── art/                # 生成式封面与头像
 │   ├── storage/            # 本地磁盘 / 七牛云存储抽象
 │   ├── handlers/           # 路由、接口与集成测试
@@ -285,7 +285,7 @@ Go 服务会自动托管 `../web/dist`，访问 <http://localhost:8080> 即可�
 
 ## 数据模型
 
-只有 27 张表：
+只有 28 张表：
 
 | 表 | 用途 |
 | --- | --- |
@@ -305,6 +305,7 @@ Go 服务会自动托管 `../web/dist`，访问 <http://localhost:8080> 即可�
 | `notifications` | 点赞 / 评论 / 提及 / 关注 / 私密阅读申请与结果通知 |
 | `images` | 上传图片：文件名、存储提供方、对象键、URL、MIME、大小、内容哈希、上传者 |
 | `ai_provider_keys` | 用户选择记住的 AI Key：按用户和服务商唯一，密钥加密保存 |
+| `ai_feedback` | AI 回答反馈：用户、服务商、模型、问题、回答摘要和是否有帮助 |
 | `view_histories` | 登录用户的浏览历史（用户 + 内容唯一） |
 | `doc_daily_stats` | 内容每日阅读量（内容 + 日期唯一），用于数据看板 |
 | `invite_codes` | 一次性邀请码：备注、有效期、创建者、使用者和使用时间 |
@@ -445,6 +446,7 @@ FOLIO_QQ_REDIRECT=http://localhost:8080/api/auth/qq/callback
 - 可选服务商：Anthropic、DeepSeek、智谱 GLM、Kimi、通义千问；每个服务商自带常用模型，也可以手动填写新模型名称；
 - 默认只在当前浏览器标签页的 sessionStorage 中记住 Key（按服务商分别记忆）；
 - 勾选「记住 Key」后，Key 会使用 `FOLIO_SECRET` 加密保存到 `ai_provider_keys` 表，下次留空即可直接使用；接口只返回是否已保存，不回显明文，不写操作日志，可以随时清除；
+- 从文章或文档页点「问 AI」会把当前内容作为优先上下文提交；回答下方可以提交「有帮助 / 没帮助」反馈，保存在 `ai_feedback` 表；
 - 知识库由已发布的文章、文档和「站点帮助」目录共同组成。文章会切成分块，标题、摘要、标签、分类和正文一起参与检索，取最相关的片段而不是整篇塞给模型；
 - 「站点帮助」是一份可扩展的功能目录，同时驱动公开的 `/about` 关于页；每条功能带标题、摘要、步骤、路由、关键词和适用角色，管理员专属功能只对管理员检索；
 - 回答支持两种模式：严格站内（只依据资料）和通用知识（资料不足时补充站外常识并明确标注）；
@@ -603,7 +605,7 @@ FOLIO_SITE_URL=https://your-domain.com
 - `/u/:username` 公开主页：文章、文档、关注、粉丝、公开收藏夹和作者置顶文章；可按隐私设置隐藏关注/粉丝/收藏，并支持封面、紧凑、纯文字三种头部样式
 - `/write`、`/write/:id` 编辑器：Markdown 分栏预览、图片上传/粘贴/拖拽、分类、自动封面预览、标签、评论开关、历史版本与差异对比、草稿/定时/立即发布、文档树父级与排序（仅超级管理员和管理员）
 - `/messages` 私信与通知：会话列表、WebSocket 实时消息、图片与表情、轮询兜底、通知类型筛选、单条/全部已读、全站公告
-- `/ask` 问 AI：用户自带 API Key（Anthropic、DeepSeek、智谱 GLM、Kimi、通义千问），检索已发布内容与站点帮助，支持严格/通用模式、多轮追问和流式回答
+- `/ask` 问 AI：用户自带 API Key（Anthropic、DeepSeek、智谱 GLM、Kimi、通义千问），检索已发布内容与站点帮助，支持严格/通用模式、多轮追问、流式回答、针对当前内容提问和回答反馈
 - `/me` 我的空间：资料、密码、隐私与消息、登录设备与会话撤销、最近登录记录、收藏夹、浏览历史；管理员额外看到自己的文章与文档，并可以把一篇文章置顶到公开主页
 - `/admin` 管理后台：概览、数据看板、内容管理、分类管理、合集管理、图片管理、阅读申请、全站通知；内容管理支持导出全部 Markdown；超级管理员额外拥有用户与权限、注册与邀请、存储设置、站点设置和操作日志
 - `/login`、`/register` 登录注册：密码登录、邮箱验证码登录、QQ 登录、注册；关闭注册后可通过一次性邀请链接注册
@@ -637,7 +639,7 @@ FOLIO_SITE_URL=https://your-domain.com
 | 内容 | `GET /docs`、`GET /docs/:id`、`GET /docs/:id/access`、`POST /docs/:id/access-requests`、`GET /doc-links`、`GET /docs/:id/backlinks`、`GET /docs/:id/related`、`GET /docs/:id/revisions`、`GET /docs/:id/revisions/:revisionID`、`POST /docs/:id/revisions/:revisionID/restore`、`POST /docs`、`PUT /docs/:id`、`DELETE /docs/:id`、`GET /doc-tree` |
 | 分类 | `GET /categories`、`POST /categories`、`PUT /categories/:id`、`DELETE /categories/:id` |
 | 图片 | `POST /images`、`GET /images`、`DELETE /images/:id`；本地模式通过 `/uploads/*` 访问，七牛模式返回云存储 URL |
-| AI | `GET /ai/status`、`POST /ai/analyze`（仅管理员）、`GET /ai/providers`、`GET /ai/meta`、`GET|PUT /ai/keys`、`DELETE /ai/keys/:provider`、`POST /ai/ask`、`POST /ai/ask/stream`（SSE，登录用户需自带 Key） |
+| AI | `GET /ai/status`、`POST /ai/analyze`（仅管理员）、`GET /ai/providers`、`GET /ai/meta`、`GET|PUT /ai/keys`、`DELETE /ai/keys/:provider`、`POST /ai/ask`、`POST /ai/ask/stream`、`POST /ai/feedback`（SSE，登录用户需自带 Key） |
 | 互动 | `POST /docs/:id/like`、`POST /docs/:id/favorite`、`GET|POST /docs/:id/comments`、`POST /comments/:id/like` |
 | 消息 | `GET /messages/conversations`、`GET|POST /messages/with/:username`、`GET /notifications?type=&unread=`、`POST /notifications/read`、`POST /notifications/:id/read`、`GET /notices`、`POST /notices/read`、`GET /ws`（WebSocket，token 查询参数） |
 | 我的 | `GET /me/docs`、`GET /me/favorites`、`GET|DELETE /me/history`、`GET /me/access-requests`、`GET /me/access-requests/outgoing`、`GET|POST /favorite-folders`、`PUT|DELETE /favorite-folders/:id`、`PUT /me`、`PUT /me/password`、`GET|PUT /me/settings`、`PUT /me/featured-doc`、`GET /me/login-records`、`GET /me/sessions`、`DELETE /me/sessions/:id`、`POST /me/sessions/revoke-others`、`POST /me/sessions/revoke-all`、`GET /inbox` |

@@ -381,7 +381,11 @@ func qaContextBlock(sources []qaSource) string {
 		if len(source.Tags) > 0 {
 			fmt.Fprintf(&b, "标签：%s\n", strings.Join(source.Tags, "、"))
 		}
-		fmt.Fprintf(&b, "内容：%s\n\n", source.Excerpt)
+		contextText := source.Context
+		if strings.TrimSpace(contextText) == "" {
+			contextText = source.Excerpt
+		}
+		fmt.Fprintf(&b, "内容：%s\n\n", contextText)
 	}
 	return b.String()
 }
@@ -392,6 +396,7 @@ type qaAskInput struct {
 	Provider string             `json:"provider"`
 	Model    string             `json:"model"`
 	Mode     string             `json:"mode"`
+	DocID    *uint              `json:"docID"`
 	History  []qaHistoryMessage `json:"history"`
 }
 
@@ -454,6 +459,34 @@ func (a *API) prepareQA(c *gin.Context, in qaAskInput) (qaPrepared, int, string)
 	}
 	history := normalizeQAHistory(in.History)
 	sources := a.retrieveQAContext(qaSearchQuestion(in.Question, history), isStaff(user))
+	focusNote := ""
+	if in.DocID != nil && *in.DocID > 0 {
+		var focus models.Document
+		if err := a.DB.First(&focus, *in.DocID).Error; err != nil || focus.Status != models.StatusPublished || !a.canViewDocument(user, &focus) {
+			return qaPrepared{}, http.StatusNotFound, "要提问的内容不存在或不可访问"
+		}
+		section := "articles"
+		if focus.Kind == models.KindDoc {
+			section = "docs"
+		}
+		ref := fmt.Sprintf("%s-%d", focus.Kind, focus.ID)
+		focusSource := qaSource{
+			Ref: ref, ID: focus.ID, Kind: focus.Kind, Title: focus.Title,
+			URL:     fmt.Sprintf("/%s/%d", section, focus.ID),
+			Tags:    focus.Tags,
+			Excerpt: plainText(focus.Content),
+			Context: truncateRunes(focus.Content, 6000),
+		}
+		filtered := make([]qaSource, 0, len(sources)+1)
+		filtered = append(filtered, focusSource)
+		for _, source := range sources {
+			if source.Ref != ref {
+				filtered = append(filtered, source)
+			}
+		}
+		sources = filtered
+		focusNote = fmt.Sprintf("用户正在针对站内内容《%s》提问，请优先围绕这篇内容回答；如果站内资料不足，再按当前模式处理。\n\n", focus.Title)
+	}
 	contextText := qaContextBlock(sources)
 	return qaPrepared{
 		Question:     in.Question,
@@ -463,7 +496,7 @@ func (a *API) prepareQA(c *gin.Context, in qaAskInput) (qaPrepared, int, string)
 		Provider:     provider,
 		History:      history,
 		Sources:      sources,
-		UserPrompt:   fmt.Sprintf("站内资料：\n%s\n用户问题：%s", contextText, in.Question),
+		UserPrompt:   fmt.Sprintf("%s站内资料：\n%s\n用户问题：%s", focusNote, contextText, in.Question),
 		SystemPrompt: qaSystemPrompt(in.Mode),
 	}, 0, ""
 }

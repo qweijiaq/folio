@@ -1,5 +1,6 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { api, getToken } from '../api/client'
 import { toast } from '../stores/toast'
 import { usePageMeta } from '../composables/usePageMeta'
@@ -10,6 +11,8 @@ import Icon from '../components/Icon.vue'
 
 usePageMeta(() => ({ title: '问 AI', description: '用自己的 API Key 向知微知识库提问', noindex: true }))
 
+const route = useRoute()
+const router = useRouter()
 const KEY_PREFIX = 'folio.ai.key.'
 const PROVIDER_STORAGE = 'folio.ai.provider'
 const CUSTOM_MODEL = '__custom__'
@@ -25,6 +28,8 @@ const customModel = ref('')
 const mode = ref('strict')
 const question = ref('')
 const thread = ref([])
+const contextDoc = ref(null)
+const feedbackSending = ref('')
 const loading = ref(false)
 const loadingStage = ref('')
 const providersLoading = ref(true)
@@ -127,6 +132,27 @@ async function loadProviders() {
   }
 }
 
+async function loadContextDoc() {
+  const id = Number(route.query.doc || 0)
+  if (!id) {
+    contextDoc.value = null
+    return
+  }
+  try {
+    const data = await api.get(`/docs/${id}`)
+    contextDoc.value = { id: data.doc.id, title: data.doc.title, kind: data.doc.kind }
+  } catch {
+    contextDoc.value = null
+  }
+}
+
+function clearContext() {
+  contextDoc.value = null
+  const query = { ...route.query }
+  delete query.doc
+  router.replace({ name: 'ask', query })
+}
+
 async function loadMeta() {
   try {
     aiMeta.value = await api.get('/ai/meta')
@@ -149,8 +175,10 @@ watch(apiKey, (value) => storeKey(providerId.value, value))
 
 onMounted(async () => {
   await loadProviders()
-  await Promise.all([loadMeta(), loadSavedKeys()])
+  await Promise.all([loadMeta(), loadSavedKeys(), loadContextDoc()])
 })
+
+watch(() => route.query.doc, loadContextDoc)
 
 function useExample(text) {
   question.value = text
@@ -292,7 +320,8 @@ async function ask() {
     mode: mode.value,
     retrieved: 0,
     pending: true,
-    error: ''
+    error: '',
+    feedback: ''
   }
   thread.value.push(assistant)
   question.value = ''
@@ -315,6 +344,7 @@ async function ask() {
         provider: providerId.value,
         model: chosenModel,
         mode: mode.value,
+        docID: contextDoc.value?.id || undefined,
         history
       }),
       signal: abortController.signal
@@ -346,6 +376,30 @@ async function ask() {
     loadingStage.value = ''
     abortController = null
     scrollThread()
+  }
+}
+
+async function sendFeedback(message, helpful) {
+  if (message.feedback || feedbackSending.value) return
+  const index = thread.value.indexOf(message)
+  const question = [...thread.value.slice(0, index)].reverse().find((item) => item.role === 'user')?.content || ''
+  if (!question || !message.content) return
+  const key = `${index}-${helpful ? 'up' : 'down'}`
+  feedbackSending.value = key
+  try {
+    await api.post('/ai/feedback', {
+      provider: message.provider,
+      model: message.model,
+      question,
+      answer: message.content,
+      helpful
+    })
+    message.feedback = helpful ? 'up' : 'down'
+    toast(helpful ? '谢谢，已记录这条回答有帮助' : '已记录，之后会继续改进')
+  } catch (err) {
+    toast(err.message || '反馈保存失败', 'error')
+  } finally {
+    feedbackSending.value = ''
   }
 }
 
@@ -388,6 +442,16 @@ onBeforeUnmount(() => {
           <span class="ask-coverage-label">知识库覆盖</span>
           <span>{{ knowledge.articles || 0 }} 篇文章 · {{ knowledge.docs || 0 }} 篇文档 · {{ knowledge.help || 0 }} 条站点帮助</span>
           <RouterLink to="/about">查看关于页</RouterLink>
+        </div>
+
+        <div v-if="contextDoc" class="ask-context">
+          <Icon name="spark" :size="15" />
+          <span>
+            正在针对
+            <RouterLink :to="`/${contextDoc.kind === 'doc' ? 'docs' : 'articles'}/${contextDoc.id}`">《{{ contextDoc.title }}》</RouterLink>
+            提问
+          </span>
+          <button type="button" class="text-link" @click="clearContext">取消</button>
         </div>
 
         <form class="ask-form" @submit.prevent="ask">
@@ -522,6 +586,25 @@ onBeforeUnmount(() => {
                 <MarkdownView :source="message.content" />
               </div>
               <p v-if="message.error" class="form-error">{{ message.error }}</p>
+              <div v-if="message.content && !message.pending && !message.error" class="ask-feedback">
+                <span>这条回答有帮助吗？</span>
+                <button
+                  type="button"
+                  :class="{ active: message.feedback === 'up' }"
+                  :disabled="Boolean(message.feedback) || Boolean(feedbackSending)"
+                  @click="sendFeedback(message, true)"
+                >
+                  有帮助
+                </button>
+                <button
+                  type="button"
+                  :class="{ active: message.feedback === 'down' }"
+                  :disabled="Boolean(message.feedback) || Boolean(feedbackSending)"
+                  @click="sendFeedback(message, false)"
+                >
+                  没帮助
+                </button>
+              </div>
               <section v-if="message.sources?.length" class="ask-sources">
                 <h3>引用资料</h3>
                 <details v-for="source in message.sources" :key="source.ref" class="ask-source-item">

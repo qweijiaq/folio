@@ -66,6 +66,27 @@ test('AI asks for a user supplied key before answering', async ({ page }) => {
   await expect(page.getByText(/请先填写你自己的.*API Key/)).toBeVisible()
 })
 
+test('asks AI with a document context', async ({ page, request }) => {
+  const ownerToken = await apiLogin(request)
+  const title = `E2E AI 上下文 ${Date.now()}`
+  const created = await request.post('/api/docs', {
+    headers: authHeader(ownerToken),
+    data: { kind: 'article', title, content: '这是给 AI 提问用的上下文正文。', status: 'published' }
+  })
+  expect(created.status()).toBe(201)
+  const doc = (await created.json()).doc
+  try {
+    await login(page, 'chen')
+    await page.goto(`/ask?doc=${doc.id}`)
+    await expect(page.locator('.ask-context')).toContainText(title)
+    await page.getByRole('button', { name: '取消' }).click()
+    await expect(page.locator('.ask-context')).toHaveCount(0)
+  } finally {
+    const res = await request.delete(`/api/docs/${doc.id}`, { headers: authHeader(ownerToken) })
+    expect(res.ok()).toBeTruthy()
+  }
+})
+
 test('adjusts reading tools and focus mode', async ({ page, request }) => {
   const ownerToken = await apiLogin(request)
   const title = `E2E 阅读体验 ${Date.now()}`
