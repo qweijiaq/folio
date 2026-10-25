@@ -61,6 +61,8 @@ func (a *API) Routes(r *gin.Engine) {
 
 	// 内容（统一文档表）。只有超级管理员和管理员可以创作。
 	g.GET("/search", a.OptionalAuth(), a.Search)
+	g.GET("/series", a.SeriesList)
+	g.GET("/series/:id", a.SeriesDetail)
 	g.GET("/docs", a.OptionalAuth(), a.DocList)
 	g.GET("/docs/:id", a.OptionalAuth(), a.DocDetail)
 	g.GET("/docs/:id/access", a.OptionalAuth(), a.docAccessInfo)
@@ -122,6 +124,10 @@ func (a *API) Routes(r *gin.Engine) {
 	authed.GET("/me/history", a.MyHistory)
 	authed.GET("/me/access-requests", a.myAccessRequests)
 	authed.GET("/me/access-requests/outgoing", a.myOutgoingAccessRequests)
+	authed.GET("/me/series", a.StaffOnly(), a.MySeries)
+	authed.POST("/series", a.StaffOnly(), a.SeriesCreate)
+	authed.PUT("/series/:id", a.StaffOnly(), a.SeriesUpdate)
+	authed.DELETE("/series/:id", a.StaffOnly(), a.SeriesDelete)
 	authed.DELETE("/access-requests/:id", a.cancelAccessRequest)
 	authed.POST("/docs/:id/access-requests", a.docAccessRequest)
 	authed.PUT("/access-requests/:id", a.handleAccessRequest)

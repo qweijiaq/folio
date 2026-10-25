@@ -30,6 +30,10 @@ const users = ref([])
 const invites = ref([])
 const accessRequests = ref([])
 const handlingRequest = ref(0)
+const seriesList = ref([])
+const seriesForm = reactive({ title: '', description: '' })
+const editingSeries = ref(0)
+const savingSeries = ref(false)
 const inviteNote = ref('')
 const inviteDays = ref(7)
 const creatingInvite = ref(false)
@@ -112,6 +116,7 @@ const tabs = computed(() => {
     { key: 'dashboard', label: '数据看板', icon: 'chart' },
     { key: 'content', label: '内容管理', icon: 'edit' },
     { key: 'categories', label: '分类管理', icon: 'tag' },
+    { key: 'series', label: '合集管理', icon: 'layers' },
     { key: 'images', label: '图片管理', icon: 'image' },
     { key: 'requests', label: '阅读申请', icon: 'lock' },
     { key: 'notices', label: '全站通知', icon: 'bell' }
@@ -469,6 +474,63 @@ async function handleAccessRequest(item, action) {
   }
 }
 
+async function loadSeriesAdmin() {
+  try {
+    const data = await api.get('/me/series')
+    seriesList.value = data.items || []
+  } catch (err) {
+    toastError(err)
+  }
+}
+
+function resetSeriesForm() {
+  editingSeries.value = 0
+  seriesForm.title = ''
+  seriesForm.description = ''
+}
+
+function editSeries(item) {
+  editingSeries.value = item.id
+  seriesForm.title = item.title || ''
+  seriesForm.description = item.description || ''
+}
+
+async function saveSeries() {
+  const title = seriesForm.title.trim()
+  if (!title) {
+    toast('合集名称不能为空')
+    return
+  }
+  savingSeries.value = true
+  try {
+    if (editingSeries.value) {
+      await api.put(`/series/${editingSeries.value}`, { title, description: seriesForm.description.trim() })
+      toast('合集已更新')
+    } else {
+      await api.post('/series', { title, description: seriesForm.description.trim() })
+      toast('合集已创建')
+    }
+    resetSeriesForm()
+    await loadSeriesAdmin()
+  } catch (err) {
+    toastError(err)
+  } finally {
+    savingSeries.value = false
+  }
+}
+
+async function removeSeries(item) {
+  if (!window.confirm(`删除合集「${item.title}」？里面的文章会保留，只是不再属于这个合集。`)) return
+  try {
+    await api.del(`/series/${item.id}`)
+    if (editingSeries.value === item.id) resetSeriesForm()
+    await loadSeriesAdmin()
+    toast('合集已删除')
+  } catch (err) {
+    toastError(err)
+  }
+}
+
 function applyStorageInfo(storage = {}) {
   Object.assign(storageInfo, {
     provider: storage.provider || 'local',
@@ -717,6 +779,7 @@ async function loadTab() {
     else if (tab.value === 'content') await loadDocs()
     else if (tab.value === 'requests') await loadAccessRequests()
     else if (tab.value === 'categories') await loadCategories()
+    else if (tab.value === 'series') await loadSeriesAdmin()
     else if (tab.value === 'images') await loadImages()
     else if (tab.value === 'notices') await loadNotices()
     else if (tab.value === 'users') {
@@ -1164,6 +1227,54 @@ onMounted(async () => {
                 </div>
               </template>
             </div>
+          </div>
+        </div>
+
+        <div v-else-if="tab === 'series'" class="panel">
+          <header class="panel-head">
+            <h2>合集管理</h2>
+            <p>把同一主题的文章整理成合集。合集会出现在公开的「合集」页，文章可以单独设置合集内排序。</p>
+          </header>
+
+          <form class="settings-form series-form" @submit.prevent="saveSeries">
+            <div class="form-row">
+              <div class="field">
+                <label for="series-title">合集名称</label>
+                <input id="series-title" v-model="seriesForm.title" maxlength="120" placeholder="例如：把博客和文档放在一起" />
+              </div>
+              <div class="form-actions">
+                <button v-if="editingSeries" class="btn btn-ghost btn-sm" type="button" @click="resetSeriesForm">取消编辑</button>
+                <button class="btn btn-primary btn-sm" type="submit" :disabled="savingSeries">
+                  {{ savingSeries ? '保存中…' : editingSeries ? '保存修改' : '新建合集' }}
+                </button>
+              </div>
+            </div>
+            <div class="field">
+              <label for="series-desc">合集介绍 <span class="hint">可选</span></label>
+              <textarea id="series-desc" v-model="seriesForm.description" rows="2" maxlength="500" placeholder="这批文章大概在讲什么？"></textarea>
+            </div>
+          </form>
+
+          <p v-if="tabLoading" class="muted loading-line">正在加载合集…</p>
+          <EmptyState
+            v-else-if="!seriesList.length"
+            icon="layers"
+            title="还没有合集"
+            description="先创建一个合集，然后在编辑器里把文章归入它。"
+          />
+          <div v-else class="series-admin-list">
+            <article v-for="item in seriesList" :key="item.id" class="series-admin-row">
+              <div class="series-admin-main">
+                <strong>{{ item.title }}</strong>
+                <p>{{ item.description || '暂无介绍' }}</p>
+                <span>{{ item.count }} 篇文章 · 更新于 {{ shortDate(item.updatedAt) }}</span>
+              </div>
+              <div class="series-admin-actions">
+                <RouterLink :to="`/series/${item.id}`" class="text-link">查看</RouterLink>
+                <button class="text-link" type="button" @click="editSeries(item)">编辑</button>
+                <button class="text-link danger" type="button" @click="removeSeries(item)">删除</button>
+              </div>
+            </article>
           </div>
         </div>
 

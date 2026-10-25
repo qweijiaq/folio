@@ -56,7 +56,7 @@ folio/
 │   ├── db/                 # SQLite / MySQL / 内存数据库
 │   ├── cache/              # Redis：JWT 黑名单、浏览量去重
 │   ├── mail/               # SMTP 发信与本地调试邮件
-│   ├── models/             # 25 张表的模型
+│   ├── models/             # 26 张表的模型
 │   ├── art/                # 生成式封面与头像
 │   ├── storage/            # 本地磁盘 / 七牛云存储抽象
 │   ├── handlers/           # 路由、接口与集成测试
@@ -264,14 +264,15 @@ Go 服务会自动托管 `../web/dist`，访问 <http://localhost:8080> 即可�
 
 ## 数据模型
 
-只有 25 张表：
+只有 26 张表：
 
 | 表 | 用途 |
 | --- | --- |
 | `users` | 用户名、昵称、邮箱、密码哈希、简介、角色、最后登录 |
 | `user_settings` | 隐私与消息偏好：关注/粉丝可见性、私信开关、点赞/评论通知、主页样式 |
 | `categories` | 文章分类 |
-| `documents` | 文章与文档共用：`kind`、`title`、`abstract`、`content`、`parent_id`、`category_id`、`tags`、`status`、`private`、`open_comment`、计数字段 |
+| `series` | 文章合集：标题、介绍、作者 |
+| `documents` | 文章与文档共用：`kind`、`title`、`abstract`、`content`、`parent_id`、`category_id`、`series_id`、`series_order`、`tags`、`status`、`private`、`open_comment`、计数字段 |
 | `likes` | 用户与内容点赞（唯一索引） |
 | `favorite_folders` | 用户自定义收藏夹 |
 | `favorites` | 用户与内容收藏（唯一索引，带 `folder_id`） |
@@ -556,7 +557,8 @@ FOLIO_SITE_URL=https://your-domain.com
 
 - `/` 首页：首屏、置顶文章、最近文章、知识库入口、标签与最近加入
 - `/articles` 文章列表：标签、分类筛选，最新/最多阅读/最多点赞排序，分页
-- `/articles/:id` 文章详情：自动封面、Markdown 正文、固定目录、移动端目录抽屉、图片灯箱、右侧点赞/收藏/分享、阅读进度、回到顶部、作者卡、上一篇/下一篇、相关文章、评论
+- `/series`、`/series/:id` 合集：按作者整理的系列文章，合集页按合集内排序展示
+- `/articles/:id` 文章详情：自动封面、Markdown 正文、固定目录、移动端目录抽屉、图片灯箱、右侧点赞/收藏/分享、阅读进度、回到顶部、作者卡、合集入口、上一篇/下一篇、相关文章、评论
 - `/docs` 知识库总览：左侧目录树 + 文档卡片
 - `/docs/:id` 文档详情：目录树、面包屑、正文与固定右侧目录、移动端目录抽屉、图片灯箱、上一篇/下一篇、右侧点赞收藏/分享、评论；私密文档只有作者和超级管理员可访问
 - `/search` 全站搜索：相关度排序、关键词高亮、摘要片段、文章/文档切换、分页、最近搜索和热门标签；点击标签进入全站聚合
@@ -566,7 +568,7 @@ FOLIO_SITE_URL=https://your-domain.com
 - `/messages` 私信与通知：会话列表、WebSocket 实时消息、图片与表情、轮询兜底、全站公告与通知已读
 - `/ask` 问 AI：用户自带 API Key（Anthropic、DeepSeek、智谱 GLM、Kimi、通义千问），检索已发布内容与站点帮助，支持严格/通用模式、多轮追问和流式回答
 - `/me` 我的空间：资料、密码、隐私与消息、最近登录记录、收藏夹、浏览历史；管理员额外看到自己的文章与文档，并可以把一篇文章置顶到公开主页
-- `/admin` 管理后台：概览、数据看板、内容管理、分类管理、图片管理、阅读申请、全站通知；内容管理支持导出全部 Markdown；超级管理员额外拥有用户与权限、注册与邀请、存储设置、站点设置和操作日志
+- `/admin` 管理后台：概览、数据看板、内容管理、分类管理、合集管理、图片管理、阅读申请、全站通知；内容管理支持导出全部 Markdown；超级管理员额外拥有用户与权限、注册与邀请、存储设置、站点设置和操作日志
 - `/login`、`/register` 登录注册：密码登录、邮箱验证码登录、QQ 登录、注册；关闭注册后可通过一次性邀请链接注册
 - `/forgot` 通过邮箱验证码重置密码
 
@@ -594,6 +596,7 @@ FOLIO_SITE_URL=https://your-domain.com
 | --- | --- |
 | 认证 | `POST /auth/register`、`POST /auth/login`、`POST /auth/email/login`、`POST /auth/password/reset`、`POST /auth/email/code`、`GET /auth/email/status`、`GET /auth/captcha`、`GET /auth/qq/status`、`GET /auth/qq/url`、`GET /auth/qq/callback`、`POST /auth/qq/exchange`、`POST /auth/logout`、`GET /me`、`PUT /me/email` |
 | 用户 | `GET /users/:username`、`POST|DELETE /users/:username/follow`、`GET /users/:username/followers|following`、`GET /users/:username/favorite-folders`、`GET /users/:username/favorites` |
+| 合集 | `GET /series`、`GET /series/:id`、`GET /me/series`、`POST /series`、`PUT|DELETE /series/:id` |
 | 内容 | `GET /docs`、`GET /docs/:id`、`GET /docs/:id/access`、`POST /docs/:id/access-requests`、`GET /docs/:id/related`、`GET /docs/:id/revisions`、`GET /docs/:id/revisions/:revisionID`、`POST /docs/:id/revisions/:revisionID/restore`、`POST /docs`、`PUT /docs/:id`、`DELETE /docs/:id`、`GET /doc-tree` |
 | 分类 | `GET /categories`、`POST /categories`、`PUT /categories/:id`、`DELETE /categories/:id` |
 | 图片 | `POST /images`、`GET /images`、`DELETE /images/:id`；本地模式通过 `/uploads/*` 访问，七牛模式返回云存储 URL |

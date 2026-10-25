@@ -2811,3 +2811,78 @@ func TestArticleNeighbors(t *testing.T) {
 		t.Fatalf("相邻文章顺序不正确: %v", data)
 	}
 }
+
+func TestSeriesFlow(t *testing.T) {
+	s := newTestAPI(t)
+	ownerToken, _ := s.register(t, "seriesowner")
+	readerToken, _ := s.register(t, "seriesreader")
+
+	status, created := s.do(t, "POST", "/api/series", ownerToken, map[string]string{
+		"title": "系列测试合集", "description": "按顺序读的测试合集。",
+	})
+	if status != http.StatusCreated {
+		t.Fatalf("创建合集失败: %d %v", status, created)
+	}
+	seriesID := uint(number(obj(created, "series")["id"]))
+	status, updated := s.do(t, "PUT", fmt.Sprintf("/api/series/%d", seriesID), ownerToken, map[string]string{
+		"title": "更新后的合集", "description": "更新后的介绍。",
+	})
+	if status != http.StatusOK || obj(updated, "series")["title"] != "更新后的合集" {
+		t.Fatalf("更新合集失败: %d %v", status, updated)
+	}
+	status, _ = s.do(t, "POST", "/api/series", readerToken, map[string]string{"title": "读者合集"})
+	if status != http.StatusForbidden {
+		t.Fatalf("读者不应能创建合集，实际 %d", status)
+	}
+
+	createArticle := func(title string, order int) uint {
+		status, data := s.do(t, "POST", "/api/docs", ownerToken, map[string]any{
+			"kind": "article", "title": title, "content": "正文", "status": "published",
+			"seriesID": seriesID, "seriesOrder": order,
+		})
+		if status != http.StatusCreated {
+			t.Fatalf("创建合集文章失败: %d %v", status, data)
+		}
+		return uint(number(obj(data, "doc")["id"]))
+	}
+	secondID := createArticle("系列第二篇", 2)
+	firstID := createArticle("系列第一篇", 1)
+
+	status, data := s.do(t, "GET", "/api/series", "", nil)
+	if status != http.StatusOK {
+		t.Fatalf("读取合集列表失败: %d %v", status, data)
+	}
+	items := list(data, "items")
+	if len(items) != 1 || number(items[0].(map[string]any)["count"]) != 2 {
+		t.Fatalf("合集列表不正确: %v", data)
+	}
+	status, data = s.do(t, "GET", fmt.Sprintf("/api/series/%d", seriesID), "", nil)
+	if status != http.StatusOK {
+		t.Fatalf("读取合集详情失败: %d %v", status, data)
+	}
+	articles := list(data, "items")
+	if len(articles) != 2 || uint(number(articles[0].(map[string]any)["id"])) != firstID || uint(number(articles[1].(map[string]any)["id"])) != secondID {
+		t.Fatalf("合集排序不正确: %v", articles)
+	}
+	status, data = s.do(t, "GET", fmt.Sprintf("/api/docs/%d", firstID), "", nil)
+	if status != http.StatusOK || obj(obj(data, "doc"), "series")["title"] != "更新后的合集" {
+		t.Fatalf("文章没有带出合集信息: %d %v", status, data)
+	}
+
+	status, data = s.do(t, "GET", "/api/me/series", ownerToken, nil)
+	if status != http.StatusOK || len(list(data, "items")) != 1 {
+		t.Fatalf("我的合集不正确: %d %v", status, data)
+	}
+	status, _ = s.do(t, "DELETE", fmt.Sprintf("/api/series/%d", seriesID), readerToken, nil)
+	if status != http.StatusForbidden {
+		t.Fatalf("读者不应能删除他人合集，实际 %d", status)
+	}
+	status, _ = s.do(t, "DELETE", fmt.Sprintf("/api/series/%d", seriesID), ownerToken, nil)
+	if status != http.StatusOK {
+		t.Fatalf("删除合集失败: %d", status)
+	}
+	status, data = s.do(t, "GET", fmt.Sprintf("/api/docs/%d", firstID), "", nil)
+	if status != http.StatusOK || obj(data, "doc")["seriesID"] != nil {
+		t.Fatalf("删除合集后文章应保留且解除归属: %d %v", status, data)
+	}
+}

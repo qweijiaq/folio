@@ -127,6 +127,7 @@ onBeforeUnmount(() => {
             文章
           </RouterLink>
           <RouterLink to="/docs" class="nav-link" active-class="is-active" @click="onNavClick('/docs')">文档</RouterLink>
+          <RouterLink to="/series" class="nav-link" active-class="is-active" @click="onNavClick('/series')">合集</RouterLink>
           <RouterLink to="/about" class="nav-link" active-class="is-active" @click="onNavClick('/about')">关于</RouterLink>
           <RouterLink v-if="auth.user" to="/ask" class="nav-link" active-class="is-active">问 AI</RouterLink>
         </nav>
@@ -198,6 +199,7 @@ onBeforeUnmount(() => {
           <div class="container">
             <RouterLink to="/articles" class="mobile-link">文章</RouterLink>
             <RouterLink to="/docs" class="mobile-link">文档</RouterLink>
+            <RouterLink to="/series" class="mobile-link">合集</RouterLink>
             <RouterLink to="/about" class="mobile-link">关于</RouterLink>
             <RouterLink v-if="staff" to="/admin" class="mobile-link">管理后台</RouterLink>
             <RouterLink v-if="auth.user" to="/messages" class="mobile-link">消息</RouterLink>
@@ -227,6 +229,7 @@ onBeforeUnmount(() => {
               <h4>浏览</h4>
               <RouterLink to="/articles">全部文章</RouterLink>
               <RouterLink to="/docs">知识库</RouterLink>
+              <RouterLink to="/series">合集</RouterLink>
               <RouterLink to="/search">搜索</RouterLink>
               <RouterLink to="/about">关于本站</RouterLink>
               <a href="/feed.xml">RSS 订阅</a>

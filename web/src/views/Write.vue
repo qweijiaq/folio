@@ -25,6 +25,8 @@ const form = reactive({
   status: 'draft',
   parentID: route.query.parent ? Number(route.query.parent) : null,
   categoryID: null,
+  seriesID: null,
+  seriesOrder: 0,
   private: false,
   pinned: false,
   openComment: true,
@@ -37,6 +39,7 @@ const fileInput = ref(null)
 const doc = ref(null)
 const parentItems = ref([])
 const categories = ref([])
+const seriesOptions = ref([])
 const loading = ref(true)
 const saving = ref('')
 const preview = ref(true)
@@ -75,6 +78,8 @@ function snapshot() {
     status: form.status,
     parentID: form.parentID,
     categoryID: form.categoryID,
+    seriesID: form.seriesID,
+    seriesOrder: form.seriesOrder,
     private: form.private,
     pinned: form.pinned,
     openComment: form.openComment,
@@ -109,6 +114,8 @@ function draftFields(source) {
     status: source.status || 'draft',
     parentID: source.parentID ?? null,
     categoryID: source.categoryID ?? null,
+    seriesID: source.seriesID ?? null,
+    seriesOrder: Number(source.seriesOrder) || 0,
     private: Boolean(source.private),
     pinned: Boolean(source.pinned),
     openComment: source.openComment !== false,
@@ -197,12 +204,14 @@ const parentOptions = computed(() => {
 async function load() {
   loading.value = true
   try {
-    const [treeData, mine, categoryData] = await Promise.all([
+    const [treeData, mine, categoryData, seriesData] = await Promise.all([
       api.get('/doc-tree'),
       api.get('/me/docs', { kind: 'doc', pageSize: 50 }),
-      api.get('/categories')
+      api.get('/categories'),
+      api.get('/me/series')
     ])
     categories.value = categoryData.items
+    seriesOptions.value = seriesData.items || []
     api.get('/ai/status').then((data) => {
       aiEnabled.value = Boolean(data.enabled)
     }).catch(() => {
@@ -223,6 +232,8 @@ async function load() {
       form.status = data.doc.status
       form.parentID = data.doc.parentID ?? null
       form.categoryID = data.doc.categoryID ?? null
+      form.seriesID = data.doc.seriesID ?? null
+      form.seriesOrder = data.doc.seriesOrder || 0
       form.private = Boolean(data.doc.private)
       form.pinned = data.doc.pinned
       form.openComment = data.doc.openComment !== false
@@ -421,6 +432,8 @@ async function save(status = 'draft') {
     status,
     parentID: form.kind === 'doc' && form.parentID ? Number(form.parentID) : null,
     categoryID: form.kind === 'article' && form.categoryID ? Number(form.categoryID) : null,
+    seriesID: form.kind === 'article' && form.seriesID ? Number(form.seriesID) : null,
+    seriesOrder: form.kind === 'article' ? Number(form.seriesOrder) || 0 : 0,
     private: form.kind === 'doc' ? form.private : false,
     pinned: form.pinned,
     openComment: form.openComment,
@@ -473,6 +486,8 @@ function onRevisionRestored(restored) {
   form.status = restored.status
   form.parentID = restored.parentID ?? null
   form.categoryID = restored.categoryID ?? null
+  form.seriesID = restored.seriesID ?? null
+  form.seriesOrder = restored.seriesOrder || 0
   form.private = Boolean(restored.private)
   form.pinned = restored.pinned
   form.openComment = restored.openComment !== false
@@ -589,6 +604,20 @@ onBeforeUnmount(() => {
               <option :value="null">未分类</option>
               <option v-for="category in categories" :key="category.id" :value="category.id">{{ category.name }}</option>
             </select>
+          </div>
+
+          <div v-if="form.kind === 'article'" class="form-row">
+            <div class="field">
+              <label for="editor-series">所属合集 <span class="hint">可选</span></label>
+              <select id="editor-series" v-model="form.seriesID">
+                <option :value="null">不属于合集</option>
+                <option v-for="series in seriesOptions" :key="series.id" :value="series.id">{{ series.title }}（{{ series.count }}）</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="editor-series-order">合集内排序</label>
+              <input id="editor-series-order" v-model.number="form.seriesOrder" type="number" min="0" :disabled="!form.seriesID" />
+            </div>
           </div>
 
           <div class="field">

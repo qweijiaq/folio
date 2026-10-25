@@ -59,6 +59,9 @@ type Document struct {
 	ParentID      *uint      `gorm:"index" json:"parentID"`
 	CategoryID    *uint      `gorm:"index" json:"categoryID"`
 	Category      *Category  `gorm:"foreignKey:CategoryID" json:"category,omitempty"`
+	SeriesID      *uint      `gorm:"index" json:"seriesID"`
+	SeriesOrder   int        `json:"seriesOrder"`
+	Series        *Series    `gorm:"foreignKey:SeriesID" json:"series,omitempty"`
 	Tags          []string   `gorm:"type:text;serializer:json" json:"tags"`
 	Status        string     `gorm:"size:16;index;not null;default:draft" json:"status"`
 	Private       bool       `gorm:"not null;default:false" json:"private"`
@@ -71,6 +74,17 @@ type Document struct {
 	FavoriteCount int        `json:"favoriteCount"`
 	PublishedAt   *time.Time `json:"publishedAt"`
 }
+
+// Series 是文章的合集/系列，按 SeriesOrder 排序。
+type Series struct {
+	Base
+	Title       string `gorm:"size:120;not null" json:"title"`
+	Description string `gorm:"size:500" json:"description"`
+	AuthorID    uint   `gorm:"index" json:"authorID"`
+	Author      User   `gorm:"foreignKey:AuthorID" json:"author"`
+}
+
+func (Series) TableName() string { return "series" }
 
 // Category 只用于文章；文档仍通过 ParentID 组成目录树。
 type Category struct {
@@ -186,6 +200,8 @@ type DocumentRevision struct {
 	Private     bool     `json:"private"`
 	ParentID    *uint    `json:"parentID"`
 	CategoryID  *uint    `json:"categoryID"`
+	SeriesID    *uint    `json:"seriesID"`
+	SeriesOrder int      `json:"seriesOrder"`
 	Pinned      bool     `json:"pinned"`
 	OpenComment bool     `json:"openComment"`
 	Sort        int      `json:"sort"`

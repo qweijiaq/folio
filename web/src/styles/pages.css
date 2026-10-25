@@ -5583,3 +5583,259 @@
   background: color-mix(in srgb, var(--accent) 18%, transparent);
   color: inherit;
 }
+
+/* ---------- 合集 ---------- */
+
+.series-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  padding-bottom: 70px;
+}
+
+.series-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 210px;
+  padding: 22px 22px 18px;
+  border: 1.2px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  transition: border-color 0.16s ease, transform 0.16s ease;
+}
+
+.series-card:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+}
+
+.series-card header,
+.series-card footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--ink-faint);
+  font-size: 11px;
+}
+
+.series-card h2 {
+  margin-top: 4px;
+  font-family: var(--hand);
+  font-size: 1.55rem;
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+.series-card p {
+  flex: 1;
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.75;
+}
+
+.series-card footer svg {
+  color: var(--accent);
+}
+
+.series-hero {
+  padding-top: 58px;
+  padding-bottom: 34px;
+  border-bottom: 1px dashed var(--line);
+}
+
+.series-hero h1 {
+  margin-top: 14px;
+  font-size: clamp(2.3rem, 4.5vw, 3.7rem);
+  line-height: 1.2;
+}
+
+.series-lede {
+  max-width: 720px;
+  margin-top: 16px;
+  color: var(--ink-soft);
+  font-size: 15px;
+  line-height: 1.85;
+}
+
+.series-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 18px;
+  color: var(--ink-faint);
+  font-size: 12px;
+}
+
+.series-meta a {
+  color: var(--accent);
+}
+
+.series-article-list {
+  display: flex;
+  flex-direction: column;
+  padding-top: 12px;
+  padding-bottom: 70px;
+}
+
+.series-article {
+  display: flex;
+  align-items: flex-start;
+  gap: 18px;
+  padding: 22px 4px;
+  border-bottom: 1px dashed var(--line);
+  color: var(--ink);
+}
+
+.series-article:hover h2 {
+  color: var(--accent);
+}
+
+.series-index {
+  flex: 0 0 36px;
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+.series-article-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.series-article h2 {
+  font-family: var(--hand);
+  font-size: 1.35rem;
+  font-weight: 500;
+  line-height: 1.35;
+  transition: color 0.15s ease;
+}
+
+.series-article p {
+  margin-top: 6px;
+  color: var(--ink-soft);
+  font-size: 12.5px;
+  line-height: 1.7;
+}
+
+.series-article-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 9px;
+  color: var(--ink-faint);
+  font-size: 10.5px;
+}
+
+.series-article > svg {
+  flex: 0 0 auto;
+  margin-top: 4px;
+  color: var(--ink-faint);
+}
+
+.article-series-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  margin: -28px 0 32px;
+  color: var(--ink-faint);
+  font-size: 12px;
+}
+
+.article-series-note a {
+  color: var(--accent);
+  font-family: var(--hand);
+  font-size: 13px;
+}
+
+.article-series-note span:last-child {
+  color: var(--ink-faint);
+}
+
+@media (max-width: 700px) {
+  .series-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .series-article {
+    gap: 12px;
+  }
+
+  .series-index {
+    flex-basis: 26px;
+  }
+}
+
+.series-form {
+  margin-bottom: 24px;
+}
+
+.series-form .form-row {
+  align-items: flex-end;
+}
+
+.series-admin-list {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--line);
+}
+
+.series-admin-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 4px;
+  border-bottom: 1px dashed var(--line);
+}
+
+.series-admin-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.series-admin-main strong {
+  font-family: var(--hand);
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.series-admin-main p {
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.series-admin-main span {
+  color: var(--ink-faint);
+  font-size: 10.5px;
+}
+
+.series-admin-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 10px;
+}
+
+.series-admin-actions .text-link {
+  font-size: 12px;
+}
+
+@media (max-width: 680px) {
+  .series-admin-row {
+    flex-wrap: wrap;
+  }
+
+  .series-admin-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}

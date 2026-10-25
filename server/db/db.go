@@ -34,6 +34,7 @@ func migrate(gdb *gorm.DB) error {
 		&models.Category{},
 		&models.Document{},
 		&models.DocumentRevision{},
+		&models.Series{},
 		&models.Like{},
 		&models.FavoriteFolder{},
 		&models.Favorite{},

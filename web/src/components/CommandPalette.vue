@@ -16,6 +16,7 @@ const quickLinks = computed(() => {
   const list = [
     { key: 'articles', label: '文章', hint: '浏览全部文章', icon: 'edit', to: { name: 'articles' }, keywords: 'post blog 写作 列表' },
     { key: 'docs', label: '文档', hint: '进入知识库', icon: 'book', to: { name: 'docs' }, keywords: 'docs 知识库 手册' },
+    { key: 'series', label: '合集', hint: '按系列阅读文章', icon: 'layers', to: { name: 'series' }, keywords: 'series 合集 系列' },
     { key: 'about', label: '关于', hint: '了解站点全部功能', icon: 'info', to: { name: 'about' }, keywords: 'about 关于 功能 帮助 介绍' }
   ]
   if (auth.user) {

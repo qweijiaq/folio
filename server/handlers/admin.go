@@ -202,6 +202,17 @@ func (a *API) purgeUser(userID uint) error {
 			docIDs = append(docIDs, id)
 		}
 
+		// 该用户创建的合集：解除文章归属后删除合集
+		var seriesIDs []uint
+		tx.Model(&models.Series{}).Where("author_id = ?", userID).Pluck("id", &seriesIDs)
+		if len(seriesIDs) > 0 {
+			tx.Model(&models.Document{}).Where("series_id IN ?", seriesIDs).UpdateColumns(map[string]any{
+				"series_id":    nil,
+				"series_order": 0,
+			})
+			tx.Where("id IN ?", seriesIDs).Delete(&models.Series{})
+		}
+
 		// 该用户发表的评论（删根评论时连同回复）
 		var myComments []models.Comment
 		tx.Where("user_id = ?", userID).Find(&myComments)
@@ -259,6 +270,7 @@ func (a *API) purgeUser(userID uint) error {
 		tx.Where("user_id = ?", userID).Delete(&models.FavoriteFolder{})
 		tx.Where("user_id = ?", userID).Delete(&models.ViewHistory{})
 		tx.Where("user_id = ?", userID).Delete(&models.UserSetting{})
+		tx.Where("user_id = ?", userID).Delete(&models.AIProviderKey{})
 		tx.Where("user_id = ?", userID).Delete(&models.NoticeRead{})
 		var email string
 		tx.Model(&models.User{}).Where("id = ?", userID).Pluck("email", &email)

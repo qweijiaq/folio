@@ -28,6 +28,8 @@ type docInput struct {
 	Private     *bool    `json:"private"`
 	ParentID    *uint    `json:"parentID"`
 	CategoryID  *uint    `json:"categoryID"`
+	SeriesID    *uint    `json:"seriesID"`
+	SeriesOrder int      `json:"seriesOrder"`
 	Pinned      *bool    `json:"pinned"`
 	OpenComment *bool    `json:"openComment"`
 	Sort        int      `json:"sort"`
@@ -142,6 +144,20 @@ func (a *API) resolveCategory(kind string, categoryID *uint) (*uint, error) {
 	return categoryID, nil
 }
 
+func (a *API) resolveSeries(kind string, seriesID *uint, author *models.User) (*uint, error) {
+	if kind != models.KindArticle || seriesID == nil {
+		return nil, nil
+	}
+	var series models.Series
+	if err := a.DB.First(&series, *seriesID).Error; err != nil {
+		return nil, errors.New("合集不存在")
+	}
+	if author == nil || (series.AuthorID != author.ID && !isSuperAdmin(author)) {
+		return nil, errors.New("只能使用自己的合集")
+	}
+	return seriesID, nil
+}
+
 func blankContent(docs []models.Document) {
 	for i := range docs {
 		docs[i].Content = ""
@@ -234,7 +250,7 @@ func (a *API) DocList(c *gin.Context) {
 	}
 
 	var docs []models.Document
-	if err := q.Preload("Category").Preload("Author", func(db *gorm.DB) *gorm.DB {
+	if err := q.Preload("Category").Preload("Series").Preload("Author", func(db *gorm.DB) *gorm.DB {
 		return db.Select("id", "username", "nickname", "bio", "role", "created_at")
 	}).Offset((page - 1) * size).Limit(size).Find(&docs).Error; err != nil {
 		fail(c, http.StatusInternalServerError, "读取失败")
@@ -280,7 +296,7 @@ func (a *API) DocDetail(c *gin.Context) {
 		return
 	}
 	var doc models.Document
-	if err := a.DB.Preload("Category").Preload("Author", func(db *gorm.DB) *gorm.DB {
+	if err := a.DB.Preload("Category").Preload("Series").Preload("Author", func(db *gorm.DB) *gorm.DB {
 		return db.Select("id", "username", "nickname", "bio", "role", "created_at")
 	}).First(&doc, id).Error; err != nil {
 		fail(c, http.StatusNotFound, "内容不存在")
@@ -396,6 +412,11 @@ func (a *API) DocCreate(c *gin.Context) {
 		bad(c, err.Error())
 		return
 	}
+	seriesID, err := a.resolveSeries(in.Kind, in.SeriesID, u)
+	if err != nil {
+		bad(c, err.Error())
+		return
+	}
 	abstract := trim(in.Abstract)
 	if abstract == "" {
 		abstract = plainText(in.Content)
@@ -412,6 +433,8 @@ func (a *API) DocCreate(c *gin.Context) {
 		AuthorID:    u.ID,
 		ParentID:    in.ParentID,
 		CategoryID:  categoryID,
+		SeriesID:    seriesID,
+		SeriesOrder: maxInt(0, in.SeriesOrder),
 		Tags:        normalizeTags(in.Tags),
 		Status:      in.Status,
 		Private:     in.Kind == models.KindDoc && in.Private != nil && *in.Private,
@@ -486,6 +509,11 @@ func (a *API) DocUpdate(c *gin.Context) {
 		bad(c, err.Error())
 		return
 	}
+	seriesID, err := a.resolveSeries(doc.Kind, in.SeriesID, u)
+	if err != nil {
+		bad(c, err.Error())
+		return
+	}
 	abstract := trim(in.Abstract)
 	if abstract == "" {
 		abstract = plainText(in.Content)
@@ -503,8 +531,10 @@ func (a *API) DocUpdate(c *gin.Context) {
 	doc.Status = in.Status
 	doc.ParentID = in.ParentID
 	doc.CategoryID = categoryID
+	doc.SeriesID = seriesID
+	doc.SeriesOrder = maxInt(0, in.SeriesOrder)
 	doc.Sort = in.Sort
-	fields := []string{"title", "abstract", "content", "tags", "status", "parent_id", "category_id", "sort"}
+	fields := []string{"title", "abstract", "content", "tags", "status", "parent_id", "category_id", "series_id", "series_order", "sort"}
 	if doc.Kind == models.KindDoc && in.Private != nil {
 		doc.Private = *in.Private
 		fields = append(fields, "private")
@@ -623,7 +653,7 @@ func (a *API) MyDocs(c *gin.Context) {
 	var total int64
 	q.Count(&total)
 	var docs []models.Document
-	q.Preload("Category").Preload("Author", func(db *gorm.DB) *gorm.DB {
+	q.Preload("Category").Preload("Series").Preload("Author", func(db *gorm.DB) *gorm.DB {
 		return db.Select("id", "username", "nickname", "bio", "role", "created_at")
 	}).Order("updated_at DESC").Offset((page - 1) * size).Limit(size).Find(&docs)
 	blankContent(docs)
@@ -669,4 +699,11 @@ func (a *API) MyFavorites(c *gin.Context) {
 		}
 	}
 	c.JSON(http.StatusOK, gin.H{"items": items, "total": total, "page": page, "pageSize": size})
+}
+
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }

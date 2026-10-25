@@ -236,6 +236,13 @@ watch(
         <CoverImage :doc="doc" />
       </figure>
 
+      <div v-if="doc.series" class="article-series-note">
+        <Icon name="layers" :size="15" />
+        <span>收录于合集</span>
+        <RouterLink :to="`/series/${doc.series.id}`">{{ doc.series.title }}</RouterLink>
+        <span v-if="doc.seriesOrder">第 {{ doc.seriesOrder }} 篇</span>
+      </div>
+
       <div class="article-layout">
         <div class="article-body">
           <MarkdownView :source="doc.content" @toc="toc = $event" />
