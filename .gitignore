@@ -15,3 +15,5 @@ __pycache__/
 web/playwright-report/
 web/test-results/
 web/blob-report/
+
+backups/

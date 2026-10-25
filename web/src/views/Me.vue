@@ -48,6 +48,7 @@ const privacySettings = reactive({
   openDiggMessage: true,
   openFollowMessage: true,
   openAccessMessage: true,
+  emailNotify: false,
   openCollect: false,
   homeStyle: 'cover'
 })
@@ -733,6 +734,14 @@ onMounted(async () => {
                 <span>
                   <strong>阅读申请通知</strong>
                   <small>关闭后，私密文档的阅读申请和处理结果不再生成站内通知。</small>
+                </span>
+              </label>
+              <label class="switch-row">
+                <input v-model="privacySettings.emailNotify" type="checkbox" :disabled="!auth.user.email" />
+                <span>
+                  <strong>邮件通知</strong>
+                  <small v-if="!auth.user.email">先在「账号安全」绑定邮箱，才能开启邮件通知。</small>
+                  <small v-else>评论、关注、阅读申请和处理结果会发送到 {{ auth.user.email }}；点赞不会发邮件。</small>
                 </span>
               </label>
               <label class="switch-row">

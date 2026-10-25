@@ -123,9 +123,7 @@ def main():
     check("图形验证码状态", captcha.get("enabled") is False, captcha)
 
     _, email_status = request("GET", "/api/auth/email/status", expect=200)
-    if email_status.get("enabled") and email_status.get("requireRegister"):
-        print("邮箱注册验证码已开启，冒烟脚本无法自动完成邮箱验证；请使用 FOLIO_MAIL_DEBUG=0 的无邮件模式。")
-        raise SystemExit(2)
+    email_register = bool(email_status.get("enabled") and email_status.get("requireRegister"))
     check("邮箱服务状态", "enabled" in email_status, email_status)
 
     _, qq_status = request("GET", "/api/auth/qq/status", expect=200)
@@ -166,18 +164,36 @@ def main():
     )
     notice_id = notice_data["notice"]["id"]
 
-    _, registered = request(
-        "POST",
-        "/api/auth/register",
-        body={
-            "username": PEER,
-            "nickname": "冒烟测试用户",
-            "email": f"{PEER}@example.com",
-            "password": PEER_PASSWORD,
-        },
-        expect=201,
-    )
-    peer_id = registered["user"]["id"]
+    if email_register:
+        # 邮件验证码注册开启时，改用超级管理员建号，冒烟脚本仍能完整跑通。
+        _, created_peer = request(
+            "POST",
+            "/api/admin/users",
+            admin_token,
+            {
+                "username": PEER,
+                "nickname": "冒烟测试用户",
+                "email": f"{PEER}@example.com",
+                "password": PEER_PASSWORD,
+                "role": "user",
+            },
+            expect=201,
+        )
+        peer_id = created_peer["user"]["id"]
+        print("        邮件验证码注册已开启，使用管理员创建测试用户")
+    else:
+        _, registered = request(
+            "POST",
+            "/api/auth/register",
+            body={
+                "username": PEER,
+                "nickname": "冒烟测试用户",
+                "email": f"{PEER}@example.com",
+                "password": PEER_PASSWORD,
+            },
+            expect=201,
+        )
+        peer_id = registered["user"]["id"]
     peer_token = login(PEER, PEER_PASSWORD)
 
     _, peer_notices = request("GET", "/api/notices", peer_token, expect=200)

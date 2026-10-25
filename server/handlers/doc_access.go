@@ -146,7 +146,7 @@ func (a *API) docAccessRequest(c *gin.Context) {
 		if in.Note != "" {
 			content = content + "：" + in.Note
 		}
-		a.notify(guardian.AuthorID, viewer.ID, models.NotifyAccessRequest, &guardian, content)
+		a.notify(c, guardian.AuthorID, viewer.ID, models.NotifyAccessRequest, &guardian, content)
 	}
 	c.JSON(http.StatusOK, gin.H{"status": request.Status, "id": request.ID})
 }
@@ -227,11 +227,11 @@ func (a *API) handleAccessRequest(c *gin.Context) {
 		return
 	}
 	if request.Status == models.AccessApproved {
-		a.notify(request.RequesterID, me.ID, models.NotifyAccessResult, &doc, "你的私密阅读申请已通过")
+		a.notify(c, request.RequesterID, me.ID, models.NotifyAccessResult, &doc, "你的私密阅读申请已通过")
 	} else if wasApproved {
-		a.notify(request.RequesterID, me.ID, models.NotifyAccessResult, nil, "你的私密阅读权限已被作者撤销")
+		a.notify(c, request.RequesterID, me.ID, models.NotifyAccessResult, nil, "你的私密阅读权限已被作者撤销")
 	} else {
-		a.notify(request.RequesterID, me.ID, models.NotifyAccessResult, nil, "你的私密阅读申请未通过")
+		a.notify(c, request.RequesterID, me.ID, models.NotifyAccessResult, nil, "你的私密阅读申请未通过")
 	}
 	c.JSON(http.StatusOK, gin.H{"status": request.Status})
 }

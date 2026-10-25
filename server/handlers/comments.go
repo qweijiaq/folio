@@ -147,7 +147,7 @@ func (a *API) CommentCreate(c *gin.Context) {
 		return
 	}
 	a.recalcComments(doc.ID)
-	a.notify(recipient, u.ID, models.NotifyComment, doc, ellipsisRunes(in.Content, 80))
+	a.notify(c, recipient, u.ID, models.NotifyComment, doc, ellipsisRunes(in.Content, 80))
 	a.DB.Preload("User", func(db *gorm.DB) *gorm.DB {
 		return db.Select("id", "username", "nickname", "bio", "role", "created_at")
 	}).First(&cm, cm.ID)

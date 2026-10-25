@@ -2,6 +2,7 @@ package handlers_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -32,6 +33,23 @@ type testAPI struct {
 	handler   http.Handler
 	api       *handlers.API
 	uploadDir string
+}
+
+type recordingMailer struct {
+	messages chan mailMessage
+}
+
+type mailMessage struct {
+	to      string
+	subject string
+	body    string
+}
+
+func (m *recordingMailer) Enabled() bool { return true }
+
+func (m *recordingMailer) Send(_ context.Context, to, subject, body string) error {
+	m.messages <- mailMessage{to: to, subject: subject, body: body}
+	return nil
 }
 
 func newTestAPI(t *testing.T, configure ...func(*config.Config)) *testAPI {
@@ -3154,5 +3172,70 @@ func TestRegisterRateLimit(t *testing.T) {
 		"username": "ratereg5", "nickname": "ratereg5", "email": "ratereg5@example.com", "password": "password123",
 	}); status != http.StatusTooManyRequests {
 		t.Fatalf("注册超过限制应返回 429，实际 %d %v", status, data)
+	}
+}
+
+func TestEmailNotifications(t *testing.T) {
+	s := newTestAPI(t)
+	aliceToken, _ := s.register(t, "emailalice")
+	bobToken, _ := s.register(t, "emailbob")
+	mailer := &recordingMailer{messages: make(chan mailMessage, 4)}
+	s.api.Mail = mailer
+
+	status, created := s.do(t, "POST", "/api/docs", aliceToken, map[string]any{
+		"kind": "article", "title": "邮件通知测试", "content": "正文", "status": "published",
+	})
+	if status != http.StatusCreated {
+		t.Fatalf("创建文章失败: %d %v", status, created)
+	}
+	docID := uint(number(obj(created, "doc")["id"]))
+
+	settings := map[string]any{
+		"openFollow": true, "openFans": true, "openPrivateChat": true,
+		"openCommentMessage": true, "openDiggMessage": true,
+		"openFollowMessage": true, "openAccessMessage": true,
+		"emailNotify": true, "openCollect": false, "homeStyle": "cover",
+	}
+	if status, data := s.do(t, "PUT", "/api/me/settings", aliceToken, settings); status != http.StatusOK {
+		t.Fatalf("开启邮件通知失败: %d %v", status, data)
+	}
+
+	if status, data := s.do(t, "POST", fmt.Sprintf("/api/docs/%d/comments", docID), bobToken, map[string]string{
+		"content": "邮件评论内容",
+	}); status != http.StatusCreated {
+		t.Fatalf("评论失败: %d %v", status, data)
+	}
+	select {
+	case msg := <-mailer.messages:
+		if msg.to != "emailalice@example.com" || !strings.Contains(msg.subject, "评论") ||
+			!strings.Contains(msg.body, "邮件评论内容") || !strings.Contains(msg.body, fmt.Sprintf("/articles/%d", docID)) {
+			t.Fatalf("通知邮件内容不正确: %+v", msg)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("评论后没有发送通知邮件")
+	}
+
+	if status, data := s.do(t, "POST", fmt.Sprintf("/api/docs/%d/like", docID), bobToken, nil); status != http.StatusOK {
+		t.Fatalf("点赞失败: %d %v", status, data)
+	}
+	select {
+	case msg := <-mailer.messages:
+		t.Fatalf("点赞不应发送邮件: %+v", msg)
+	case <-time.After(300 * time.Millisecond):
+	}
+
+	settings["emailNotify"] = false
+	if status, data := s.do(t, "PUT", "/api/me/settings", aliceToken, settings); status != http.StatusOK {
+		t.Fatalf("关闭邮件通知失败: %d %v", status, data)
+	}
+	if status, data := s.do(t, "POST", fmt.Sprintf("/api/docs/%d/comments", docID), bobToken, map[string]string{
+		"content": "关闭邮件后的评论",
+	}); status != http.StatusCreated {
+		t.Fatalf("第二次评论失败: %d %v", status, data)
+	}
+	select {
+	case msg := <-mailer.messages:
+		t.Fatalf("关闭邮件通知后不应发送: %+v", msg)
+	case <-time.After(300 * time.Millisecond):
 	}
 }

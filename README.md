@@ -272,7 +272,7 @@ Go 服务会自动托管 `../web/dist`，访问 <http://localhost:8080> 即可�
 | 表 | 用途 |
 | --- | --- |
 | `users` | 用户名、昵称、邮箱、密码哈希、简介、角色、最后登录 |
-| `user_settings` | 隐私与消息偏好：关注/粉丝可见性、私信开关、评论/点赞/关注/阅读申请通知、主页样式 |
+| `user_settings` | 隐私与消息偏好：关注/粉丝可见性、私信开关、站内/邮件通知、主页样式 |
 | `user_sessions` | 登录会话：token 标识、IP、User-Agent、设备、最近活跃、过期与撤销时间 |
 | `categories` | 文章分类 |
 | `series` | 文章合集：标题、介绍、作者 |
@@ -454,6 +454,7 @@ FOLIO_QQ_REDIRECT=http://localhost:8080/api/auth/qq/callback
 - 是否允许别人发送私信（关闭后新私信会被拒绝，已有对话仍可查看）；
 - 是否公开我的收藏夹（默认私密，开启后访客可以在公开主页按收藏夹浏览已发布内容）；
 - 是否生成评论/回复、点赞、关注、私密阅读申请与结果通知；
+- 是否把评论、关注、阅读申请和处理结果再发一份邮件（默认关闭，点赞不发邮件，需要先绑定邮箱）；
 - 公开主页头部样式：`cover`（封面）、`compact`（紧凑）、`plain`（纯文字）。
 
 在「我的文章」里可以把一篇已发布文章置顶到公开主页；每位作者最多一篇。
@@ -475,7 +476,8 @@ FOLIO_QQ_REDIRECT=http://localhost:8080/api/auth/qq/callback
 - 「我的空间 → 账号安全」里可以绑定或更换邮箱，绑定同样要验证；
 - 忘记密码时用邮箱验证码设置新密码；
 - 验证码 10 分钟有效，只存 HMAC 摘要，验证成功或用错 5 次后立即作废；
-- 同一邮箱 60 秒内只能发一次，24 小时最多 10 封。
+- 同一邮箱 60 秒内只能发一次，24 小时最多 10 封；
+- 在「我的空间 → 隐私与消息」开启邮件通知后，评论、关注、阅读申请和处理结果会额外发邮件；点赞不会发邮件。
 
 如果站点对外开放，建议同时开启登录图形验证码：
 
@@ -619,13 +621,33 @@ FOLIO_SITE_URL=https://your-domain.com
 | 系统 | `GET /health` |
 | 管理 | `PUT|DELETE /access-requests/:id`、`GET /admin/stats`、`GET /admin/dashboard`、`GET /admin/docs`、`GET /admin/users`、`POST /admin/users`、`DELETE /admin/users/:id`、`PUT /admin/users/:id/role`、`GET|POST /admin/invites`、`DELETE /admin/invites/:id`、`GET|PUT /admin/access`、`GET|PUT /admin/settings`、`GET|PUT /admin/storage`、`POST /admin/storage/test`、`GET /admin/logs`、`GET|POST /admin/notices`、`DELETE /admin/notices/:id`、`GET /admin/export` |
 
+## 备份与恢复
+
+Docker 部署使用内置脚本：
+
+```bash
+./scripts/backup.sh
+```
+
+脚本会调用 `mysqldump --single-transaction` 导出数据库，复制 `app:/app/data/uploads`，生成 `backups/folio-YYYYMMDD-HHMMSS.tar.gz`，并更新 `backups/latest.tar.gz`。可以用 `BACKUP_DIR` 改目录，用 `BACKUP_KEEP_DAYS` 改保留天数（默认 14 天）。
+
+恢复时先解压，再导入数据库并复制上传目录：
+
+```bash
+tar -xzf backups/folio-YYYYMMDD-HHMMSS.tar.gz -C /tmp
+docker compose exec -T db sh -c 'exec mysql -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE"' < /tmp/folio.sql
+docker compose cp /tmp/uploads/. app:/app/data/uploads/
+```
+
+如果使用七牛云存储，图片不在本地上传目录里，需要在七牛侧另做备份与生命周期管理。
+
 ## 一些实现约定
 
 - **摘要**：不填时自动从 Markdown 正文提取前 120 字。
 - **计数**：点赞、收藏、评论写入后重新 `COUNT(*)` 回写，避免增量漂移。
 - **删除**：删除文档会递归删除子文档及其评论、点赞、收藏、通知；删除根评论会连同回复一起删除；删除用户会清理其全部内容、互动、图片和浏览历史。
 - **图片**：支持上传、粘贴与拖拽；默认保存在 `FOLIO_UPLOAD_DIR`，可以在管理后台「存储设置」切换到七牛，也可以用环境变量提供初始配置；封面与头像仍然是自动生成，不能上传。
-- **备份**：SQLite 可用 `sqlite3 folio.db ".backup 'backup.db'"`；MySQL 使用 `mysqldump`；本地图片目录/`uploads-data` 卷需要一起备份，七牛图片由对象存储侧负责备份与生命周期。
+- **备份**：Docker 部署可直接运行 `./scripts/backup.sh`，会把 MySQL 和 `uploads-data` 打成一个带时间戳的压缩包放到 `backups/`，默认保留 14 天；SQLite 可用 `sqlite3 folio.db ".backup 'backup.db'"`。七牛图片由对象存储侧负责备份与生命周期。
 - **主题**：默认跟随系统明暗偏好，切换后记住选择。
 
 ## 已知边界

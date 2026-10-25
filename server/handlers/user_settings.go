@@ -18,6 +18,7 @@ func defaultUserSetting(userID uint) models.UserSetting {
 		OpenDiggMessage:    true,
 		OpenFollowMessage:  true,
 		OpenAccessMessage:  true,
+		EmailNotify:        false,
 		OpenCollect:        false,
 		HomeStyle:          "cover",
 	}
@@ -61,6 +62,7 @@ func (a *API) MeSettingsUpdate(c *gin.Context) {
 		OpenDiggMessage    bool   `json:"openDiggMessage"`
 		OpenFollowMessage  *bool  `json:"openFollowMessage"`
 		OpenAccessMessage  *bool  `json:"openAccessMessage"`
+		EmailNotify        *bool  `json:"emailNotify"`
 		OpenCollect        bool   `json:"openCollect"`
 		HomeStyle          string `json:"homeStyle"`
 	}
@@ -88,10 +90,14 @@ func (a *API) MeSettingsUpdate(c *gin.Context) {
 	if in.OpenAccessMessage != nil {
 		setting.OpenAccessMessage = *in.OpenAccessMessage
 	}
+	if in.EmailNotify != nil {
+		setting.EmailNotify = *in.EmailNotify
+	}
 	setting.OpenCollect = in.OpenCollect
 	setting.HomeStyle = in.HomeStyle
 	followMessage := setting.OpenFollowMessage
 	accessMessage := setting.OpenAccessMessage
+	emailNotify := setting.EmailNotify
 	if err := a.DB.Save(&setting).Error; err != nil {
 		fail(c, http.StatusInternalServerError, "保存隐私设置失败")
 		return
@@ -101,12 +107,14 @@ func (a *API) MeSettingsUpdate(c *gin.Context) {
 	if err := a.DB.Model(&setting).UpdateColumns(map[string]any{
 		"open_follow_message": followMessage,
 		"open_access_message": accessMessage,
+		"email_notify":        emailNotify,
 	}).Error; err != nil {
 		fail(c, http.StatusInternalServerError, "保存通知设置失败")
 		return
 	}
 	setting.OpenFollowMessage = followMessage
 	setting.OpenAccessMessage = accessMessage
+	setting.EmailNotify = emailNotify
 	c.JSON(http.StatusOK, gin.H{"settings": setting})
 }
 

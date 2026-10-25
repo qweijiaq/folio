@@ -497,7 +497,7 @@ func (a *API) follow(c *gin.Context, on bool) {
 		err := a.DB.Where("follower_id = ? AND followee_id = ?", me.ID, target.ID).First(&existing).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			if err := a.DB.Create(&models.Follow{FollowerID: me.ID, FolloweeID: target.ID}).Error; err == nil {
-				a.notify(target.ID, me.ID, models.NotifyFollow, nil, "")
+				a.notify(c, target.ID, me.ID, models.NotifyFollow, nil, "")
 			}
 		}
 	} else {

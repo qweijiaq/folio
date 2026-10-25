@@ -10,7 +10,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func (a *API) notify(userID, actorID uint, typ string, doc *models.Document, content string) {
+func (a *API) notify(c *gin.Context, userID, actorID uint, typ string, doc *models.Document, content string) {
 	if userID == 0 || userID == actorID {
 		return
 	}
@@ -40,6 +40,9 @@ func (a *API) notify(userID, actorID uint, typ string, doc *models.Document, con
 		n.DocTitle = doc.Title
 	}
 	a.DB.Create(&n)
+	if setting.EmailNotify {
+		a.queueNotificationEmail(c, userID, actorID, typ, doc, content)
+	}
 }
 
 func (a *API) recalcLikes(docID uint) int64 {
@@ -117,7 +120,7 @@ func (a *API) DocLike(c *gin.Context) {
 	}
 	if liked {
 		content := ""
-		a.notify(doc.AuthorID, viewer.ID, models.NotifyLike, doc, content)
+		a.notify(c, doc.AuthorID, viewer.ID, models.NotifyLike, doc, content)
 	} else {
 		a.DB.Where("user_id = ? AND actor_id = ? AND type = ? AND doc_id = ?", doc.AuthorID, viewer.ID, models.NotifyLike, doc.ID).Delete(&models.Notification{})
 	}
