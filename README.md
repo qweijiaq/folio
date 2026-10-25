@@ -10,14 +10,14 @@
 - **不做封面上传**：封面与头像由 rough.js 在浏览器里实时绘制。封面是一张内容索引卡，标题、摘要、标签和分类参与排版，再按标签与标题选配手绘线稿；头像是一个手绘圆加昵称首字。同一篇内容永远得到同一张封面。服务端 `/api/art/*` 保留同风格的轻量 SVG/PNG 版本，供接口和分享图使用。
 - **CSS 全部手写**：不引入 Arco 或其他组件库，也不使用预处理器。四个 CSS 文件构成设计系统，支持明暗主题。
 - **三种数据模式**：SQLite（默认）、MySQL、进程内内存 Mock。Redis 可选，用于登出黑名单与浏览量去重。图片默认落本地磁盘，也可以切换到七牛云。
-- **保留内容能力**：正文图片上传与图库、粘贴/拖拽插图、文章分类、文章推荐、收藏夹分组、浏览历史、评论、点赞、收藏、关注、私信、通知都已恢复。
+- **保留内容能力**：正文图片上传与图库、粘贴/拖拽插图、文章分类、文章推荐、收藏夹分组、浏览历史、评论、点赞、收藏、关注、私信、通知、双向链接都已恢复。
 - **邮箱能力**：配置 SMTP 后支持邮箱验证码注册、验证码登录、绑定/更换邮箱和自助找回密码。
 - **AI 问答**：登录用户可以使用自己的 API Key 向站内文章、文档和站点帮助提问，可选 Anthropic、DeepSeek、智谱 GLM、Kimi、通义千问；支持分块检索、严格/通用模式、多轮追问和流式回答，回答会带回引用。本站不提供 Key；用户可选择将自己的 Key 加密保存，方便下次使用。
 - **关于页与站点帮助**：`/about` 按场景介绍全部功能，目录同时作为 AI 的站点帮助知识库；新增功能只需补充一条目录记录。
 - **站点设置与审计**：超级管理员可以在后台修改站点名称、描述、维护者和登录图形验证码；公开注册与 QQ 登录开关在「注册与邀请」；登录、内容、分类、图片、角色等关键动作都会写入操作日志。
 - **隐私与消息偏好**：每个人都可以决定是否公开关注/粉丝列表、是否接收私信和评论/点赞/关注/阅读申请通知，并选择公开主页的封面样式。
 - **删繁就简**：去掉复杂的角色表、文档权限、文档密码与试看、审核流、Banner、Elasticsearch；只保留一个极简的三级角色字段。
-- **保留基本互动**：评论（两级）、评论点赞、内容点赞、收藏、关注/粉丝、私信、站内通知、管理后台；每篇文章或文档都可以单独关闭评论。私信支持图片、表情和 WebSocket 实时推送。管理员可以发布全站公告。
+- **保留基本互动**：评论（两级、@提及）、评论点赞、内容点赞、收藏、关注/粉丝、私信、站内通知、管理后台；每篇文章或文档都可以单独关闭评论。私信支持图片、表情和 WebSocket 实时推送。管理员可以发布全站公告。
 - **个人站点权限**：只有超级管理员和管理员可以发布文章与文档；普通读者可以评论、点赞、收藏、关注和私信。超级管理员可以在管理后台把读者设为管理员。
 
 ## 三种运行模式
@@ -197,7 +197,7 @@ python3 scripts/smoke.py
 ```
 
 - `go test ./...` 使用临时 SQLite，无需任何外部服务，覆盖注册登录、内容 CRUD、点赞收藏、两级评论、关注、私信、通知、搜索、权限、会话管理、限流、级联删除和健康检查。
-- 前端单元测试使用 Vitest：`cd web && npm test`，覆盖日期/数字格式化、文档树、Markdown 渲染与代码块；`npm run build` 仍会做完整生产构建。
+- 前端单元测试使用 Vitest：`cd web && npm test`，覆盖日期/数字格式化、文档树、Markdown 渲染、代码块、版本差异和 @提及解析；`npm run build` 仍会做完整生产构建。
 - 端到端测试使用 Playwright：首次先执行 `cd web && npx playwright install chromium`，之后 `npm run test:e2e`。它会自动构建前端、在 `127.0.0.1:8091` 用全新的 SQLite 演示库启动服务，覆盖登录退出、写作发布、私密阅读申请、AI 必填自带 Key 和登录设备列表。
 - GitHub Actions 工作流 `.github/workflows/ci.yml` 会并行运行后端测试、Vitest + 构建和 Playwright；E2E 失败时上传报告。
 - `scripts/smoke.py` 对运行中的实例做端到端检查，会临时创建一个用户和一篇内容，测试结束后自动删除。Redis 在线时还会额外验证**登出黑名单**和**浏览量去重**。
@@ -302,7 +302,7 @@ Go 服务会自动托管 `../web/dist`，访问 <http://localhost:8080> 即可�
 | `comment_likes` | 评论点赞 |
 | `follows` | 关注关系 |
 | `messages` | 私信：类型（文字/图片）、正文、图片地址、已读时间 |
-| `notifications` | 点赞 / 评论 / 关注 / 私密阅读申请与结果通知 |
+| `notifications` | 点赞 / 评论 / 提及 / 关注 / 私密阅读申请与结果通知 |
 | `images` | 上传图片：文件名、存储提供方、对象键、URL、MIME、大小、内容哈希、上传者 |
 | `ai_provider_keys` | 用户选择记住的 AI Key：按用户和服务商唯一，密钥加密保存 |
 | `view_histories` | 登录用户的浏览历史（用户 + 内容唯一） |
@@ -533,6 +533,7 @@ FOLIO_SMTP_FROM=you@qq.com
 
 - 每次实际修改并保存时，保存前的版本会写入 `document_revisions`；
 - 历史面板可以查看旧标题、状态、正文和编辑者，并一键恢复；
+- 历史面板支持「与当前差异」，按行标出新增和删除内容；
 - 恢复前会先把当前内容再存一条历史，不会覆盖掉唯一副本；
 - 删除内容时会一并清理它的历史版本。
 
@@ -541,6 +542,14 @@ FOLIO_SMTP_FROM=you@qq.com
 - 下载 zip，按 `articles/` 与 `docs/` 分目录；
 - 每篇带 YAML frontmatter（标题、类型、状态、作者、分类、标签、时间、上级文档）和正文；
 - 图片不会被复制进 zip，仍引用站内 `/uploads` 或对象存储地址，备份时需要连同图片一起保存。
+
+## 双向链接与反向链接
+
+在正文里写 `[[另一篇内容的标题]]`，渲染时会自动解析成站内链接；找不到同名内容时显示为虚线占位。
+
+- 标题索引只包含当前读者可见的已发布内容，草稿、定时和私密文档不会泄漏；
+- 文章和文档底部会增加「反向链接」，列出所有正文里引用了当前标题的其他内容；
+- 链接按标题解析，修改标题后旧链接会失效，需要同步修改引用它的正文。
 
 ## 数据看板
 
@@ -586,13 +595,13 @@ FOLIO_SITE_URL=https://your-domain.com
 - `/` 首页：首屏、置顶文章、最近文章、知识库入口、标签与最近加入
 - `/articles` 文章列表：标签、分类筛选，最新/最多阅读/最多点赞排序，分页
 - `/series`、`/series/:id` 合集：按作者整理的系列文章，合集页按合集内排序展示
-- `/articles/:id` 文章详情：自动封面、Markdown 正文、固定目录、移动端目录抽屉、图片灯箱、右侧点赞/收藏/分享、阅读进度、回到顶部、作者卡、合集入口、上一篇/下一篇、相关文章、评论
+- `/articles/:id` 文章详情：自动封面、Markdown 正文、标题锚点、字号/行宽/专注模式/打印、固定目录、移动端目录抽屉、图片灯箱、右侧点赞/收藏/分享、阅读进度、回到顶部、作者卡、合集入口、上一篇/下一篇、相关文章、反向链接、评论
 - `/docs` 知识库总览：左侧目录树 + 文档卡片
-- `/docs/:id` 文档详情：目录树、面包屑、正文与固定右侧目录、移动端目录抽屉、图片灯箱、上一篇/下一篇、右侧点赞收藏/分享、评论；私密文档只有作者和超级管理员可访问
+- `/docs/:id` 文档详情：目录树、面包屑、标题锚点、字号/行宽/专注模式/打印、固定右侧目录、移动端目录抽屉、图片灯箱、上一篇/下一篇、右侧点赞收藏/分享、反向链接、评论；私密文档只有作者和超级管理员可访问
 - `/search` 全站搜索：相关度排序、关键词高亮、摘要片段、文章/文档切换、分页、最近搜索和热门标签；点击标签进入全站聚合
 - `/about` 关于：按场景系统介绍站点全部功能，支持页面内搜索、角色标记和截图，也是 AI 问答的站点帮助目录
 - `/u/:username` 公开主页：文章、文档、关注、粉丝、公开收藏夹和作者置顶文章；可按隐私设置隐藏关注/粉丝/收藏，并支持封面、紧凑、纯文字三种头部样式
-- `/write`、`/write/:id` 编辑器：Markdown 分栏预览、图片上传/粘贴/拖拽、分类、自动封面预览、标签、评论开关、历史版本、草稿/定时/立即发布、文档树父级与排序（仅超级管理员和管理员）
+- `/write`、`/write/:id` 编辑器：Markdown 分栏预览、图片上传/粘贴/拖拽、分类、自动封面预览、标签、评论开关、历史版本与差异对比、草稿/定时/立即发布、文档树父级与排序（仅超级管理员和管理员）
 - `/messages` 私信与通知：会话列表、WebSocket 实时消息、图片与表情、轮询兜底、通知类型筛选、单条/全部已读、全站公告
 - `/ask` 问 AI：用户自带 API Key（Anthropic、DeepSeek、智谱 GLM、Kimi、通义千问），检索已发布内容与站点帮助，支持严格/通用模式、多轮追问和流式回答
 - `/me` 我的空间：资料、密码、隐私与消息、登录设备与会话撤销、最近登录记录、收藏夹、浏览历史；管理员额外看到自己的文章与文档，并可以把一篇文章置顶到公开主页
@@ -614,7 +623,7 @@ FOLIO_SITE_URL=https://your-domain.com
 - 私信支持发送图片和常用表情，图片走同一套上传接口，按当前存储模式返回本地或七牛 URL；
 - 通知覆盖点赞、评论/回复、关注、私密阅读申请与处理结果，可按类型或未读筛选，点击单条即可标记已读；管理员还可以发布全站公告，公告单独显示在通知页顶部。
 - 收藏是私密的，只有自己能在「我的收藏」里看到；收藏可以分到不同收藏夹，默认收藏夹不能删除；
-- 评论只有两级，回复会显示「回复 @某某」；编辑器里关掉「允许读者评论」后，接口会拒绝新评论，已有评论仍可阅读和点赞。
+- 评论只有两级，回复会显示「回复 @某某」；用 `@用户名` 提及他人时会发提及通知，评论里的提及会链接到对方主页；编辑器里关掉「允许读者评论」后，接口会拒绝新评论，已有评论仍可阅读和点赞。
 
 ## API 概要
 
@@ -625,7 +634,7 @@ FOLIO_SITE_URL=https://your-domain.com
 | 认证 | `POST /auth/register`、`POST /auth/login`、`POST /auth/email/login`、`POST /auth/password/reset`、`POST /auth/email/code`、`GET /auth/email/status`、`GET /auth/captcha`、`GET /auth/qq/status`、`GET /auth/qq/url`、`GET /auth/qq/callback`、`POST /auth/qq/exchange`、`POST /auth/logout`、`GET /me`、`PUT /me/email` |
 | 用户 | `GET /users/:username`、`POST|DELETE /users/:username/follow`、`GET /users/:username/followers|following`、`GET /users/:username/favorite-folders`、`GET /users/:username/favorites` |
 | 合集 | `GET /series`、`GET /series/:id`、`GET /me/series`、`POST /series`、`PUT|DELETE /series/:id` |
-| 内容 | `GET /docs`、`GET /docs/:id`、`GET /docs/:id/access`、`POST /docs/:id/access-requests`、`GET /docs/:id/related`、`GET /docs/:id/revisions`、`GET /docs/:id/revisions/:revisionID`、`POST /docs/:id/revisions/:revisionID/restore`、`POST /docs`、`PUT /docs/:id`、`DELETE /docs/:id`、`GET /doc-tree` |
+| 内容 | `GET /docs`、`GET /docs/:id`、`GET /docs/:id/access`、`POST /docs/:id/access-requests`、`GET /doc-links`、`GET /docs/:id/backlinks`、`GET /docs/:id/related`、`GET /docs/:id/revisions`、`GET /docs/:id/revisions/:revisionID`、`POST /docs/:id/revisions/:revisionID/restore`、`POST /docs`、`PUT /docs/:id`、`DELETE /docs/:id`、`GET /doc-tree` |
 | 分类 | `GET /categories`、`POST /categories`、`PUT /categories/:id`、`DELETE /categories/:id` |
 | 图片 | `POST /images`、`GET /images`、`DELETE /images/:id`；本地模式通过 `/uploads/*` 访问，七牛模式返回云存储 URL |
 | AI | `GET /ai/status`、`POST /ai/analyze`（仅管理员）、`GET /ai/providers`、`GET /ai/meta`、`GET|PUT /ai/keys`、`DELETE /ai/keys/:provider`、`POST /ai/ask`、`POST /ai/ask/stream`（SSE，登录用户需自带 Key） |

@@ -66,6 +66,33 @@ test('AI asks for a user supplied key before answering', async ({ page }) => {
   await expect(page.getByText(/请先填写你自己的.*API Key/)).toBeVisible()
 })
 
+test('adjusts reading tools and focus mode', async ({ page, request }) => {
+  const ownerToken = await apiLogin(request)
+  const title = `E2E 阅读体验 ${Date.now()}`
+  const created = await request.post('/api/docs', {
+    headers: authHeader(ownerToken),
+    data: { kind: 'article', title, content: '# 阅读测试\n\n这是阅读体验测试正文。', status: 'published' }
+  })
+  expect(created.status()).toBe(201)
+  const doc = (await created.json()).doc
+  try {
+    await page.goto(`/articles/${doc.id}`)
+    await expect(page.locator('.reading-tools')).toBeVisible()
+    await expect(page.locator('.heading-anchor').first()).toBeAttached()
+    const before = await page.locator('.prose').evaluate((el) => getComputedStyle(el).fontSize)
+    await page.getByRole('button', { name: '增大字号' }).click()
+    const after = await page.locator('.prose').evaluate((el) => getComputedStyle(el).fontSize)
+    expect(after).not.toBe(before)
+    await page.getByRole('button', { name: '专注' }).click()
+    await expect(page.locator('body')).toHaveClass(/reading-focus/)
+    await page.keyboard.press('Escape')
+    await expect(page.locator('body')).not.toHaveClass(/reading-focus/)
+  } finally {
+    const res = await request.delete(`/api/docs/${doc.id}`, { headers: authHeader(ownerToken) })
+    expect(res.ok()).toBeTruthy()
+  }
+})
+
 test('shows the current login session in account security', async ({ page }) => {
   await login(page)
   await page.goto('/me?tab=security')
