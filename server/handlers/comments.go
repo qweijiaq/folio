@@ -122,6 +122,10 @@ func (a *API) CommentCreate(c *gin.Context) {
 		return
 	}
 	u := currentUser(c)
+	if ok, retry := a.Limiter.Allow(userRateKey("comment", u.ID), 10, time.Minute); !ok {
+		tooMany(c, retry)
+		return
+	}
 	cm := models.Comment{DocID: doc.ID, UserID: u.ID, Content: in.Content}
 	recipient := doc.AuthorID
 	if in.ParentID != nil {

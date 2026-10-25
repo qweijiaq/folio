@@ -3094,3 +3094,65 @@ func TestSessionManagement(t *testing.T) {
 		t.Fatalf("无 Redis 时登出后 token 仍有效，实际 %d", status)
 	}
 }
+
+func TestRateLimits(t *testing.T) {
+	s := newTestAPI(t)
+	token, _ := s.register(t, "rateowner")
+
+	// 登录：同一用户名连续失败 10 次后，第 11 次返回 429。
+	for i := 0; i < 10; i++ {
+		status, data := s.do(t, "POST", "/api/auth/login", "", map[string]string{
+			"username": "rateowner", "password": "wrong-password",
+		})
+		if status != http.StatusUnauthorized {
+			t.Fatalf("第 %d 次错误登录应返回 401，实际 %d %v", i+1, status, data)
+		}
+	}
+	if status, data := s.do(t, "POST", "/api/auth/login", "", map[string]string{
+		"username": "rateowner", "password": "wrong-password",
+	}); status != http.StatusTooManyRequests {
+		t.Fatalf("登录超过限制应返回 429，实际 %d %v", status, data)
+	}
+
+	// 评论：同一用户每分钟最多 10 条。
+	status, created := s.do(t, "POST", "/api/docs", token, map[string]any{
+		"kind": "article", "title": "限流测试文章", "content": "正文", "status": "published",
+	})
+	if status != http.StatusCreated {
+		t.Fatalf("创建文章失败: %d %v", status, created)
+	}
+	docID := uint(number(obj(created, "doc")["id"]))
+	for i := 0; i < 10; i++ {
+		status, data := s.do(t, "POST", fmt.Sprintf("/api/docs/%d/comments", docID), token, map[string]string{
+			"content": fmt.Sprintf("限流评论 %d", i+1),
+		})
+		if status != http.StatusCreated {
+			t.Fatalf("第 %d 条评论失败: %d %v", i+1, status, data)
+		}
+	}
+	if status, data := s.do(t, "POST", fmt.Sprintf("/api/docs/%d/comments", docID), token, map[string]string{
+		"content": "超出限制的评论",
+	}); status != http.StatusTooManyRequests {
+		t.Fatalf("评论超过限制应返回 429，实际 %d %v", status, data)
+	}
+}
+
+func TestRegisterRateLimit(t *testing.T) {
+	s := newTestAPI(t)
+	for i := 0; i < 5; i++ {
+		status, data := s.do(t, "POST", "/api/auth/register", "", map[string]string{
+			"username": fmt.Sprintf("ratereg%d", i),
+			"nickname": fmt.Sprintf("ratereg%d", i),
+			"email":    fmt.Sprintf("ratereg%d@example.com", i),
+			"password": "password123",
+		})
+		if status != http.StatusCreated {
+			t.Fatalf("第 %d 次注册失败: %d %v", i+1, status, data)
+		}
+	}
+	if status, data := s.do(t, "POST", "/api/auth/register", "", map[string]string{
+		"username": "ratereg5", "nickname": "ratereg5", "email": "ratereg5@example.com", "password": "password123",
+	}); status != http.StatusTooManyRequests {
+		t.Fatalf("注册超过限制应返回 429，实际 %d %v", status, data)
+	}
+}

@@ -36,6 +36,7 @@ type API struct {
 	Captcha base64Captcha.Store
 	Hub     *wsHub
 	Storage *storage.Manager
+	Limiter *rateLimiter
 }
 
 func New(db *gorm.DB, cfg config.Config, rc *cache.Cache) *API {
@@ -60,6 +61,7 @@ func New(db *gorm.DB, cfg config.Config, rc *cache.Cache) *API {
 		Captcha: base64Captcha.NewMemoryStore(20240, 5*time.Minute),
 		Hub:     newWSHub(),
 		Storage: storage.New(cfg),
+		Limiter: newRateLimiter(),
 	}
 	api.loadStorageSetting()
 	return api

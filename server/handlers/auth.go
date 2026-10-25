@@ -79,6 +79,10 @@ func (a *API) Register(c *gin.Context) {
 		bad(c, "请求格式错误")
 		return
 	}
+	if ok, retry := a.Limiter.Allow(ipRateKey("register", c.ClientIP()), 5, 10*time.Minute); !ok {
+		tooMany(c, retry)
+		return
+	}
 	in.Invite = trim(in.Invite)
 	var invite *models.InviteCode
 	if in.Invite != "" {
@@ -209,6 +213,19 @@ func (a *API) Login(c *gin.Context) {
 		return
 	}
 	username := trim(in.Username)
+	ipKey := ipRateKey("login", c.ClientIP())
+	if ok, retry := a.Limiter.Allow(ipKey, 20, 5*time.Minute); !ok {
+		tooMany(c, retry)
+		return
+	}
+	userKey := ""
+	if username != "" {
+		userKey = "login:user:" + strings.ToLower(username)
+		if ok, retry := a.Limiter.Allow(userKey, 10, 5*time.Minute); !ok {
+			tooMany(c, retry)
+			return
+		}
+	}
 	var u models.User
 	if err := a.DB.Where("lower(username) = lower(?)", username).First(&u).Error; err != nil {
 		fail(c, http.StatusUnauthorized, "用户名或密码错误")
@@ -218,6 +235,7 @@ func (a *API) Login(c *gin.Context) {
 		fail(c, http.StatusUnauthorized, "用户名或密码错误")
 		return
 	}
+	a.Limiter.Reset(userKey)
 	now := time.Now()
 	a.DB.Model(&u).UpdateColumn("last_login_at", now)
 	a.recordLog(c, &u, "登录", "user", u.ID, "用户名密码登录")

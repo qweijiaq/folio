@@ -86,6 +86,10 @@ func (a *API) docAccessRequest(c *gin.Context) {
 		bad(c, "你已经可以阅读这篇文档")
 		return
 	}
+	if ok, retry := a.Limiter.Allow(userRateKey("access", viewer.ID), 5, 10*time.Minute); !ok {
+		tooMany(c, retry)
+		return
+	}
 	guardianID := a.docGuardian(doc.ID)
 	if guardianID == 0 {
 		fail(c, http.StatusInternalServerError, "无法确定私密范围")
