@@ -19,9 +19,10 @@ const (
 	NotifyAccessRequest = "access_request"
 	NotifyAccessResult  = "access_result"
 
-	AccessPending  = "pending"
-	AccessApproved = "approved"
-	AccessDenied   = "denied"
+	AccessPending   = "pending"
+	AccessApproved  = "approved"
+	AccessDenied    = "denied"
+	AccessCancelled = "cancelled"
 
 	MessageText  = "text"
 	MessageImage = "image"

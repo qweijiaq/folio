@@ -2659,3 +2659,66 @@ func TestPrivateAccessRequests(t *testing.T) {
 		t.Fatalf("被拒后应允许重新申请: %d %v", status, req)
 	}
 }
+
+func TestAccessRequestWithdrawAndRevoke(t *testing.T) {
+	s := newTestAPI(t)
+	ownerToken, _ := s.register(t, "accessowner3")
+	readerToken, _ := s.register(t, "accessreader3")
+	status, created := s.do(t, "POST", "/api/docs", ownerToken, map[string]any{
+		"kind": "doc", "title": "撤回申请测试", "content": "私密内容。", "status": "published", "private": true,
+	})
+	if status != http.StatusCreated {
+		t.Fatalf("创建私密文档失败: %d %v", status, created)
+	}
+	docID := uint(number(obj(created, "doc")["id"]))
+	status, _ = s.do(t, "POST", fmt.Sprintf("/api/docs/%d/access-requests", docID), readerToken, map[string]string{"note": "第一版说明"})
+	if status != http.StatusOK {
+		t.Fatalf("提交申请失败: %d", status)
+	}
+	status, outgoing := s.do(t, "GET", "/api/me/access-requests/outgoing", readerToken, nil)
+	if status != http.StatusOK || len(list(outgoing, "items")) != 1 {
+		t.Fatalf("我的申请列表不正确: %d %v", status, outgoing)
+	}
+	requestID := uint(number(list(outgoing, "items")[0].(map[string]any)["id"]))
+	status, result := s.do(t, "DELETE", fmt.Sprintf("/api/access-requests/%d", requestID), readerToken, nil)
+	if status != http.StatusOK || result["status"] != models.AccessCancelled {
+		t.Fatalf("撤回申请失败: %d %v", status, result)
+	}
+	status, outgoing = s.do(t, "GET", "/api/me/access-requests/outgoing", readerToken, nil)
+	if status != http.StatusOK || list(outgoing, "items")[0].(map[string]any)["status"] != models.AccessCancelled {
+		t.Fatalf("撤回状态不正确: %d %v", status, outgoing)
+	}
+
+	status, _ = s.do(t, "POST", fmt.Sprintf("/api/docs/%d/access-requests", docID), readerToken, map[string]string{"note": "第二版说明"})
+	if status != http.StatusOK {
+		t.Fatalf("重新申请失败: %d", status)
+	}
+	status, listData := s.do(t, "GET", "/api/me/access-requests", ownerToken, nil)
+	if status != http.StatusOK || len(list(listData, "items")) != 1 {
+		t.Fatalf("作者申请列表不正确: %d %v", status, listData)
+	}
+	requestID = uint(number(list(listData, "items")[0].(map[string]any)["id"]))
+	status, _ = s.do(t, "PUT", fmt.Sprintf("/api/access-requests/%d", requestID), ownerToken, map[string]string{"action": "approve"})
+	if status != http.StatusOK {
+		t.Fatalf("通过申请失败: %d", status)
+	}
+	status, _ = s.do(t, "GET", fmt.Sprintf("/api/docs/%d", docID), readerToken, nil)
+	if status != http.StatusOK {
+		t.Fatalf("通过后应能访问，实际 %d", status)
+	}
+	status, result = s.do(t, "PUT", fmt.Sprintf("/api/access-requests/%d", requestID), ownerToken, map[string]string{"action": "deny"})
+	if status != http.StatusOK || result["status"] != models.AccessDenied {
+		t.Fatalf("撤销访问失败: %d %v", status, result)
+	}
+	status, _ = s.do(t, "GET", fmt.Sprintf("/api/docs/%d", docID), readerToken, nil)
+	if status != http.StatusForbidden {
+		t.Fatalf("撤销后应失去访问权限，实际 %d", status)
+	}
+	var notice models.Notification
+	if err := s.api.DB.Where("type = ?", models.NotifyAccessResult).Order("id DESC").First(&notice).Error; err != nil {
+		t.Fatalf("撤销通知不存在: %v", err)
+	}
+	if !strings.Contains(notice.Content, "撤销") {
+		t.Fatalf("撤销通知内容不正确: %v", notice)
+	}
+}

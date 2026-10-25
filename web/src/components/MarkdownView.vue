@@ -1,12 +1,17 @@
 <script setup>
-import { computed, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { renderMarkdown } from '../utils/markdown'
 import { toast } from '../stores/toast'
+import Icon from './Icon.vue'
 
 const props = defineProps({
   source: { type: String, default: '' }
 })
 const emit = defineEmits(['toc'])
+
+const lightbox = ref(null)
+let previousOverflow = ''
+let lastImage = null
 
 const rendered = computed(() => renderMarkdown(props.source))
 watch(
@@ -15,7 +20,47 @@ watch(
   { immediate: true }
 )
 
+function openLightbox(image) {
+  if (!image) return
+  lastImage = image
+  lightbox.value = { src: image.currentSrc || image.src, alt: image.alt || '' }
+  previousOverflow = document.body.style.overflow
+  document.body.style.overflow = 'hidden'
+  window.addEventListener('keydown', onLightboxKeydown)
+}
+
+function closeLightbox() {
+  if (!lightbox.value) return
+  lightbox.value = null
+  document.body.style.overflow = previousOverflow
+  window.removeEventListener('keydown', onLightboxKeydown)
+  lastImage?.focus?.()
+}
+
+function onLightboxKeydown(event) {
+  if (event.key === 'Escape') closeLightbox()
+}
+
+function onKeydown(event) {
+  if ((event.key === 'Enter' || event.key === ' ') && event.target.tagName === 'IMG') {
+    event.preventDefault()
+    openLightbox(event.target)
+  }
+}
+
+onBeforeUnmount(() => {
+  if (lightbox.value) {
+    document.body.style.overflow = previousOverflow
+    window.removeEventListener('keydown', onLightboxKeydown)
+  }
+})
+
 function onClick(event) {
+  const image = event.target.closest('.prose img')
+  if (image) {
+    openLightbox(image)
+    return
+  }
   const toggle = event.target.closest('.code-toggle')
   if (toggle) {
     const block = toggle.closest('.code-block')
@@ -45,5 +90,5 @@ function onClick(event) {
 </script>
 
 <template>
-  <div class="prose" v-html="rendered.html" @click="onClick"></div>
+  <div class="prose" v-html="rendered.html" @click="onClick" @keydown="onKeydown"></div>
 </template>

@@ -16,6 +16,7 @@ import TagPill from '../components/TagPill.vue'
 import EmptyState from '../components/EmptyState.vue'
 import Icon from '../components/Icon.vue'
 import ReadingBar from '../components/ReadingBar.vue'
+import TocDrawer from '../components/TocDrawer.vue'
 import ShareCard from '../components/ShareCard.vue'
 import DocActions from '../components/DocActions.vue'
 import { useReadingProgress } from '../composables/useReadingProgress'
@@ -37,6 +38,7 @@ const privateBlocked = ref(false)
 const accessInfo = ref(null)
 const accessNote = ref('')
 const requestingAccess = ref(false)
+const cancellingAccess = ref(false)
 const sideOpen = ref(false)
 const shareOpen = ref(false)
 const { progress, activeId, refresh: refreshReading } = useReadingProgress()
@@ -164,13 +166,29 @@ async function requestAccess() {
   requestingAccess.value = true
   try {
     const data = await api.post(`/docs/${route.params.id}/access-requests`, { note: accessNote.value.trim() })
-    accessInfo.value = { ...(accessInfo.value || {}), status: data.status || 'pending', canView: false }
+    accessInfo.value = { ...(accessInfo.value || {}), status: data.status || 'pending', requestID: data.id, canView: false }
     accessNote.value = ''
     toast('申请已提交，等待作者处理')
   } catch (err) {
     toastError(err)
   } finally {
     requestingAccess.value = false
+  }
+}
+
+async function cancelAccess() {
+  const requestID = accessInfo.value?.requestID
+  if (!requestID || cancellingAccess.value) return
+  if (!window.confirm('撤回这条阅读申请？')) return
+  cancellingAccess.value = true
+  try {
+    await api.del(`/access-requests/${requestID}`)
+    accessInfo.value = { ...(accessInfo.value || {}), status: 'none', requestID: 0 }
+    toast('已撤回阅读申请')
+  } catch (err) {
+    toastError(err)
+  } finally {
+    cancellingAccess.value = false
   }
 }
 
@@ -227,6 +245,7 @@ watch(
 <template>
   <div class="page docs-page">
     <ReadingBar v-if="doc && !loading" :progress="progress" />
+    <TocDrawer v-if="doc && visibleToc.length" :items="visibleToc" :active-id="activeId" title="本页目录" />
     <ArticleSkeleton v-if="loading" />
 
     <div v-else-if="notFound" class="container page-loading">
@@ -254,6 +273,9 @@ watch(
             <strong>申请已提交</strong>
             <span>请等待作者处理，处理结果会出现在「消息 → 通知」里。</span>
           </div>
+          <button v-if="accessInfo.requestID" class="btn btn-ghost btn-sm" type="button" :disabled="cancellingAccess" @click="cancelAccess">
+            {{ cancellingAccess ? '撤回中…' : '撤回申请' }}
+          </button>
         </template>
         <template v-else-if="accessInfo.status === 'approved'">
           <div class="private-access-status is-approved">

@@ -13,6 +13,7 @@ import TagPill from '../components/TagPill.vue'
 import EmptyState from '../components/EmptyState.vue'
 import Icon from '../components/Icon.vue'
 import ReadingBar from '../components/ReadingBar.vue'
+import TocDrawer from '../components/TocDrawer.vue'
 import ShareCard from '../components/ShareCard.vue'
 import DocActions from '../components/DocActions.vue'
 import { useReadingProgress } from '../composables/useReadingProgress'
@@ -166,6 +167,7 @@ watch(
 <template>
   <div class="page article-page">
     <ReadingBar v-if="doc && !loading" :progress="progress" />
+    <TocDrawer v-if="doc && articleToc.length" :items="articleToc" :active-id="activeId" />
     <ArticleSkeleton v-if="loading" />
 
     <div v-else-if="notFound" class="container page-loading">

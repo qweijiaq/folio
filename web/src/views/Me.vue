@@ -28,6 +28,8 @@ const newFolderName = ref('')
 const editingFolderID = ref(0)
 const folderNameDraft = ref('')
 const history = ref([])
+const outgoingRequests = ref([])
+const cancellingRequest = ref(0)
 const loginRecords = ref([])
 const featuredDocID = ref(null)
 const savingProfile = ref(false)
@@ -68,6 +70,7 @@ const tabs = computed(() => {
   }
   list.push({ key: 'favorites', label: '我的收藏', icon: 'bookmark', count: auth.user?.counts?.favorites ?? 0 })
   list.push({ key: 'history', label: '浏览历史', icon: 'clock' })
+  list.push({ key: 'requests', label: '阅读申请', icon: 'lock' })
   return list
 })
 
@@ -203,6 +206,9 @@ async function loadTab() {
     } else if (tab.value === 'history') {
       const data = await api.get('/me/history', { pageSize: 50 })
       history.value = data.items
+    } else if (tab.value === 'requests') {
+      const data = await api.get('/me/access-requests/outgoing')
+      outgoingRequests.value = data.items || []
     } else if (tab.value === 'privacy') {
       await loadPrivacySettings()
     } else if (tab.value === 'security') {
@@ -219,6 +225,24 @@ function fillProfile() {
   if (!auth.user) return
   profileForm.nickname = auth.user.nickname || ''
   profileForm.bio = auth.user.bio || ''
+}
+
+function accessStatusLabel(status) {
+  return { pending: '待处理', approved: '已通过', denied: '已拒绝', cancelled: '已撤回' }[status] || status
+}
+
+async function cancelOutgoingRequest(item) {
+  if (!window.confirm('撤回这条阅读申请？')) return
+  cancellingRequest.value = item.id
+  try {
+    await api.del(`/access-requests/${item.id}`)
+    await loadTab()
+    toast('已撤回阅读申请')
+  } catch (err) {
+    toastError(err)
+  } finally {
+    cancellingRequest.value = 0
+  }
 }
 
 function setTab(key) {
@@ -781,6 +805,44 @@ onMounted(async () => {
               </div>
               <div class="content-row-actions">
                 <RouterLink :to="docHref(item.doc)" class="btn btn-ghost btn-sm">重新阅读</RouterLink>
+              </div>
+            </article>
+          </div>
+        </div>
+
+        <div v-else-if="tab === 'requests'" class="panel">
+          <header class="panel-head">
+            <h2>我的阅读申请</h2>
+            <p>你向私密文档作者提交的阅读申请会显示在这里。待处理申请可以撤回。</p>
+          </header>
+
+          <p v-if="tabLoading" class="muted loading-line">正在加载…</p>
+          <EmptyState
+            v-else-if="!outgoingRequests.length"
+            icon="lock"
+            title="还没有阅读申请"
+            description="打开一篇私密文档链接并提交申请后，进度会显示在这里。"
+          />
+          <div v-else class="content-list">
+            <article v-for="item in outgoingRequests" :key="item.id" class="content-row access-outgoing-row">
+              <div class="content-row-main">
+                <div class="content-row-title">私密文档 #{{ item.docID }}</div>
+                <div class="content-row-meta">
+                  <span v-if="item.owner?.nickname">作者 {{ item.owner.nickname }}</span>
+                  <span>{{ shortDate(item.createdAt) }}</span>
+                  <span v-if="item.handledAt">处理于 {{ shortDate(item.handledAt) }}</span>
+                </div>
+                <p v-if="item.note" class="access-request-note">{{ item.note }}</p>
+              </div>
+              <div class="content-row-actions">
+                <span class="badge" :class="item.status === 'approved' ? 'badge-live' : item.status === 'denied' ? 'access-badge-denied' : ''">
+                  {{ accessStatusLabel(item.status) }}
+                </span>
+                <RouterLink v-if="item.status === 'approved'" :to="`/docs/${item.docID}`" class="btn btn-ghost btn-sm">去阅读</RouterLink>
+                <RouterLink v-else-if="item.status === 'denied' || item.status === 'cancelled'" :to="`/docs/${item.docID}`" class="text-link">重新申请</RouterLink>
+                <button v-else class="text-link danger" type="button" :disabled="cancellingRequest === item.id" @click="cancelOutgoingRequest(item)">
+                  {{ cancellingRequest === item.id ? '撤回中…' : '撤回' }}
+                </button>
               </div>
             </article>
           </div>

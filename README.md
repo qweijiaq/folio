@@ -180,8 +180,9 @@ QQ 登录也由这里控制：没有配置 QQ 互联凭据时开关不可开启�
 - 私密状态会随历史版本保存和恢复。
 - 没有权限的登录读者打开私密文档链接时，可以填写说明申请阅读；
 - 作者会在「管理后台 → 阅读申请」看到申请，也可以从站内通知进入；
-- 通过后申请人可以阅读该私密范围及其所有子文档，拒绝后可补充说明重新申请；
-- 作者改为拒绝会立即撤销已经通过的访问权限。
+- 通过后申请人可以阅读该私密范围及其所有子文档，拒绝或撤回后可补充说明重新申请；
+- 申请人可以在「我的空间 → 阅读申请」查看进度并撤回待处理申请；
+- 作者可以在后台撤销已通过的访问，权限会立即失效。
 
 ## 自测
 
@@ -555,9 +556,9 @@ FOLIO_SITE_URL=https://your-domain.com
 
 - `/` 首页：首屏、置顶文章、最近文章、知识库入口、标签与最近加入
 - `/articles` 文章列表：标签、分类筛选，最新/最多阅读/最多点赞排序，分页
-- `/articles/:id` 文章详情：自动封面、Markdown 正文、固定目录、右侧点赞/收藏/分享、阅读进度、回到顶部、作者卡、相关文章、评论
+- `/articles/:id` 文章详情：自动封面、Markdown 正文、固定目录、移动端目录抽屉、图片灯箱、右侧点赞/收藏/分享、阅读进度、回到顶部、作者卡、相关文章、评论
 - `/docs` 知识库总览：左侧目录树 + 文档卡片
-- `/docs/:id` 文档详情：目录树、面包屑、正文与固定右侧目录、上一篇/下一篇、右侧点赞收藏/分享、评论；私密文档只有作者和超级管理员可访问
+- `/docs/:id` 文档详情：目录树、面包屑、正文与固定右侧目录、移动端目录抽屉、图片灯箱、上一篇/下一篇、右侧点赞收藏/分享、评论；私密文档只有作者和超级管理员可访问
 - `/search` 全站搜索：关键词搜索；点击任意标签进入该标签的全站聚合
 - `/about` 关于：按场景系统介绍站点全部功能，支持页面内搜索、角色标记和截图，也是 AI 问答的站点帮助目录
 - `/u/:username` 公开主页：文章、文档、关注、粉丝、公开收藏夹和作者置顶文章；可按隐私设置隐藏关注/粉丝/收藏，并支持封面、紧凑、纯文字三种头部样式
@@ -599,12 +600,12 @@ FOLIO_SITE_URL=https://your-domain.com
 | AI | `GET /ai/status`、`POST /ai/analyze`（仅管理员）、`GET /ai/providers`、`GET /ai/meta`、`GET|PUT /ai/keys`、`DELETE /ai/keys/:provider`、`POST /ai/ask`、`POST /ai/ask/stream`（SSE，登录用户需自带 Key） |
 | 互动 | `POST /docs/:id/like`、`POST /docs/:id/favorite`、`GET|POST /docs/:id/comments`、`POST /comments/:id/like` |
 | 消息 | `GET /messages/conversations`、`GET|POST /messages/with/:username`、`GET /notifications`、`GET /notices`、`POST /notices/read`、`GET /ws`（WebSocket，token 查询参数） |
-| 我的 | `GET /me/docs`、`GET /me/favorites`、`GET|DELETE /me/history`、`GET /me/access-requests`、`GET|POST /favorite-folders`、`PUT|DELETE /favorite-folders/:id`、`PUT /me`、`PUT /me/password`、`GET|PUT /me/settings`、`PUT /me/featured-doc`、`GET /me/login-records`、`GET /inbox` |
+| 我的 | `GET /me/docs`、`GET /me/favorites`、`GET|DELETE /me/history`、`GET /me/access-requests`、`GET /me/access-requests/outgoing`、`GET|POST /favorite-folders`、`PUT|DELETE /favorite-folders/:id`、`PUT /me`、`PUT /me/password`、`GET|PUT /me/settings`、`PUT /me/featured-doc`、`GET /me/login-records`、`GET /inbox` |
 | 视觉 | `GET /art/cover.svg`、`GET /art/cover.png`、`GET /art/avatar.svg` |
 | 站点 | `GET /site`、`GET /site/features`（公开的功能目录，关于页使用） |
 | SEO | `GET /feed.xml`、`GET /sitemap.xml`、`GET /robots.txt` |
 | 系统 | `GET /health` |
-| 管理 | `PUT /access-requests/:id`、`GET /admin/stats`、`GET /admin/dashboard`、`GET /admin/docs`、`GET /admin/users`、`POST /admin/users`、`DELETE /admin/users/:id`、`PUT /admin/users/:id/role`、`GET|POST /admin/invites`、`DELETE /admin/invites/:id`、`GET|PUT /admin/access`、`GET|PUT /admin/settings`、`GET|PUT /admin/storage`、`POST /admin/storage/test`、`GET /admin/logs`、`GET|POST /admin/notices`、`DELETE /admin/notices/:id`、`GET /admin/export` |
+| 管理 | `PUT|DELETE /access-requests/:id`、`GET /admin/stats`、`GET /admin/dashboard`、`GET /admin/docs`、`GET /admin/users`、`POST /admin/users`、`DELETE /admin/users/:id`、`PUT /admin/users/:id/role`、`GET|POST /admin/invites`、`DELETE /admin/invites/:id`、`GET|PUT /admin/access`、`GET|PUT /admin/settings`、`GET|PUT /admin/storage`、`POST /admin/storage/test`、`GET /admin/logs`、`GET|POST /admin/notices`、`DELETE /admin/notices/:id`、`GET /admin/export` |
 
 ## 一些实现约定
 

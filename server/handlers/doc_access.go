@@ -42,10 +42,15 @@ func (a *API) docAccessInfo(c *gin.Context) {
 		return
 	}
 	status := "none"
+	requestID := uint(0)
 	if viewer != nil {
 		var request models.DocAccessRequest
 		if err := a.DB.Where("doc_id = ? AND requester_id = ?", guardian.ID, viewer.ID).First(&request).Error; err == nil {
 			status = request.Status
+			requestID = request.ID
+			if status == models.AccessCancelled {
+				status = "none"
+			}
 		}
 	}
 	c.JSON(http.StatusOK, gin.H{
@@ -53,6 +58,7 @@ func (a *API) docAccessInfo(c *gin.Context) {
 		"canView":   false,
 		"needLogin": viewer == nil,
 		"status":    status,
+		"requestID": requestID,
 		"owner": gin.H{
 			"id":       guardian.Author.ID,
 			"username": guardian.Author.Username,
@@ -109,7 +115,7 @@ func (a *API) docAccessRequest(c *gin.Context) {
 		return
 	}
 	if err == nil && request.Status == models.AccessApproved {
-		c.JSON(http.StatusOK, gin.H{"status": request.Status})
+		c.JSON(http.StatusOK, gin.H{"status": request.Status, "id": request.ID})
 		return
 	}
 	wasPending := err == nil && request.Status == models.AccessPending
@@ -138,7 +144,7 @@ func (a *API) docAccessRequest(c *gin.Context) {
 		}
 		a.notify(guardian.AuthorID, viewer.ID, models.NotifyAccessRequest, &guardian, content)
 	}
-	c.JSON(http.StatusOK, gin.H{"status": request.Status})
+	c.JSON(http.StatusOK, gin.H{"status": request.Status, "id": request.ID})
 }
 
 func (a *API) myAccessRequests(c *gin.Context) {
@@ -205,6 +211,7 @@ func (a *API) handleAccessRequest(c *gin.Context) {
 		return
 	}
 	now := time.Now()
+	wasApproved := request.Status == models.AccessApproved
 	if in.Action == "approve" {
 		request.Status = models.AccessApproved
 	} else {
@@ -217,8 +224,65 @@ func (a *API) handleAccessRequest(c *gin.Context) {
 	}
 	if request.Status == models.AccessApproved {
 		a.notify(request.RequesterID, me.ID, models.NotifyAccessResult, &doc, "你的私密阅读申请已通过")
+	} else if wasApproved {
+		a.notify(request.RequesterID, me.ID, models.NotifyAccessResult, nil, "你的私密阅读权限已被作者撤销")
 	} else {
 		a.notify(request.RequesterID, me.ID, models.NotifyAccessResult, nil, "你的私密阅读申请未通过")
+	}
+	c.JSON(http.StatusOK, gin.H{"status": request.Status})
+}
+
+func (a *API) myOutgoingAccessRequests(c *gin.Context) {
+	me := currentUser(c)
+	var requests []models.DocAccessRequest
+	a.DB.Preload("Doc", func(db *gorm.DB) *gorm.DB {
+		return db.Select("id, kind, title, private, author_id")
+	}).Preload("Doc.Author", func(db *gorm.DB) *gorm.DB {
+		return db.Select("id, username, nickname")
+	}).Where("requester_id = ?", me.ID).Order("id DESC").Limit(100).Find(&requests)
+	items := make([]gin.H, 0, len(requests))
+	for _, request := range requests {
+		items = append(items, gin.H{
+			"id":        request.ID,
+			"docID":     request.DocID,
+			"status":    request.Status,
+			"note":      request.Note,
+			"createdAt": request.CreatedAt,
+			"handledAt": request.HandledAt,
+			"owner": gin.H{
+				"username": request.Doc.Author.Username,
+				"nickname": request.Doc.Author.Nickname,
+			},
+		})
+	}
+	c.JSON(http.StatusOK, gin.H{"items": items})
+}
+
+func (a *API) cancelAccessRequest(c *gin.Context) {
+	id, ok := paramID(c)
+	if !ok {
+		return
+	}
+	var request models.DocAccessRequest
+	if err := a.DB.First(&request, id).Error; err != nil {
+		fail(c, http.StatusNotFound, "申请不存在")
+		return
+	}
+	me := currentUser(c)
+	if request.RequesterID != me.ID {
+		fail(c, http.StatusForbidden, "只能撤回自己的申请")
+		return
+	}
+	if request.Status != models.AccessPending {
+		bad(c, "只能撤回待处理的申请")
+		return
+	}
+	now := time.Now()
+	request.Status = models.AccessCancelled
+	request.HandledAt = &now
+	if err := a.DB.Save(&request).Error; err != nil {
+		fail(c, http.StatusInternalServerError, "撤回申请失败")
+		return
 	}
 	c.JSON(http.StatusOK, gin.H{"status": request.Status})
 }

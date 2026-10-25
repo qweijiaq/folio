@@ -454,3 +454,92 @@ html[data-theme="dark"] {
 .hljs-deletion {
   color: var(--hl-deletion);
 }
+
+.prose img {
+  cursor: zoom-in;
+}
+
+.prose img:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.image-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 46px 24px 28px;
+  background: rgba(18, 17, 14, 0.88);
+  backdrop-filter: blur(4px);
+}
+
+.image-lightbox-close {
+  position: absolute;
+  top: 18px;
+  right: 20px;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid rgba(244, 243, 238, 0.38);
+  border-radius: 50%;
+  background: rgba(30, 28, 25, 0.5);
+  color: #f4f3ee;
+  cursor: pointer;
+}
+
+.image-lightbox-figure {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  max-width: 92vw;
+  max-height: 82vh;
+}
+
+.image-lightbox-figure img {
+  max-width: 92vw;
+  max-height: 76vh;
+  border: 1px solid rgba(244, 243, 238, 0.25);
+  border-radius: 8px;
+  object-fit: contain;
+  cursor: default;
+}
+
+.image-lightbox-figure figcaption {
+  max-width: 760px;
+  color: rgba(244, 243, 238, 0.78);
+  font-size: 12.5px;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.image-lightbox-link {
+  color: rgba(244, 243, 238, 0.85);
+  font-size: 12px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.image-lightbox-enter-active,
+.image-lightbox-leave-active {
+  transition: opacity 0.18s ease;
+}
+
+.image-lightbox-enter-from,
+.image-lightbox-leave-to {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .image-lightbox-enter-active,
+  .image-lightbox-leave-active {
+    transition: none;
+  }
+}

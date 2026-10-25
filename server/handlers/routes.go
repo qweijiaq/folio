@@ -119,6 +119,8 @@ func (a *API) Routes(r *gin.Engine) {
 	authed.GET("/me/favorites", a.MyFavorites)
 	authed.GET("/me/history", a.MyHistory)
 	authed.GET("/me/access-requests", a.myAccessRequests)
+	authed.GET("/me/access-requests/outgoing", a.myOutgoingAccessRequests)
+	authed.DELETE("/access-requests/:id", a.cancelAccessRequest)
 	authed.POST("/docs/:id/access-requests", a.docAccessRequest)
 	authed.PUT("/access-requests/:id", a.handleAccessRequest)
 	authed.DELETE("/me/history", a.ClearHistory)

@@ -449,17 +449,19 @@ async function loadAccessRequests() {
 }
 
 function accessRequestStatusLabel(status) {
-  return { pending: '待处理', approved: '已通过', denied: '已拒绝' }[status] || status
+  return { pending: '待处理', approved: '已通过', denied: '已拒绝', cancelled: '已撤回' }[status] || status
 }
 
 async function handleAccessRequest(item, action) {
-  const verb = action === 'approve' ? '通过' : '拒绝'
-  if (!window.confirm(`${verb}「${item.requester?.nickname || '读者'}」阅读《${item.doc?.title || '私密文档'}》的申请？`)) return
+  let verb = action === 'approve' ? '通过' : '拒绝'
+  if (action === 'approve' && item.status === 'denied') verb = '重新通过'
+  if (action === 'deny' && item.status === 'approved') verb = '撤销访问'
+  if (!window.confirm(`${verb}「${item.requester?.nickname || '读者'}」阅读《${item.doc?.title || '私密文档'}》的权限？`)) return
   handlingRequest.value = item.id
   try {
     await api.put(`/access-requests/${item.id}`, { action })
     await loadAccessRequests()
-    toast(action === 'approve' ? '已通过阅读申请' : '已拒绝阅读申请')
+    toast(action === 'approve' ? '已通过阅读申请' : verb === '撤销访问' ? '已撤销阅读权限' : '已拒绝阅读申请')
   } catch (err) {
     toastError(err)
   } finally {
@@ -1250,9 +1252,11 @@ onMounted(async () => {
               <span class="badge" :class="item.status === 'approved' ? 'badge-live' : item.status === 'denied' ? 'access-badge-denied' : ''">
                 {{ accessRequestStatusLabel(item.status) }}
               </span>
-              <div v-if="item.status === 'pending'" class="access-request-actions">
-                <button class="btn btn-primary btn-sm" type="button" :disabled="handlingRequest === item.id" @click="handleAccessRequest(item, 'approve')">通过</button>
-                <button class="btn btn-ghost btn-sm" type="button" :disabled="handlingRequest === item.id" @click="handleAccessRequest(item, 'deny')">拒绝</button>
+              <div v-if="item.status === 'pending' || item.status === 'approved' || item.status === 'denied'" class="access-request-actions">
+                <button v-if="item.status === 'pending'" class="btn btn-primary btn-sm" type="button" :disabled="handlingRequest === item.id" @click="handleAccessRequest(item, 'approve')">通过</button>
+                <button v-if="item.status === 'pending'" class="btn btn-ghost btn-sm" type="button" :disabled="handlingRequest === item.id" @click="handleAccessRequest(item, 'deny')">拒绝</button>
+                <button v-if="item.status === 'approved'" class="btn btn-ghost btn-sm access-revoke-btn" type="button" :disabled="handlingRequest === item.id" @click="handleAccessRequest(item, 'deny')">撤销访问</button>
+                <button v-if="item.status === 'denied'" class="btn btn-ghost btn-sm" type="button" :disabled="handlingRequest === item.id" @click="handleAccessRequest(item, 'approve')">重新通过</button>
               </div>
             </article>
           </div>

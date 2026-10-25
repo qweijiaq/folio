@@ -64,6 +64,6 @@ export function renderMarkdown(source) {
     toc.push({ level: Number(level), text, id })
     return `<h${level} id="${id}">${inner}</h${level}>`
   })
-  html = html.replace(/<img /g, '<img loading="lazy" ')
+  html = html.replace(/<img /g, '<img loading="lazy" tabindex="0" ')
   return { html, toc }
 }
