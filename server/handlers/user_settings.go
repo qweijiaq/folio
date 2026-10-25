@@ -16,6 +16,8 @@ func defaultUserSetting(userID uint) models.UserSetting {
 		OpenPrivateChat:    true,
 		OpenCommentMessage: true,
 		OpenDiggMessage:    true,
+		OpenFollowMessage:  true,
+		OpenAccessMessage:  true,
 		OpenCollect:        false,
 		HomeStyle:          "cover",
 	}
@@ -57,6 +59,8 @@ func (a *API) MeSettingsUpdate(c *gin.Context) {
 		OpenPrivateChat    bool   `json:"openPrivateChat"`
 		OpenCommentMessage bool   `json:"openCommentMessage"`
 		OpenDiggMessage    bool   `json:"openDiggMessage"`
+		OpenFollowMessage  *bool  `json:"openFollowMessage"`
+		OpenAccessMessage  *bool  `json:"openAccessMessage"`
 		OpenCollect        bool   `json:"openCollect"`
 		HomeStyle          string `json:"homeStyle"`
 	}
@@ -78,12 +82,31 @@ func (a *API) MeSettingsUpdate(c *gin.Context) {
 	setting.OpenPrivateChat = in.OpenPrivateChat
 	setting.OpenCommentMessage = in.OpenCommentMessage
 	setting.OpenDiggMessage = in.OpenDiggMessage
+	if in.OpenFollowMessage != nil {
+		setting.OpenFollowMessage = *in.OpenFollowMessage
+	}
+	if in.OpenAccessMessage != nil {
+		setting.OpenAccessMessage = *in.OpenAccessMessage
+	}
 	setting.OpenCollect = in.OpenCollect
 	setting.HomeStyle = in.HomeStyle
+	followMessage := setting.OpenFollowMessage
+	accessMessage := setting.OpenAccessMessage
 	if err := a.DB.Save(&setting).Error; err != nil {
 		fail(c, http.StatusInternalServerError, "保存隐私设置失败")
 		return
 	}
+	// 这两个字段带数据库默认值 true，GORM 创建时会把 false 当作零值省略并回填默认值，
+	// 因此用保存前的目标值显式回写。
+	if err := a.DB.Model(&setting).UpdateColumns(map[string]any{
+		"open_follow_message": followMessage,
+		"open_access_message": accessMessage,
+	}).Error; err != nil {
+		fail(c, http.StatusInternalServerError, "保存通知设置失败")
+		return
+	}
+	setting.OpenFollowMessage = followMessage
+	setting.OpenAccessMessage = accessMessage
 	c.JSON(http.StatusOK, gin.H{"settings": setting})
 }
 

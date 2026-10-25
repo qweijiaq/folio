@@ -22,6 +22,19 @@ const conversations = ref([])
 const notifications = ref([])
 const notices = ref([])
 const notifUnread = ref(0)
+const noticeUnread = ref(0)
+const notifCounts = ref({})
+const notifFilter = ref('all')
+const notifUnreadOnly = ref(false)
+const notifLoading = ref(false)
+const notifFilters = [
+  { key: 'all', label: '全部' },
+  { key: 'comment', label: '评论' },
+  { key: 'like', label: '点赞' },
+  { key: 'follow', label: '关注' },
+  { key: 'access_request', label: '阅读申请' },
+  { key: 'access_result', label: '申请结果' }
+]
 const messages = ref([])
 const hasMore = ref(false)
 const loadingOlder = ref(false)
@@ -121,19 +134,60 @@ async function loadOlder() {
   }
 }
 
-async function loadNotifications(markRead = false) {
+async function loadNotifications() {
+  notifLoading.value = true
   try {
-    const data = await api.get('/notifications')
-    notifications.value = data.items
+    const data = await api.get('/notifications', {
+      type: notifFilter.value === 'all' ? undefined : notifFilter.value,
+      unread: notifUnreadOnly.value ? '1' : undefined
+    })
+    notifications.value = data.items || []
     notices.value = data.notices || []
-    notifUnread.value = (data.unread || 0) + (data.noticeUnread || 0)
-    if (markRead && notifUnread.value > 0) {
-      await Promise.all([api.post('/notifications/read'), api.post('/notices/read')])
-      notifications.value = data.items.map((item) => ({ ...item, read: true }))
-      notices.value = notices.value.map((item) => ({ ...item, read: true }))
-      notifUnread.value = 0
-      await refreshInbox()
+    notifCounts.value = data.counts || {}
+    noticeUnread.value = data.noticeUnread || 0
+    notifUnread.value = (data.unread || 0) + noticeUnread.value
+  } catch (err) {
+    toastError(err)
+  } finally {
+    notifLoading.value = false
+  }
+}
+
+function setNotifFilter(key) {
+  if (notifFilter.value === key) return
+  notifFilter.value = key
+  loadNotifications()
+}
+
+async function markNotificationRead(item) {
+  if (item.read) return
+  item.read = true
+  notifUnread.value = Math.max(0, notifUnread.value - 1)
+  try {
+    const data = await api.post(`/notifications/${item.id}/read`)
+    if (typeof data.unread === 'number') {
+      notifUnread.value = data.unread + noticeUnread.value
     }
+    await refreshInbox()
+  } catch {
+    item.read = false
+    notifUnread.value += 1
+  }
+}
+
+async function markAllNotificationsRead() {
+  try {
+    const hasUnreadNotice = notices.value.some((notice) => !notice.read)
+    await Promise.all([
+      api.post('/notifications/read'),
+      hasUnreadNotice ? api.post('/notices/read') : Promise.resolve()
+    ])
+    notifications.value = notifications.value.map((item) => ({ ...item, read: true }))
+    notices.value = notices.value.map((item) => ({ ...item, read: true }))
+    notifUnread.value = 0
+    noticeUnread.value = 0
+    await refreshInbox()
+    toast('通知已全部标为已读')
   } catch (err) {
     toastError(err)
   }
@@ -301,7 +355,7 @@ watch(
   () => [route.query.tab, route.query.with],
   () => {
     if (tab.value === 'notifications') {
-      loadNotifications(true)
+      loadNotifications()
     } else {
       loadThread()
       loadConversations()
@@ -321,7 +375,7 @@ onMounted(async () => {
       loadConversations()
       if (withUser.value) loadThread(true)
     } else {
-      loadNotifications(false)
+      loadNotifications()
     }
   }, 10000)
 })
@@ -497,14 +551,33 @@ onBeforeUnmount(() => {
             <header class="thread-head thread-head--simple">
               <strong>通知</strong>
               <button
-                v-if="notifications.some((item) => !item.read) || notices.some((item) => !item.read)"
+                v-if="notifUnread > 0"
                 class="text-link"
                 type="button"
-                @click="loadNotifications(true)"
+                @click="markAllNotificationsRead"
               >
                 全部标为已读
               </button>
             </header>
+            <div class="notif-filters">
+              <div class="notif-filter-group">
+                <button
+                  v-for="filter in notifFilters"
+                  :key="filter.key"
+                  type="button"
+                  class="notif-filter"
+                  :class="{ active: notifFilter === filter.key }"
+                  @click="setNotifFilter(filter.key)"
+                >
+                  {{ filter.label }}
+                  <span v-if="notifCounts[filter.key]" class="notif-filter-count">{{ notifCounts[filter.key] }}</span>
+                </button>
+              </div>
+              <label class="notif-unread-toggle">
+                <input v-model="notifUnreadOnly" type="checkbox" @change="loadNotifications" />
+                只看未读
+              </label>
+            </div>
             <div class="notice-list">
               <article v-for="notice in notices" :key="notice.id" class="notice-item" :class="{ unread: !notice.read }">
                 <header class="notice-head">
@@ -522,13 +595,17 @@ onBeforeUnmount(() => {
             </div>
 
             <div class="notif-list">
-              <p v-if="!notifications.length && !notices.length" class="empty-inline">还没有新的通知。</p>
+              <p v-if="notifLoading" class="muted loading-line">正在加载通知…</p>
+              <p v-else-if="!notifications.length && !notices.length" class="empty-inline">
+                {{ notifUnreadOnly || notifFilter !== 'all' ? '没有符合条件的通知。' : '还没有新的通知。' }}
+              </p>
               <RouterLink
                 v-for="item in notifications"
                 :key="item.id"
                 :to="notifLink(item)"
                 class="notif-item"
                 :class="{ unread: !item.read }"
+                @click="markNotificationRead(item)"
               >
                 <UserAvatar :username="item.actor.username" :nickname="item.actor.nickname" :size="38" />
                 <span class="notif-main">

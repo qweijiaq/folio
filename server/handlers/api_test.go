@@ -1051,7 +1051,8 @@ func TestUserPrivacySettings(t *testing.T) {
 
 	status, settings := s.do(t, "GET", "/api/me/settings", aliceToken, nil)
 	initial := obj(settings, "settings")
-	if status != http.StatusOK || initial["openFans"] != true || initial["homeStyle"] != "cover" {
+	if status != http.StatusOK || initial["openFans"] != true || initial["homeStyle"] != "cover" ||
+		initial["openFollowMessage"] != true || initial["openAccessMessage"] != true {
 		t.Fatalf("默认隐私设置不正确: %d %v", status, settings)
 	}
 
@@ -2941,5 +2942,78 @@ func TestScheduledPublishing(t *testing.T) {
 	}
 	if obj(data, "doc")["publishedAt"] == nil || obj(data, "doc")["publishAt"] != nil {
 		t.Fatalf("到点发布后应写入发布时间并清空定时时间: %v", data)
+	}
+}
+
+func TestNotificationReadAndFilters(t *testing.T) {
+	s := newTestAPI(t)
+	aliceToken, _ := s.register(t, "notifyalice")
+	bobToken, _ := s.register(t, "notifybob")
+
+	status, created := s.do(t, "POST", "/api/docs", aliceToken, map[string]any{
+		"kind": "article", "title": "通知测试文章", "content": "正文", "status": "published",
+	})
+	if status != http.StatusCreated {
+		t.Fatalf("创建文章失败: %d %v", status, created)
+	}
+	docID := uint(number(obj(created, "doc")["id"]))
+
+	if status, data := s.do(t, "POST", "/api/users/notifyalice/follow", bobToken, nil); status != http.StatusOK {
+		t.Fatalf("关注失败: %d %v", status, data)
+	}
+	if status, data := s.do(t, "POST", "/api/docs/"+itoa(docID)+"/like", bobToken, nil); status != http.StatusOK {
+		t.Fatalf("点赞失败: %d %v", status, data)
+	}
+	if status, data := s.do(t, "POST", "/api/docs/"+itoa(docID)+"/comments", bobToken, map[string]string{"content": "通知测试评论"}); status != http.StatusCreated {
+		t.Fatalf("评论失败: %d %v", status, data)
+	}
+
+	status, data := s.do(t, "GET", "/api/notifications", aliceToken, nil)
+	counts := obj(data, "counts")
+	if status != http.StatusOK || number(counts["all"]) != 3 || number(counts["follow"]) != 1 ||
+		number(counts["like"]) != 1 || number(counts["comment"]) != 1 || number(data["unread"]) != 3 {
+		t.Fatalf("通知计数不正确: %d %v", status, data)
+	}
+
+	status, data = s.do(t, "GET", "/api/notifications?type=follow", aliceToken, nil)
+	followItems := list(data, "items")
+	if status != http.StatusOK || len(followItems) != 1 || followItems[0].(map[string]any)["type"] != models.NotifyFollow {
+		t.Fatalf("按类型筛选通知失败: %d %v", status, data)
+	}
+	noticeID := uint(number(followItems[0].(map[string]any)["id"]))
+
+	if status, data := s.do(t, "POST", fmt.Sprintf("/api/notifications/%d/read", noticeID), bobToken, nil); status != http.StatusNotFound {
+		t.Fatalf("不能标记别人的通知为已读，实际 %d %v", status, data)
+	}
+	status, data = s.do(t, "POST", fmt.Sprintf("/api/notifications/%d/read", noticeID), aliceToken, nil)
+	if status != http.StatusOK || number(data["unread"]) != 2 {
+		t.Fatalf("单条已读失败: %d %v", status, data)
+	}
+	status, data = s.do(t, "GET", "/api/notifications?unread=1", aliceToken, nil)
+	if status != http.StatusOK || len(list(data, "items")) != 2 || number(data["unread"]) != 2 {
+		t.Fatalf("只看未读筛选失败: %d %v", status, data)
+	}
+	status, _ = s.do(t, "POST", "/api/notifications/read", aliceToken, nil)
+	if status != http.StatusOK {
+		t.Fatalf("全部已读失败: %d", status)
+	}
+	status, data = s.do(t, "GET", "/api/notifications?unread=1", aliceToken, nil)
+	if status != http.StatusOK || len(list(data, "items")) != 0 || number(data["unread"]) != 0 {
+		t.Fatalf("全部已读后仍有未读: %d %v", status, data)
+	}
+
+	status, _ = s.do(t, "PUT", "/api/me/settings", aliceToken, map[string]any{
+		"openFollow": true, "openFans": true, "openPrivateChat": true,
+		"openCommentMessage": true, "openDiggMessage": true,
+		"openFollowMessage": false, "openAccessMessage": true, "homeStyle": "cover",
+	})
+	if status != http.StatusOK {
+		t.Fatalf("关闭关注通知失败: %d", status)
+	}
+	s.do(t, "DELETE", "/api/users/notifyalice/follow", bobToken, nil)
+	s.do(t, "POST", "/api/users/notifyalice/follow", bobToken, nil)
+	status, data = s.do(t, "GET", "/api/notifications?type=follow", aliceToken, nil)
+	if status != http.StatusOK || len(list(data, "items")) != 0 {
+		t.Fatalf("关闭关注通知后仍收到通知: %d %v", status, data)
 	}
 }

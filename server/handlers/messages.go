@@ -192,19 +192,59 @@ func (a *API) Inbox(c *gin.Context) {
 
 func (a *API) Notifications(c *gin.Context) {
 	me := currentUser(c)
+	q := a.DB.Model(&models.Notification{}).Where("user_id = ?", me.ID)
+	if typ := trim(c.Query("type")); typ != "" && typ != "all" {
+		q = q.Where("type = ?", typ)
+	}
+	if c.Query("unread") == "1" || c.Query("unread") == "true" {
+		q = q.Where("`read` = ?", false)
+	}
 	var items []models.Notification
-	a.DB.Preload("Actor", func(db *gorm.DB) *gorm.DB {
+	q.Preload("Actor", func(db *gorm.DB) *gorm.DB {
 		return db.Select("id", "username", "nickname", "bio", "role", "created_at")
-	}).Where("user_id = ?", me.ID).Order("id DESC").Limit(60).Find(&items)
+	}).Order("id DESC").Limit(60).Find(&items)
+
 	var unread int64
 	a.DB.Model(&models.Notification{}).Where("user_id = ? AND `read` = ?", me.ID, false).Count(&unread)
+
+	var rows []struct {
+		Type  string
+		Count int64
+	}
+	a.DB.Model(&models.Notification{}).Select("type, COUNT(*) AS count").Where("user_id = ?", me.ID).Group("type").Scan(&rows)
+	counts := map[string]int64{"all": 0}
+	for _, row := range rows {
+		counts[row.Type] = row.Count
+		counts["all"] += row.Count
+	}
+
 	notices, noticeUnread := a.noticesFor(me.ID, 5)
 	c.JSON(http.StatusOK, gin.H{
 		"items":        items,
 		"unread":       unread,
+		"counts":       counts,
 		"notices":      notices,
 		"noticeUnread": noticeUnread,
 	})
+}
+
+func (a *API) NotificationRead(c *gin.Context) {
+	id, ok := paramID(c)
+	if !ok {
+		return
+	}
+	me := currentUser(c)
+	var notice models.Notification
+	if err := a.DB.Where("id = ? AND user_id = ?", id, me.ID).First(&notice).Error; err != nil {
+		fail(c, http.StatusNotFound, "通知不存在")
+		return
+	}
+	if !notice.Read {
+		a.DB.Model(&notice).UpdateColumn("`read`", true)
+	}
+	var unread int64
+	a.DB.Model(&models.Notification{}).Where("user_id = ? AND `read` = ?", me.ID, false).Count(&unread)
+	c.JSON(http.StatusOK, gin.H{"ok": true, "unread": unread})
 }
 
 func (a *API) NotificationsRead(c *gin.Context) {

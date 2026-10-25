@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 	"regexp"
 	"strings"
@@ -460,9 +461,13 @@ func (a *API) follow(c *gin.Context, on bool) {
 		return
 	}
 	if on {
-		f := models.Follow{FollowerID: me.ID, FolloweeID: target.ID}
-		a.DB.Where("follower_id = ? AND followee_id = ?", me.ID, target.ID).FirstOrCreate(&f)
-		a.notify(target.ID, me.ID, models.NotifyFollow, nil, "")
+		var existing models.Follow
+		err := a.DB.Where("follower_id = ? AND followee_id = ?", me.ID, target.ID).First(&existing).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			if err := a.DB.Create(&models.Follow{FollowerID: me.ID, FolloweeID: target.ID}).Error; err == nil {
+				a.notify(target.ID, me.ID, models.NotifyFollow, nil, "")
+			}
+		}
 	} else {
 		a.DB.Where("follower_id = ? AND followee_id = ?", me.ID, target.ID).Delete(&models.Follow{})
 		a.DB.Where("user_id = ? AND actor_id = ? AND type = ?", target.ID, me.ID, models.NotifyFollow).Delete(&models.Notification{})

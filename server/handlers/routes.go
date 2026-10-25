@@ -152,6 +152,7 @@ func (a *API) Routes(r *gin.Engine) {
 
 	authed.GET("/notifications", a.Notifications)
 	authed.POST("/notifications/read", a.NotificationsRead)
+	authed.POST("/notifications/:id/read", a.NotificationRead)
 	authed.GET("/notices", a.Notices)
 	authed.POST("/notices/read", a.NoticesRead)
 

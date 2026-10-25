@@ -21,6 +21,12 @@ func (a *API) notify(userID, actorID uint, typ string, doc *models.Document, con
 	if typ == models.NotifyComment && !setting.OpenCommentMessage {
 		return
 	}
+	if typ == models.NotifyFollow && !setting.OpenFollowMessage {
+		return
+	}
+	if (typ == models.NotifyAccessRequest || typ == models.NotifyAccessResult) && !setting.OpenAccessMessage {
+		return
+	}
 	n := models.Notification{
 		UserID:  userID,
 		ActorID: actorID,

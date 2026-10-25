@@ -43,6 +43,8 @@ const privacySettings = reactive({
   openPrivateChat: true,
   openCommentMessage: true,
   openDiggMessage: true,
+  openFollowMessage: true,
+  openAccessMessage: true,
   openCollect: false,
   homeStyle: 'cover'
 })
@@ -618,6 +620,20 @@ onMounted(async () => {
                 <span>
                   <strong>点赞通知</strong>
                   <small>关闭后，别人点赞你的内容时不再生成站内通知。</small>
+                </span>
+              </label>
+              <label class="switch-row">
+                <input v-model="privacySettings.openFollowMessage" type="checkbox" />
+                <span>
+                  <strong>关注通知</strong>
+                  <small>关闭后，别人关注你时不再生成站内通知。</small>
+                </span>
+              </label>
+              <label class="switch-row">
+                <input v-model="privacySettings.openAccessMessage" type="checkbox" />
+                <span>
+                  <strong>阅读申请通知</strong>
+                  <small>关闭后，私密文档的阅读申请和处理结果不再生成站内通知。</small>
                 </span>
               </label>
               <label class="switch-row">

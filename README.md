@@ -15,7 +15,7 @@
 - **AI 问答**：登录用户可以使用自己的 API Key 向站内文章、文档和站点帮助提问，可选 Anthropic、DeepSeek、智谱 GLM、Kimi、通义千问；支持分块检索、严格/通用模式、多轮追问和流式回答，回答会带回引用。本站不提供 Key；用户可选择将自己的 Key 加密保存，方便下次使用。
 - **关于页与站点帮助**：`/about` 按场景介绍全部功能，目录同时作为 AI 的站点帮助知识库；新增功能只需补充一条目录记录。
 - **站点设置与审计**：超级管理员可以在后台修改站点名称、描述、维护者和登录图形验证码；公开注册与 QQ 登录开关在「注册与邀请」；登录、内容、分类、图片、角色等关键动作都会写入操作日志。
-- **隐私与消息偏好**：每个人都可以决定是否公开关注/粉丝列表、是否接收私信和点赞/评论通知，并选择公开主页的封面样式。
+- **隐私与消息偏好**：每个人都可以决定是否公开关注/粉丝列表、是否接收私信和评论/点赞/关注/阅读申请通知，并选择公开主页的封面样式。
 - **删繁就简**：去掉复杂的角色表、文档权限、文档密码与试看、审核流、Banner、Elasticsearch；只保留一个极简的三级角色字段。
 - **保留基本互动**：评论（两级）、评论点赞、内容点赞、收藏、关注/粉丝、私信、站内通知、管理后台；每篇文章或文档都可以单独关闭评论。私信支持图片、表情和 WebSocket 实时推送。管理员可以发布全站公告。
 - **个人站点权限**：只有超级管理员和管理员可以发布文章与文档；普通读者可以评论、点赞、收藏、关注和私信。超级管理员可以在管理后台把读者设为管理员。
@@ -269,7 +269,7 @@ Go 服务会自动托管 `../web/dist`，访问 <http://localhost:8080> 即可�
 | 表 | 用途 |
 | --- | --- |
 | `users` | 用户名、昵称、邮箱、密码哈希、简介、角色、最后登录 |
-| `user_settings` | 隐私与消息偏好：关注/粉丝可见性、私信开关、点赞/评论通知、主页样式 |
+| `user_settings` | 隐私与消息偏好：关注/粉丝可见性、私信开关、评论/点赞/关注/阅读申请通知、主页样式 |
 | `categories` | 文章分类 |
 | `series` | 文章合集：标题、介绍、作者 |
 | `documents` | 文章与文档共用：`kind`、`title`、`abstract`、`content`、`parent_id`、`category_id`、`series_id`、`series_order`、`tags`、`status`、`private`、`open_comment`、计数字段 |
@@ -280,7 +280,7 @@ Go 服务会自动托管 `../web/dist`，访问 <http://localhost:8080> 即可�
 | `comment_likes` | 评论点赞 |
 | `follows` | 关注关系 |
 | `messages` | 私信：类型（文字/图片）、正文、图片地址、已读时间 |
-| `notifications` | 点赞 / 评论 / 关注通知 |
+| `notifications` | 点赞 / 评论 / 关注 / 私密阅读申请与结果通知 |
 | `images` | 上传图片：文件名、存储提供方、对象键、URL、MIME、大小、内容哈希、上传者 |
 | `ai_provider_keys` | 用户选择记住的 AI Key：按用户和服务商唯一，密钥加密保存 |
 | `view_histories` | 登录用户的浏览历史（用户 + 内容唯一） |
@@ -449,14 +449,14 @@ FOLIO_QQ_REDIRECT=http://localhost:8080/api/auth/qq/callback
 - 是否公开关注列表、粉丝列表（关闭后列表与数量都会隐藏，自己仍然看得到）；
 - 是否允许别人发送私信（关闭后新私信会被拒绝，已有对话仍可查看）；
 - 是否公开我的收藏夹（默认私密，开启后访客可以在公开主页按收藏夹浏览已发布内容）；
-- 是否生成评论/回复通知、点赞通知；
+- 是否生成评论/回复、点赞、关注、私密阅读申请与结果通知；
 - 公开主页头部样式：`cover`（封面）、`compact`（紧凑）、`plain`（纯文字）。
 
 在「我的文章」里可以把一篇已发布文章置顶到公开主页；每位作者最多一篇。
 
 「账号安全」里还会显示最近 12 条登录与安全动作（登录、注册、改密、找回密码、绑定邮箱），数据来自操作日志，只对本人可见。
 
-这些设置保存在 `user_settings`，没有记录时按全部公开、全部通知处理，老用户不需要迁移。
+这些设置保存在 `user_settings`，没有记录时按全部公开、全部通知处理；新增的通知开关带数据库默认值，老用户不需要迁移。
 
 ## 邮箱验证码（可选）
 
@@ -565,7 +565,7 @@ FOLIO_SITE_URL=https://your-domain.com
 - `/about` 关于：按场景系统介绍站点全部功能，支持页面内搜索、角色标记和截图，也是 AI 问答的站点帮助目录
 - `/u/:username` 公开主页：文章、文档、关注、粉丝、公开收藏夹和作者置顶文章；可按隐私设置隐藏关注/粉丝/收藏，并支持封面、紧凑、纯文字三种头部样式
 - `/write`、`/write/:id` 编辑器：Markdown 分栏预览、图片上传/粘贴/拖拽、分类、自动封面预览、标签、评论开关、历史版本、草稿/定时/立即发布、文档树父级与排序（仅超级管理员和管理员）
-- `/messages` 私信与通知：会话列表、WebSocket 实时消息、图片与表情、轮询兜底、全站公告与通知已读
+- `/messages` 私信与通知：会话列表、WebSocket 实时消息、图片与表情、轮询兜底、通知类型筛选、单条/全部已读、全站公告
 - `/ask` 问 AI：用户自带 API Key（Anthropic、DeepSeek、智谱 GLM、Kimi、通义千问），检索已发布内容与站点帮助，支持严格/通用模式、多轮追问和流式回答
 - `/me` 我的空间：资料、密码、隐私与消息、最近登录记录、收藏夹、浏览历史；管理员额外看到自己的文章与文档，并可以把一篇文章置顶到公开主页
 - `/admin` 管理后台：概览、数据看板、内容管理、分类管理、合集管理、图片管理、阅读申请、全站通知；内容管理支持导出全部 Markdown；超级管理员额外拥有用户与权限、注册与邀请、存储设置、站点设置和操作日志
@@ -584,7 +584,7 @@ FOLIO_SITE_URL=https://your-domain.com
 
 - 私信通过 WebSocket 实时推送；连接不可用或断开时，页面每 10 秒轮询兜底。打开会话时会标记已读；会话超过 50 条时可以继续加载更早消息；
 - 私信支持发送图片和常用表情，图片走同一套上传接口，按当前存储模式返回本地或七牛 URL；
-- 普通通知只针对点赞、评论/回复、关注三种行为；管理员还可以发布全站公告，公告单独显示在通知页顶部。
+- 通知覆盖点赞、评论/回复、关注、私密阅读申请与处理结果，可按类型或未读筛选，点击单条即可标记已读；管理员还可以发布全站公告，公告单独显示在通知页顶部。
 - 收藏是私密的，只有自己能在「我的收藏」里看到；收藏可以分到不同收藏夹，默认收藏夹不能删除；
 - 评论只有两级，回复会显示「回复 @某某」；编辑器里关掉「允许读者评论」后，接口会拒绝新评论，已有评论仍可阅读和点赞。
 
@@ -602,7 +602,7 @@ FOLIO_SITE_URL=https://your-domain.com
 | 图片 | `POST /images`、`GET /images`、`DELETE /images/:id`；本地模式通过 `/uploads/*` 访问，七牛模式返回云存储 URL |
 | AI | `GET /ai/status`、`POST /ai/analyze`（仅管理员）、`GET /ai/providers`、`GET /ai/meta`、`GET|PUT /ai/keys`、`DELETE /ai/keys/:provider`、`POST /ai/ask`、`POST /ai/ask/stream`（SSE，登录用户需自带 Key） |
 | 互动 | `POST /docs/:id/like`、`POST /docs/:id/favorite`、`GET|POST /docs/:id/comments`、`POST /comments/:id/like` |
-| 消息 | `GET /messages/conversations`、`GET|POST /messages/with/:username`、`GET /notifications`、`GET /notices`、`POST /notices/read`、`GET /ws`（WebSocket，token 查询参数） |
+| 消息 | `GET /messages/conversations`、`GET|POST /messages/with/:username`、`GET /notifications?type=&unread=`、`POST /notifications/read`、`POST /notifications/:id/read`、`GET /notices`、`POST /notices/read`、`GET /ws`（WebSocket，token 查询参数） |
 | 我的 | `GET /me/docs`、`GET /me/favorites`、`GET|DELETE /me/history`、`GET /me/access-requests`、`GET /me/access-requests/outgoing`、`GET|POST /favorite-folders`、`PUT|DELETE /favorite-folders/:id`、`PUT /me`、`PUT /me/password`、`GET|PUT /me/settings`、`PUT /me/featured-doc`、`GET /me/login-records`、`GET /inbox` |
 | 视觉 | `GET /art/cover.svg`、`GET /art/cover.png`、`GET /art/avatar.svg` |
 | 站点 | `GET /site`、`GET /site/features`（公开的功能目录，关于页使用） |
