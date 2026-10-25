@@ -66,6 +66,16 @@ func (a *API) queueNotificationEmail(c *gin.Context, userID, actorID uint, typ s
 		if doc != nil {
 			path = fmt.Sprintf("/%s/%d", map[string]string{"doc": "docs", "article": "articles"}[doc.Kind], doc.ID)
 		}
+	case models.NotifyMention:
+		subject = fmt.Sprintf("%s 在评论中提到了你", actorName)
+		if docTitle != "" {
+			body = fmt.Sprintf("%s 在%s《%s》的评论中提到了你：\n\n%s", actorName, kind, docTitle, content)
+		} else {
+			body = fmt.Sprintf("%s 在评论中提到了你：\n\n%s", actorName, content)
+		}
+		if doc != nil {
+			path = fmt.Sprintf("/%s/%d", map[string]string{"doc": "docs", "article": "articles"}[doc.Kind], doc.ID)
+		}
 	case models.NotifyFollow:
 		subject = fmt.Sprintf("%s 关注了你", actorName)
 		body = fmt.Sprintf("%s 关注了你。", actorName)

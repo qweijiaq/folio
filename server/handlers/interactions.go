@@ -18,7 +18,7 @@ func (a *API) notify(c *gin.Context, userID, actorID uint, typ string, doc *mode
 	if typ == models.NotifyLike && !setting.OpenDiggMessage {
 		return
 	}
-	if typ == models.NotifyComment && !setting.OpenCommentMessage {
+	if (typ == models.NotifyComment || typ == models.NotifyMention) && !setting.OpenCommentMessage {
 		return
 	}
 	if typ == models.NotifyFollow && !setting.OpenFollowMessage {

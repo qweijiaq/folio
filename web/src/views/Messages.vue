@@ -32,6 +32,7 @@ const notifFilters = [
   { key: 'comment', label: '评论' },
   { key: 'like', label: '点赞' },
   { key: 'follow', label: '关注' },
+  { key: 'mention', label: '提及' },
   { key: 'access_request', label: '阅读申请' },
   { key: 'access_result', label: '申请结果' }
 ]
@@ -345,6 +346,7 @@ function notifLink(item) {
 
 function notifText(item) {
   if (item.type === 'follow') return '关注了你'
+  if (item.type === 'mention') return '在评论中提到了你'
   if (item.type === 'access_request') return '申请阅读你的私密文档'
   if (item.type === 'access_result') return '处理了你的私密阅读申请'
   if (item.type === 'like') return `赞了你的${item.docKind === 'doc' ? '文档' : '文章'}`
@@ -617,7 +619,7 @@ onBeforeUnmount(() => {
                   <span v-if="item.content" class="notif-excerpt">{{ item.content }}</span>
                   <span class="notif-time">{{ shortDate(item.createdAt) }}</span>
                 </span>
-                <Icon :name="item.type.startsWith('access') ? 'lock' : item.type === 'follow' ? 'follow' : item.type === 'like' ? 'heart' : 'comment'" :size="16" class="notif-icon" />
+                <Icon :name="item.type.startsWith('access') ? 'lock' : item.type === 'follow' ? 'follow' : item.type === 'mention' ? 'message' : item.type === 'like' ? 'heart' : 'comment'" :size="16" class="notif-icon" />
               </RouterLink>
             </div>
           </template>

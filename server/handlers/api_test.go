@@ -3283,3 +3283,46 @@ func TestWikiLinksAndBacklinks(t *testing.T) {
 		t.Fatalf("私密内容不应出现在反向链接里")
 	}
 }
+
+func TestCommentMentions(t *testing.T) {
+	s := newTestAPI(t)
+	aliceToken, aliceID := s.register(t, "mentionalice")
+	bobToken, _ := s.register(t, "mentionbob")
+	carolToken, carolID := s.register(t, "mentioncarol")
+
+	status, created := s.do(t, "POST", "/api/docs", aliceToken, map[string]any{
+		"kind": "article", "title": "提及测试文章", "content": "正文", "status": "published",
+	})
+	if status != http.StatusCreated {
+		t.Fatalf("创建文章失败: %d %v", status, created)
+	}
+	docID := uint(number(obj(created, "doc")["id"]))
+
+	if status, data := s.do(t, "POST", fmt.Sprintf("/api/docs/%d/comments", docID), bobToken, map[string]string{
+		"content": "@mentioncarol 和 @mentionalice 来看这条评论",
+	}); status != http.StatusCreated {
+		t.Fatalf("评论失败: %d %v", status, data)
+	}
+
+	status, data := s.do(t, "GET", "/api/notifications?type=mention", carolToken, nil)
+	items := list(data, "items")
+	if status != http.StatusOK || len(items) != 1 {
+		t.Fatalf("被提及用户没有收到提及通知: %d %v", status, data)
+	}
+	notice := items[0].(map[string]any)
+	if number(notice["actorID"]) != 2 || notice["type"] != models.NotifyMention || notice["docTitle"] != "提及测试文章" {
+		t.Fatalf("提及通知内容不正确: %v", notice)
+	}
+	if uint(number(notice["userID"])) != carolID {
+		t.Fatalf("提及通知接收者不正确: %v", notice)
+	}
+	status, data = s.do(t, "GET", "/api/notifications?type=mention", aliceToken, nil)
+	if status != http.StatusOK || len(list(data, "items")) != 0 {
+		t.Fatalf("作者已收到评论通知时不应重复收到提及通知: %d %v", status, data)
+	}
+	status, data = s.do(t, "GET", "/api/notifications?type=comment", aliceToken, nil)
+	if status != http.StatusOK || len(list(data, "items")) != 1 {
+		t.Fatalf("作者应收到一条评论通知: %d %v", status, data)
+	}
+	_ = aliceID
+}

@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"net/http"
+	"regexp"
+	"strings"
 	"time"
 
 	"folio/server/models"
@@ -9,6 +11,23 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
+
+var mentionPattern = regexp.MustCompile(`(?:^|[^A-Za-z0-9_@])@([A-Za-z0-9_]{2,20})`)
+
+func commentMentionNames(content string) []string {
+	matches := mentionPattern.FindAllStringSubmatch(content, -1)
+	seen := map[string]bool{}
+	names := make([]string, 0, len(matches))
+	for _, match := range matches {
+		name := strings.ToLower(match[1])
+		if seen[name] {
+			continue
+		}
+		seen[name] = true
+		names = append(names, name)
+	}
+	return names
+}
 
 type commentOut struct {
 	ID          uint         `json:"id"`
@@ -148,6 +167,17 @@ func (a *API) CommentCreate(c *gin.Context) {
 	}
 	a.recalcComments(doc.ID)
 	a.notify(c, recipient, u.ID, models.NotifyComment, doc, ellipsisRunes(in.Content, 80))
+	names := commentMentionNames(in.Content)
+	if len(names) > 0 {
+		var mentioned []models.User
+		a.DB.Select("id", "username").Where("lower(username) IN ?", names).Find(&mentioned)
+		for _, target := range mentioned {
+			if target.ID == u.ID || target.ID == recipient {
+				continue
+			}
+			a.notify(c, target.ID, u.ID, models.NotifyMention, doc, ellipsisRunes(in.Content, 80))
+		}
+	}
 	a.DB.Preload("User", func(db *gorm.DB) *gorm.DB {
 		return db.Select("id", "username", "nickname", "bio", "role", "created_at")
 	}).First(&cm, cm.ID)

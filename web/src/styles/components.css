@@ -464,6 +464,13 @@
   font-size: 11px;
 }
 
+.mention-link {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-style: dashed;
+  text-underline-offset: 3px;
+}
+
 .comment-body {
   margin-top: 6px;
   color: var(--ink-soft);

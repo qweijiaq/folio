@@ -17,6 +17,7 @@ const (
 	NotifyLike          = "like"
 	NotifyComment       = "comment"
 	NotifyFollow        = "follow"
+	NotifyMention       = "mention"
 	NotifyAccessRequest = "access_request"
 	NotifyAccessResult  = "access_result"
 

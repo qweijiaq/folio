@@ -7,6 +7,7 @@ import { timeAgo } from '../utils/format'
 import UserAvatar from './UserAvatar.vue'
 import Icon from './Icon.vue'
 import Pagination from './Pagination.vue'
+import MentionText from './MentionText.vue'
 
 const props = defineProps({
   docId: { type: [Number, String], required: true },
@@ -150,7 +151,7 @@ onMounted(load)
           :placeholder="replyTo ? `回复 @${replyTo.user.nickname}…` : '写下你的想法…'"
         ></textarea>
         <div class="comment-form-foot">
-          <span class="hint">{{ content.length }} / 800</span>
+          <span class="hint">{{ content.length }} / 800 · 用 @用户名 提及他人</span>
           <button class="btn btn-primary btn-sm" type="submit" :disabled="submitting">
             {{ submitting ? '发布中…' : replyTo ? '回复' : '发布' }}
           </button>
@@ -176,7 +177,7 @@ onMounted(load)
             <RouterLink :to="`/u/${comment.user.username}`" class="comment-author">{{ comment.user.nickname }}</RouterLink>
             <span class="comment-time">{{ timeAgo(comment.createdAt) }}</span>
           </header>
-          <p class="comment-body">{{ comment.content }}</p>
+          <p class="comment-body"><MentionText :text="comment.content" /></p>
           <div class="comment-actions">
             <button type="button" :class="{ active: comment.liked }" @click="toggleLike(comment)">
               <Icon name="heart" :size="14" />
@@ -195,7 +196,7 @@ onMounted(load)
                   <span v-if="reply.replyToName" class="reply-to">回复 @{{ reply.replyToName }}</span>
                   <span class="comment-time">{{ timeAgo(reply.createdAt) }}</span>
                 </header>
-                <p class="comment-body">{{ reply.content }}</p>
+                <p class="comment-body"><MentionText :text="reply.content" /></p>
                 <div class="comment-actions">
                   <button type="button" :class="{ active: reply.liked }" @click="toggleLike(reply)">
                     <Icon name="heart" :size="14" />
