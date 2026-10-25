@@ -1,6 +1,19 @@
 import { expect, test } from '@playwright/test'
 import { apiLogin, authHeader, login } from './helpers'
 
+test('resets scroll between pages and restores it on back', async ({ page }) => {
+  await page.goto('/articles')
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight))
+  const before = await page.evaluate(() => window.scrollY)
+  expect(before).toBeGreaterThan(300)
+  await page.locator('.doc-card').first().click()
+  await page.waitForURL(/\/articles\/\d+$/)
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeLessThan(20)
+  await page.goBack()
+  await page.waitForURL(/\/articles$/)
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(200)
+})
+
 test('login, open the user menu and log out', async ({ page }) => {
   await login(page)
   await page.locator('.avatar-button').click()

@@ -38,10 +38,12 @@ const router = createRouter({
   history: createWebHistory(),
   routes,
   scrollBehavior(to, from, saved) {
-    if (saved) return saved
+    if (saved) return { ...saved, behavior: 'auto' }
     if (to.hash) return { el: to.hash, top: 96, behavior: 'smooth' }
-    if (to.path === from.path) return { top: 0 }
-    return { top: 0 }
+    // 同一路径只改 query（tab、筛选、分页参数）时保留当前位置，
+    // 由页面自己决定是否需要滚动；跨页面才回到顶部。
+    if (to.path === from.path) return false
+    return { top: 0, behavior: 'auto' }
   }
 })
 
