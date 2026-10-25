@@ -6,6 +6,8 @@ export const site = reactive({
   description: '一个人的知识花园，存放文章、手册与零散的思考。',
   owner: 'weijia',
   allowRegister: true,
+  icpBeian: '',
+  policeBeian: '',
   year: new Date().getFullYear(),
   loaded: false
 })

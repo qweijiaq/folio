@@ -307,6 +307,8 @@ type SiteSetting struct {
 	AllowRegister bool   `json:"allowRegister"`
 	LoginCaptcha  bool   `json:"loginCaptcha"`
 	QQLogin       *bool  `json:"qqLogin"`
+	ICPBeian      string `gorm:"size:64" json:"icpBeian"`
+	PoliceBeian   string `gorm:"size:64" json:"policeBeian"`
 }
 
 // StorageSetting 是单行图片存储设置。密钥加密后保存，接口不会回显。

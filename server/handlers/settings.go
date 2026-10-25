@@ -62,6 +62,8 @@ func (a *API) siteInfo() gin.H {
 		"owner":         settingText(setting.SiteOwner, a.Cfg.SiteOwner),
 		"year":          time.Now().Year(),
 		"allowRegister": setting.AllowRegister,
+		"icpBeian":      setting.ICPBeian,
+		"policeBeian":   setting.PoliceBeian,
 	}
 }
 
@@ -116,11 +118,13 @@ func (a *API) AdminAccessUpdate(c *gin.Context) {
 
 func (a *API) AdminSettingsUpdate(c *gin.Context) {
 	var in struct {
-		SiteName      string `json:"siteName"`
-		SiteDesc      string `json:"siteDesc"`
-		SiteOwner     string `json:"siteOwner"`
-		AllowRegister *bool  `json:"allowRegister"`
-		LoginCaptcha  bool   `json:"loginCaptcha"`
+		SiteName      string  `json:"siteName"`
+		SiteDesc      string  `json:"siteDesc"`
+		SiteOwner     string  `json:"siteOwner"`
+		AllowRegister *bool   `json:"allowRegister"`
+		LoginCaptcha  bool    `json:"loginCaptcha"`
+		ICPBeian      *string `json:"icpBeian"`
+		PoliceBeian   *string `json:"policeBeian"`
 	}
 	if err := c.ShouldBindJSON(&in); err != nil {
 		bad(c, "请求格式错误")
@@ -141,6 +145,20 @@ func (a *API) AdminSettingsUpdate(c *gin.Context) {
 		bad(c, "维护者名称最多 32 个字符")
 		return
 	}
+	if in.ICPBeian != nil {
+		*in.ICPBeian = trim(*in.ICPBeian)
+		if runeLen(*in.ICPBeian) > 64 {
+			bad(c, "ICP 备案号最多 64 个字符")
+			return
+		}
+	}
+	if in.PoliceBeian != nil {
+		*in.PoliceBeian = trim(*in.PoliceBeian)
+		if runeLen(*in.PoliceBeian) > 64 {
+			bad(c, "公安备案号最多 64 个字符")
+			return
+		}
+	}
 
 	var setting models.SiteSetting
 	if err := a.DB.First(&setting, 1).Error; err != nil {
@@ -153,6 +171,12 @@ func (a *API) AdminSettingsUpdate(c *gin.Context) {
 		setting.AllowRegister = *in.AllowRegister
 	}
 	setting.LoginCaptcha = in.LoginCaptcha
+	if in.ICPBeian != nil {
+		setting.ICPBeian = *in.ICPBeian
+	}
+	if in.PoliceBeian != nil {
+		setting.PoliceBeian = *in.PoliceBeian
+	}
 	if err := a.DB.Save(&setting).Error; err != nil {
 		fail(c, http.StatusInternalServerError, "保存站点设置失败")
 		return

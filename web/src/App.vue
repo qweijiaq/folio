@@ -251,6 +251,10 @@ onBeforeUnmount(() => {
         </div>
         <div class="footer-bottom">
           <span>© {{ today }} {{ site.name }} · 由 {{ site.owner }} 维护</span>
+          <span v-if="site.icpBeian || site.policeBeian" class="footer-filings">
+            <a v-if="site.icpBeian" href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">{{ site.icpBeian }}</a>
+            <a v-if="site.policeBeian" href="https://beian.mps.gov.cn/" target="_blank" rel="noopener noreferrer">{{ site.policeBeian }}</a>
+          </span>
           <span class="footer-meta">手写 CSS · 生成式封面与头像</span>
         </div>
       </div>

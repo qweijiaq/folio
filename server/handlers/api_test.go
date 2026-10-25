@@ -906,13 +906,16 @@ func TestSiteSettingsAndLogs(t *testing.T) {
 		"siteOwner":     "新维护者",
 		"allowRegister": false,
 		"loginCaptcha":  true,
+		"icpBeian":      "浙ICP备2026000000号-1",
+		"policeBeian":   "浙公网安备 33010000000000号",
 	})
 	if status != http.StatusOK {
 		t.Fatalf("保存站点设置失败: %d %v", status, updated)
 	}
 	status, siteData = s.do(t, "GET", "/api/site", "", nil)
 	info = obj(siteData, "site")
-	if info["name"] != "新站点" || info["allowRegister"] != false {
+	if info["name"] != "新站点" || info["allowRegister"] != false ||
+		info["icpBeian"] != "浙ICP备2026000000号-1" || info["policeBeian"] != "浙公网安备 33010000000000号" {
 		t.Fatalf("站点设置未生效: %v", info)
 	}
 

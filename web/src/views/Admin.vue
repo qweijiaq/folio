@@ -60,7 +60,9 @@ const settingsForm = reactive({
   siteName: '',
   siteDesc: '',
   siteOwner: '',
-  loginCaptcha: false
+  loginCaptcha: false,
+  icpBeian: '',
+  policeBeian: ''
 })
 const accessForm = reactive({
   allowRegister: true,
@@ -445,6 +447,8 @@ async function loadSettings() {
     settingsForm.siteDesc = setting.siteDesc || ''
     settingsForm.siteOwner = setting.siteOwner || ''
     settingsForm.loginCaptcha = Boolean(setting.loginCaptcha)
+    settingsForm.icpBeian = setting.icpBeian || ''
+    settingsForm.policeBeian = setting.policeBeian || ''
   } catch (err) {
     toastError(err)
   }
@@ -462,7 +466,9 @@ async function saveSettings() {
       siteName: name,
       siteDesc: settingsForm.siteDesc.trim(),
       siteOwner: settingsForm.siteOwner.trim(),
-      loginCaptcha: settingsForm.loginCaptcha
+      loginCaptcha: settingsForm.loginCaptcha,
+      icpBeian: settingsForm.icpBeian.trim(),
+      policeBeian: settingsForm.policeBeian.trim()
     })
     if (data.site) mergeSite(data.site)
     toast('站点设置已保存')
@@ -1664,6 +1670,18 @@ onMounted(async () => {
               <textarea id="setting-desc" v-model="settingsForm.siteDesc" rows="3" maxlength="120" placeholder="一句话说明这个站点…"></textarea>
               <span class="hint">{{ settingsForm.siteDesc.length }} / 120</span>
             </div>
+
+            <div class="form-row">
+              <div class="field">
+                <label for="setting-icp">ICP 备案号 <span class="hint">可选</span></label>
+                <input id="setting-icp" v-model="settingsForm.icpBeian" maxlength="64" placeholder="例如：浙ICP备2026xxxxxx号-1" />
+              </div>
+              <div class="field">
+                <label for="setting-police">公安备案号 <span class="hint">可选</span></label>
+                <input id="setting-police" v-model="settingsForm.policeBeian" maxlength="64" placeholder="例如：浙公网安备 3301xxxxxxxx号" />
+              </div>
+            </div>
+            <p class="hint">填写后页脚会显示对应备案号，ICP 备案号会链接到工信部备案查询页；留空则不显示。</p>
 
             <div class="settings-switches">
               <label class="switch-row">
