@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { api } from '../api/client'
+import { confirmDialog } from '../stores/confirm'
 import { toast, toastError } from '../stores/toast'
 import MarkdownView from './MarkdownView.vue'
 import Icon from './Icon.vue'
@@ -58,7 +59,7 @@ async function selectRevision(item) {
 
 async function restore() {
   if (!selected.value || restoring.value) return
-  if (!window.confirm('恢复到这一版？当前内容会先保存为一条历史版本。')) return
+  if (!(await confirmDialog({ title: '恢复历史版本', message: '恢复到这一版？当前内容会先保存为一条历史版本。', confirmText: '恢复' }))) return
   restoring.value = true
   try {
     const data = await api.post(`/docs/${props.docId}/revisions/${selected.value.id}/restore`)

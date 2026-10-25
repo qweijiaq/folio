@@ -1566,3 +1566,78 @@
   margin-left: auto;
   color: var(--ink-faint);
 }
+
+/* ---------- 确认弹窗 ---------- */
+
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: color-mix(in srgb, var(--ink) 30%, transparent);
+  backdrop-filter: blur(2px);
+}
+
+.confirm-panel {
+  width: min(420px, 100%);
+  padding: 26px 28px;
+  border: 1.5px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: 8px 8px 0 color-mix(in srgb, var(--ink) 14%, transparent);
+}
+
+.confirm-panel h2 {
+  margin: 6px 0 10px;
+  font-family: var(--hand);
+  font-size: 1.45rem;
+  font-weight: 500;
+}
+
+.confirm-message {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 13.5px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+}
+
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.confirm-danger {
+  border-color: var(--danger);
+  background: var(--danger);
+  color: #fff;
+}
+
+.confirm-danger:hover {
+  border-color: color-mix(in srgb, var(--danger) 80%, #000);
+  background: color-mix(in srgb, var(--danger) 88%, #000);
+}
+
+.confirm-enter-active,
+.confirm-leave-active {
+  transition: opacity 0.16s ease;
+}
+
+.confirm-enter-active .confirm-panel,
+.confirm-leave-active .confirm-panel {
+  transition: transform 0.16s ease;
+}
+
+.confirm-enter-from,
+.confirm-leave-to {
+  opacity: 0;
+}
+
+.confirm-enter-from .confirm-panel,
+.confirm-leave-to .confirm-panel {
+  transform: translateY(8px) scale(0.985);
+}

@@ -2,6 +2,7 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '../api/client'
+import { confirmDialog } from '../stores/confirm'
 import { auth } from '../stores/auth'
 import { toast, toastError } from '../stores/toast'
 import { buildTree, flattenTree } from '../utils/tree'
@@ -181,7 +182,7 @@ async function requestAccess() {
 async function cancelAccess() {
   const requestID = accessInfo.value?.requestID
   if (!requestID || cancellingAccess.value) return
-  if (!window.confirm('撤回这条阅读申请？')) return
+  if (!(await confirmDialog({ title: '撤回阅读申请', message: '撤回这条阅读申请？', confirmText: '撤回' }))) return
   cancellingAccess.value = true
   try {
     await api.del(`/access-requests/${requestID}`)

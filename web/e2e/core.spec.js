@@ -156,6 +156,40 @@ test('adjusts reading tools and focus mode', async ({ page, request }) => {
     await expect(page.locator('body')).toHaveClass(/reading-focus/)
     await page.keyboard.press('Escape')
     await expect(page.locator('body')).not.toHaveClass(/reading-focus/)
+    await page.emulateMedia({ media: 'print' })
+    expect(await page.locator('.skip-link').evaluate((el) => getComputedStyle(el).display)).toBe('none')
+    expect(await page.locator('.print-watermark').evaluate((el) => getComputedStyle(el).display)).toBe('flex')
+    await expect(page.locator('.print-watermark')).toContainText('原创')
+    await page.emulateMedia({ media: 'screen' })
+  } finally {
+    const res = await request.delete(`/api/docs/${doc.id}`, { headers: authHeader(ownerToken) })
+    expect(res.ok()).toBeTruthy()
+  }
+})
+
+test('uses the site confirmation dialog for destructive actions', async ({ page, request }) => {
+  const ownerToken = await apiLogin(request)
+  const title = `E2E 确认弹窗 ${Date.now()}`
+  const created = await request.post('/api/docs', {
+    headers: authHeader(ownerToken),
+    data: { kind: 'article', title, content: '确认弹窗测试正文。', status: 'published' }
+  })
+  expect(created.status()).toBe(201)
+  const doc = (await created.json()).doc
+  try {
+    await login(page, 'chen')
+    await page.goto(`/articles/${doc.id}`)
+    await page.locator('.comment-form textarea').fill('E2E 待删除评论')
+    await page.locator('.comment-form').getByRole('button', { name: '发布' }).click()
+    const comment = page.locator('.comment').filter({ hasText: 'E2E 待删除评论' }).first()
+    await expect(comment).toBeVisible()
+    await comment.getByRole('button', { name: '删除' }).click()
+    await expect(page.locator('.confirm-panel')).toBeVisible()
+    await page.locator('.confirm-panel').getByRole('button', { name: '取消' }).click()
+    await expect(comment).toBeVisible()
+    await comment.getByRole('button', { name: '删除' }).click()
+    await page.locator('.confirm-panel .confirm-danger').click()
+    await expect(comment).toHaveCount(0)
   } finally {
     const res = await request.delete(`/api/docs/${doc.id}`, { headers: authHeader(ownerToken) })
     expect(res.ok()).toBeTruthy()

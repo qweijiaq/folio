@@ -11,6 +11,7 @@ import BrandMark from './components/BrandMark.vue'
 import UserAvatar from './components/UserAvatar.vue'
 import ToastHost from './components/ToastHost.vue'
 import CommandPalette from './components/CommandPalette.vue'
+import ConfirmHost from './components/ConfirmHost.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -110,6 +111,10 @@ onBeforeUnmount(() => {
 <template>
   <div class="app-shell">
     <a class="skip-link" href="#main">跳到正文</a>
+    <div class="print-watermark" aria-hidden="true">
+      <strong>{{ site.name }} · 原创</strong>
+      <span>{{ site.owner }} · {{ today }}</span>
+    </div>
     <header class="site-header" :class="{ 'is-scrolled': scrolled }">
       <div class="container header-inner">
         <RouterLink to="/" class="brand" aria-label="知微首页">
@@ -258,5 +263,6 @@ onBeforeUnmount(() => {
     </Transition>
     <ToastHost />
     <CommandPalette />
+    <ConfirmHost />
   </div>
 </template>

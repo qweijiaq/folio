@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '../api/client'
+import { confirmDialog } from '../stores/confirm'
 import { auth, logoutLocal, refreshMe } from '../stores/auth'
 import { toast, toastError } from '../stores/toast'
 import { roleLabel, shortDate, timeAgo } from '../utils/format'
@@ -165,7 +166,7 @@ async function saveFolderName(folder) {
 }
 
 async function removeFolder(folder) {
-  if (!window.confirm(`删除收藏夹「${folder.name}」？里面的收藏会移到默认收藏夹。`)) return
+  if (!(await confirmDialog({ title: '删除收藏夹', message: `删除收藏夹「${folder.name}」？里面的收藏会移到默认收藏夹。`, confirmText: '删除', danger: true }))) return
   try {
     await api.del(`/favorite-folders/${folder.id}`)
     selectedFolderID.value = null
@@ -189,7 +190,7 @@ async function moveFavorite(doc, folderValue) {
 }
 
 async function removeFavorite(doc) {
-  if (!window.confirm(`取消收藏「${doc.title}」？`)) return
+  if (!(await confirmDialog({ title: '取消收藏', message: `取消收藏「${doc.title}」？`, confirmText: '取消收藏' }))) return
   try {
     await api.post(`/docs/${doc.id}/favorite`)
     await loadFavorites()
@@ -246,7 +247,7 @@ function accessStatusLabel(status) {
 }
 
 async function cancelOutgoingRequest(item) {
-  if (!window.confirm('撤回这条阅读申请？')) return
+  if (!(await confirmDialog({ title: '撤回阅读申请', message: '撤回这条阅读申请？', confirmText: '撤回' }))) return
   cancellingRequest.value = item.id
   try {
     await api.del(`/access-requests/${item.id}`)
@@ -307,7 +308,7 @@ async function loadSessions() {
 async function revokeSession(session) {
   const label = session.device || '该设备'
   const question = session.current ? '退出当前设备后需要重新登录，继续？' : `退出「${label}」这个登录会话？`
-  if (!window.confirm(question)) return
+  if (!(await confirmDialog({ title: '退出登录设备', message: question, confirmText: '退出', danger: true }))) return
   sessionBusy.value = session.id
   try {
     const data = await api.del(`/me/sessions/${session.id}`)
@@ -328,7 +329,7 @@ async function revokeSession(session) {
 
 async function revokeOtherSessions() {
   if (!otherSessions.value) return
-  if (!window.confirm(`退出其他 ${otherSessions.value} 个登录会话？`)) return
+  if (!(await confirmDialog({ title: '退出其他设备', message: `退出其他 ${otherSessions.value} 个登录会话？`, confirmText: '退出', danger: true }))) return
   try {
     const data = await api.post('/me/sessions/revoke-others')
     await loadSessions()
@@ -339,7 +340,7 @@ async function revokeOtherSessions() {
 }
 
 async function revokeAllSessions() {
-  if (!window.confirm('退出所有设备后需要重新登录，确定继续？')) return
+  if (!(await confirmDialog({ title: '退出所有设备', message: '退出所有设备后需要重新登录，确定继续？', confirmText: '退出所有设备', danger: true }))) return
   try {
     await api.post('/me/sessions/revoke-all')
     logoutLocal()
@@ -438,7 +439,7 @@ async function toggleFeatured(doc) {
 }
 
 async function removeDoc(doc) {
-  if (!window.confirm(`删除「${doc.title}」？文档的子文档和所有互动也会一并删除。`)) return
+  if (!(await confirmDialog({ title: '删除内容', message: `删除「${doc.title}」？文档的子文档和所有互动也会一并删除。`, confirmText: '删除', danger: true }))) return
   try {
     await api.del(`/docs/${doc.id}`)
     await loadTab()
@@ -450,7 +451,7 @@ async function removeDoc(doc) {
 }
 
 async function clearHistory() {
-  if (!window.confirm('清空全部浏览历史？')) return
+  if (!(await confirmDialog({ title: '清空浏览历史', message: '清空全部浏览历史？', confirmText: '清空', danger: true }))) return
   try {
     await api.del('/me/history')
     history.value = []

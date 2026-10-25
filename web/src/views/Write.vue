@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { api } from '../api/client'
+import { confirmDialog } from '../stores/confirm'
 import { auth } from '../stores/auth'
 import { toast, toastError } from '../stores/toast'
 import { buildTree, flattenTree } from '../utils/tree'
@@ -637,7 +638,7 @@ function goBack() {
 
 onBeforeRouteLeave(() => {
   if (!dirty.value) return true
-  return window.confirm('这篇内容还有未保存的修改，确定离开吗？')
+  return confirmDialog({ title: '离开编辑器？', message: '这篇内容还有未保存的修改，确定离开吗？', confirmText: '离开', cancelText: '继续编辑', danger: true })
 })
 
 function onBeforeUnload(event) {

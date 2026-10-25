@@ -1,6 +1,7 @@
 <script setup>
 import { onMounted, ref, nextTick } from 'vue'
 import { api } from '../api/client'
+import { confirmDialog } from '../stores/confirm'
 import { auth } from '../stores/auth'
 import { toast, toastError } from '../stores/toast'
 import { timeAgo } from '../utils/format'
@@ -100,7 +101,7 @@ async function toggleLike(comment) {
 }
 
 async function remove(comment) {
-  if (!window.confirm('确定删除这条评论吗？')) return
+  if (!(await confirmDialog({ title: '删除评论', message: '确定删除这条评论吗？', confirmText: '删除', danger: true }))) return
   try {
     await api.del(`/comments/${comment.id}`)
     if (items.value.length === 1 && page.value > 1) page.value -= 1

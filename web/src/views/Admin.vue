@@ -336,7 +336,7 @@ async function copyInvite(invite) {
 }
 
 async function removeInvite(invite) {
-  if (!window.confirm(`撤销这个邀请码？${invite.note || ''}`)) return
+  if (!(await confirmDialog({ title: '撤销邀请码', message: `撤销这个邀请码？${invite.note || ''}`, confirmText: '撤销', danger: true }))) return
   try {
     await api.del(`/admin/invites/${invite.id}`)
     await loadInvites()
@@ -427,7 +427,7 @@ async function createNotice() {
 }
 
 async function removeNotice(notice) {
-  if (!window.confirm(`删除公告「${notice.title}」？`)) return
+  if (!(await confirmDialog({ title: '删除公告', message: `删除公告「${notice.title}」？`, confirmText: '删除', danger: true }))) return
   try {
     await api.del(`/admin/notices/${notice.id}`)
     await loadNotices()
@@ -520,7 +520,7 @@ async function handleAccessRequest(item, action) {
   let verb = action === 'approve' ? '通过' : '拒绝'
   if (action === 'approve' && item.status === 'denied') verb = '重新通过'
   if (action === 'deny' && item.status === 'approved') verb = '撤销访问'
-  if (!window.confirm(`${verb}「${item.requester?.nickname || '读者'}」阅读《${item.doc?.title || '私密文档'}》的权限？`)) return
+  if (!(await confirmDialog({ title: `${verb}阅读权限`, message: `${verb}「${item.requester?.nickname || '读者'}」阅读《${item.doc?.title || '私密文档'}》的权限？`, confirmText: verb, danger: action === 'deny' }))) return
   handlingRequest.value = item.id
   try {
     await api.put(`/access-requests/${item.id}`, { action })
@@ -579,7 +579,7 @@ async function saveSeries() {
 }
 
 async function removeSeries(item) {
-  if (!window.confirm(`删除合集「${item.title}」？里面的文章会保留，只是不再属于这个合集。`)) return
+  if (!(await confirmDialog({ title: '删除合集', message: `删除合集「${item.title}」？里面的文章会保留，只是不再属于这个合集。`, confirmText: '删除', danger: true }))) return
   try {
     await api.del(`/series/${item.id}`)
     if (editingSeries.value === item.id) resetSeriesForm()
@@ -652,7 +652,7 @@ async function saveAISummary() {
 }
 
 async function clearAISummary() {
-  if (!window.confirm('清除网页端 AI 摘要配置？清除后编辑器将不再显示 AI 摘要按钮。')) return
+  if (!(await confirmDialog({ title: '清除 AI 摘要配置', message: '清除网页端 AI 摘要配置？清除后编辑器将不再显示 AI 摘要按钮。', confirmText: '清除', danger: true }))) return
   clearingAISummary.value = true
   try {
     const data = await api.del('/admin/ai-summary')
@@ -831,7 +831,7 @@ async function saveCategory() {
 }
 
 async function removeCategory(category) {
-  if (!window.confirm(`删除分类「${category.name}」？该分类下的文章会变为未分类。`)) return
+  if (!(await confirmDialog({ title: '删除分类', message: `删除分类「${category.name}」？该分类下的文章会变为未分类。`, confirmText: '删除', danger: true }))) return
   try {
     await api.del(`/categories/${category.id}`)
     await loadCategories()
@@ -869,7 +869,7 @@ async function copyImage(image) {
 }
 
 async function removeImage(image) {
-  if (!window.confirm(`删除图片「${image.filename}」？引用它的文章可能显示失败。`)) return
+  if (!(await confirmDialog({ title: '删除图片', message: `删除图片「${image.filename}」？引用它的文章可能显示失败。`, confirmText: '删除', danger: true }))) return
   try {
     await api.del(`/images/${image.id}`)
     await loadImages()
@@ -971,7 +971,7 @@ async function updateRole(user, role) {
 }
 
 async function removeUser(user) {
-  if (!window.confirm(`删除用户 @${user.username} 及其全部内容？这个操作不可撤销。`)) return
+  if (!(await confirmDialog({ title: '删除用户', message: `删除用户 @${user.username} 及其全部内容？这个操作不可撤销。`, confirmText: '永久删除', danger: true }))) return
   try {
     await api.del(`/admin/users/${user.id}`)
     await loadUsers()
@@ -983,7 +983,7 @@ async function removeUser(user) {
 }
 
 async function removeDoc(doc) {
-  if (!window.confirm(`删除「${doc.title}」？文档的子文档和所有互动也会一并删除。`)) return
+  if (!(await confirmDialog({ title: '删除内容', message: `删除「${doc.title}」？文档的子文档和所有互动也会一并删除。`, confirmText: '删除', danger: true }))) return
   try {
     await api.del(`/docs/${doc.id}`)
     await loadDocs()

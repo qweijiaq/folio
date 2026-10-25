@@ -684,6 +684,9 @@ body.reading-focus .docs-article {
 }
 
 @media print {
+  .skip-link,
+  .toast-stack,
+  .confirm-overlay,
   .site-header,
   .site-footer,
   .article-aside,
@@ -747,5 +750,38 @@ body.reading-focus .docs-article {
 
   .heading-anchor {
     display: none !important;
+  }
+}
+
+.print-watermark {
+  display: none;
+}
+
+@media print {
+  .print-watermark {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 10pt;
+    color: #000;
+    opacity: 0.06;
+    pointer-events: none;
+    transform: rotate(-24deg);
+    font-family: var(--hand);
+  }
+
+  .print-watermark strong {
+    font-size: 68pt;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+  }
+
+  .print-watermark span {
+    font-size: 16pt;
+    letter-spacing: 0.2em;
   }
 }
