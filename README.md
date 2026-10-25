@@ -202,6 +202,24 @@ python3 scripts/smoke.py
 - GitHub Actions 工作流 `.github/workflows/ci.yml` 会并行运行后端测试、Vitest + 构建和 Playwright；E2E 失败时上传报告。
 - `scripts/smoke.py` 对运行中的实例做端到端检查，会临时创建一个用户和一篇内容，测试结束后自动删除。Redis 在线时还会额外验证**登出黑名单**和**浏览量去重**。
 
+## 域名与 HTTPS
+
+站点域名已配置为 `https://folio.weijia.asia`，`FOLIO_SITE_URL` 会用于 RSS、sitemap、分享卡片和邮件里的绝对链接。
+
+仓库提供了一套可选的 Caddy 自动 HTTPS 配置：
+
+1. 在 DNS 服务商（当前域名的 NS 是阿里云 `dns15/dns16.hichina.com`）添加 `folio` 的 A 记录，指向部署服务器的公网 IPv4；如果服务器有稳定 IPv6，也可以再加 AAAA。
+2. 路由器或云安全组放行 80 和 443 端口。
+3. 启动带 Caddy 的组合：
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.edge.yml up -d
+```
+
+Caddy 会自动申请和续期证书，并把请求反代到 `app:8080`；配置在 [deploy/Caddyfile](deploy/Caddyfile)，域名和证书邮箱分别由 `FOLIO_DOMAIN`、`ACME_EMAIL` 控制。DNS 尚未生效时不要启动 Caddy，否则证书申请会失败并触发重试。
+
+如果 80/443 无法从公网访问，可以使用 Cloudflare Tunnel 或其他隧道在外部终止 TLS，此时不需要启动 Caddy 服务。
+
 ## 生产构建
 
 ```bash

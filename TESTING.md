@@ -205,6 +205,15 @@ docker compose restart app
 - [ ] 修改密码后其他设备退出，当前设备保持登录；
 - [ ] 不配置 Redis 时，普通登出后旧 token 也不能继续访问。
 
+### 域名与 HTTPS
+
+- [ ] `dig +short folio.weijia.asia` 能返回部署服务器的 IPv4；
+- [ ] 公网可以访问 `http://folio.weijia.asia` 和 `https://folio.weijia.asia`；
+- [ ] 启动 Caddy 后证书自动签发，`curl -I https://folio.weijia.asia` 返回 200 且证书有效；
+- [ ] `https://folio.weijia.asia/feed.xml`、`/sitemap.xml` 中的链接都使用正式域名；
+- [ ] 邮件里的“查看”链接也指向正式域名；
+- [ ] 80 端口会自动跳转到 443。
+
 ### 限流
 
 - [ ] 同一账号连续输错密码 10 次后，第 11 次返回 429，并提示稍后再试；
