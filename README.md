@@ -97,7 +97,7 @@ docker compose up -d --build
 ```
 
 - 站点：<http://localhost:8080>（Go 直接托管构建好的前端）
-- MySQL：`localhost:3306`，Redis：`localhost:6379`
+- MySQL：`127.0.0.1:3306`，Redis：`127.0.0.1:6379`（默认只绑定本机，不暴露公网）
 - 应用容器内的环境变量已经配置好 MySQL 与 Redis。
 
 只启动数据库，应用在本地跑：
