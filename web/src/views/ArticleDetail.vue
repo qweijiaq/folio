@@ -29,6 +29,8 @@ const favorited = ref(false)
 const following = ref(false)
 const toc = ref([])
 const related = ref([])
+const prevArticle = ref(null)
+const nextArticle = ref(null)
 const loading = ref(true)
 const notFound = ref(false)
 const shareOpen = ref(false)
@@ -79,6 +81,8 @@ async function load() {
   loading.value = true
   notFound.value = false
   related.value = []
+  prevArticle.value = null
+  nextArticle.value = null
   try {
     const data = await api.get(`/docs/${route.params.id}`)
     if (data.doc.kind === 'doc') {
@@ -90,6 +94,7 @@ async function load() {
     favorited.value = data.favorited
     following.value = data.followingAuthor
     loadRelated(data.doc.id)
+    loadNeighbors(data.doc.id)
   } catch (err) {
     if (err.status === 404) notFound.value = true
     else toastError(err)
@@ -105,6 +110,17 @@ async function loadRelated(id) {
     related.value = data.items
   } catch {
     related.value = []
+  }
+}
+
+async function loadNeighbors(id) {
+  try {
+    const data = await api.get(`/docs/${id}/neighbors`)
+    prevArticle.value = data.prev || null
+    nextArticle.value = data.next || null
+  } catch {
+    prevArticle.value = null
+    nextArticle.value = null
   }
 }
 
@@ -262,6 +278,18 @@ watch(
               <button class="btn btn-ghost btn-sm" type="button" @click="toggleFollow">关注作者</button>
             </div>
           </div>
+
+          <nav v-if="prevArticle || nextArticle" class="docs-pager article-pager">
+            <RouterLink v-if="prevArticle" :to="`/articles/${prevArticle.id}`" class="pager-link">
+              <span class="pager-label"><Icon name="arrowLeft" :size="14" /> 上一篇</span>
+              <strong>{{ prevArticle.title }}</strong>
+            </RouterLink>
+            <span v-else></span>
+            <RouterLink v-if="nextArticle" :to="`/articles/${nextArticle.id}`" class="pager-link pager-link--right">
+              <span class="pager-label">下一篇 <Icon name="arrowRight" :size="14" /></span>
+              <strong>{{ nextArticle.title }}</strong>
+            </RouterLink>
+          </nav>
 
           <section v-if="related.length" class="related-section">
             <header class="section-head section-head--tight">

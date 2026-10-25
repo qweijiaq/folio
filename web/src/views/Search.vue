@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '../api/client'
 import { toastError } from '../stores/toast'
@@ -7,15 +7,23 @@ import DocCard from '../components/DocCard.vue'
 import DocCardSkeleton from '../components/DocCardSkeleton.vue'
 import EmptyState from '../components/EmptyState.vue'
 import Icon from '../components/Icon.vue'
+import Pagination from '../components/Pagination.vue'
 import { usePageMeta } from '../composables/usePageMeta'
 
+const HISTORY_KEY = 'folio.search.history'
 const route = useRoute()
 const router = useRouter()
 
 const query = ref(String(route.query.q || ''))
 const tab = ref('all')
-const articles = ref([])
-const docs = ref([])
+const page = ref(1)
+const pageSize = 12
+const items = ref([])
+const total = ref(0)
+const counts = reactive({ all: 0, article: 0, doc: 0 })
+const relatedTags = ref([])
+const popularTags = ref([])
+const history = ref(readHistory())
 const loading = ref(false)
 const searched = ref(false)
 
@@ -30,32 +38,50 @@ usePageMeta(() => ({
   url: '/search'
 }))
 
-const articleTotal = computed(() => articles.value.length)
-const docTotal = computed(() => docs.value.length)
-const total = computed(() => articleTotal.value + docTotal.value)
-const results = computed(() => {
-  if (tab.value === 'article') return articles.value
-  if (tab.value === 'doc') return docs.value
-  return [...articles.value, ...docs.value]
-})
+function readHistory() {
+  try {
+    const value = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]')
+    return Array.isArray(value) ? value.slice(0, 8) : []
+  } catch {
+    return []
+  }
+}
+
+function rememberSearch(value) {
+  const text = value.trim()
+  if (!text) return
+  history.value = [text, ...history.value.filter((item) => item !== text)].slice(0, 8)
+  try {
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(history.value))
+  } catch {
+    /* ignore */
+  }
+}
 
 async function run() {
   if (!label.value) {
-    articles.value = []
-    docs.value = []
+    items.value = []
+    total.value = 0
     searched.value = false
     return
   }
   loading.value = true
   searched.value = true
-  const filters = activeTag.value ? { tag: activeTag.value } : { q: keyword.value }
   try {
-    const [articleData, docData] = await Promise.all([
-      api.get('/docs', { ...filters, kind: 'article', pageSize: 20 }),
-      api.get('/docs', { ...filters, kind: 'doc', pageSize: 20 })
-    ])
-    articles.value = articleData.items
-    docs.value = docData.items
+    const data = await api.get('/search', {
+      q: keyword.value || undefined,
+      tag: activeTag.value || undefined,
+      kind: tab.value === 'all' ? undefined : tab.value,
+      page: page.value,
+      pageSize
+    })
+    items.value = data.items || []
+    total.value = data.total || 0
+    Object.assign(counts, { all: 0, article: 0, doc: 0 }, data.counts || {})
+    relatedTags.value = data.tags || []
+    if (keyword.value) {
+      rememberSearch(keyword.value)
+    }
   } catch (err) {
     toastError(err)
   } finally {
@@ -63,11 +89,59 @@ async function run() {
   }
 }
 
+async function loadPopularTags() {
+  try {
+    const data = await api.get('/tags')
+    popularTags.value = (data.items || []).slice(0, 14)
+  } catch {
+    popularTags.value = []
+  }
+}
+
 function submit() {
   const value = query.value.trim()
   if (!value) return
-  if (keyword.value === value && !activeTag.value) run()
-  else router.push({ name: 'search', query: { q: value } })
+  if (keyword.value === value && !activeTag.value) {
+    page.value = 1
+    run()
+  } else {
+    router.push({ name: 'search', query: { q: value } })
+  }
+}
+
+function setTab(value) {
+  if (tab.value === value) return
+  tab.value = value
+  page.value = 1
+  run()
+}
+
+function changePage(value) {
+  page.value = value
+  run()
+  document.querySelector('.search-results')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+function searchFor(value) {
+  router.push({ name: 'search', query: { q: value } })
+}
+
+function searchTag(name) {
+  router.push({ name: 'search', query: { tag: name } })
+}
+
+function clearSearch() {
+  query.value = ''
+  router.push({ name: 'search' })
+}
+
+function clearHistory() {
+  history.value = []
+  try {
+    localStorage.removeItem(HISTORY_KEY)
+  } catch {
+    /* ignore */
+  }
 }
 
 watch(
@@ -75,10 +149,13 @@ watch(
   () => {
     query.value = keyword.value
     tab.value = 'all'
+    page.value = 1
     run()
   },
   { immediate: true }
 )
+
+onMounted(loadPopularTags)
 </script>
 
 <template>
@@ -92,36 +169,72 @@ watch(
         <button class="btn btn-primary" type="submit">搜索</button>
       </form>
       <p v-if="searched" class="search-summary">
-        <template v-if="activeTag">标签「{{ activeTag }}」相关的内容共 <strong>{{ total }}</strong> 条</template>
-        <template v-else>与「{{ keyword }}」相关的内容共 <strong>{{ total }}</strong> 条</template>
+        <template v-if="activeTag">标签「{{ activeTag }}」相关的内容共 <strong>{{ counts.all }}</strong> 条</template>
+        <template v-else>与「{{ keyword }}」相关的内容共 <strong>{{ counts.all }}</strong> 条</template>
+        <span class="search-sort-hint">{{ keyword ? '按相关度排序' : '按更新时间排序' }}</span>
       </p>
     </header>
 
     <div class="container">
       <div v-if="searched" class="tabs">
-        <button type="button" :class="{ active: tab === 'all' }" @click="tab = 'all'">全部 <span>{{ total }}</span></button>
-        <button type="button" :class="{ active: tab === 'article' }" @click="tab = 'article'">文章 <span>{{ articleTotal }}</span></button>
-        <button type="button" :class="{ active: tab === 'doc' }" @click="tab = 'doc'">文档 <span>{{ docTotal }}</span></button>
+        <button type="button" :class="{ active: tab === 'all' }" @click="setTab('all')">全部 <span>{{ counts.all }}</span></button>
+        <button type="button" :class="{ active: tab === 'article' }" @click="setTab('article')">文章 <span>{{ counts.article }}</span></button>
+        <button type="button" :class="{ active: tab === 'doc' }" @click="setTab('doc')">文档 <span>{{ counts.doc }}</span></button>
       </div>
 
-      <div v-if="loading" class="doc-grid">
-        <DocCardSkeleton v-for="i in 4" :key="i" />
+      <div v-if="searched && relatedTags.length" class="search-related-tags">
+        <span>相关标签</span>
+        <button v-for="tag in relatedTags" :key="tag.name" type="button" class="tag" @click="searchTag(tag.name)">
+          {{ tag.name }} <span class="tag-count">{{ tag.count }}</span>
+        </button>
       </div>
-      <EmptyState
-        v-else-if="searched && !total"
-        icon="search"
-        title="没有找到相关内容"
-        :description="activeTag ? '这个标签下暂时没有内容。' : '换一个关键词，或者去文章与文档里随便逛逛。'"
-      >
-        <RouterLink to="/articles" class="btn btn-ghost btn-sm">浏览文章</RouterLink>
-      </EmptyState>
-      <div v-else-if="!searched" class="search-hint">
-        <Icon name="search" :size="24" />
-        <p>试试搜索「封面」「Go」「知识管理」，或者按 <kbd>/</kbd> 或 <kbd>⌘K</kbd> 随时唤起快速搜索。</p>
-      </div>
-      <div v-else class="doc-grid">
-        <DocCard v-for="doc in results" :key="`${doc.kind}-${doc.id}`" :doc="doc" />
-      </div>
+
+      <section class="search-results">
+        <div v-if="loading" class="doc-grid">
+          <DocCardSkeleton v-for="i in 4" :key="i" />
+        </div>
+        <EmptyState
+          v-else-if="searched && !total"
+          icon="search"
+          title="没有找到相关内容"
+          :description="activeTag ? '这个标签下暂时没有内容。' : '试试更短的关键词，或者从下面的标签开始。'"
+        >
+          <button class="btn btn-ghost btn-sm" type="button" @click="clearSearch">重新搜索</button>
+        </EmptyState>
+        <div v-else-if="searched" class="doc-grid">
+          <DocCard v-for="doc in items" :key="`${doc.kind}-${doc.id}`" :doc="doc" :highlight="keyword" />
+        </div>
+        <Pagination v-if="searched && total > pageSize" :page="page" :total="total" :page-size="pageSize" @change="changePage" />
+      </section>
+
+      <section v-if="!searched" class="search-discovery">
+        <div v-if="history.length" class="search-discovery-block">
+          <header>
+            <span class="eyebrow">最近</span>
+            <button class="text-link" type="button" @click="clearHistory">清空</button>
+          </header>
+          <div class="search-chip-row">
+            <button v-for="item in history" :key="item" type="button" class="tag" @click="searchFor(item)">{{ item }}</button>
+          </div>
+        </div>
+
+        <div class="search-discovery-block">
+          <header>
+            <span class="eyebrow">热门标签</span>
+          </header>
+          <div class="search-chip-row">
+            <button v-for="tag in popularTags" :key="tag.name" type="button" class="tag" @click="searchTag(tag.name)">
+              {{ tag.name }} <span class="tag-count">{{ tag.count }}</span>
+            </button>
+          </div>
+          <p v-if="!popularTags.length" class="hint">还没有可以探索的标签。</p>
+        </div>
+
+        <div class="search-hint">
+          <Icon name="search" :size="24" />
+          <p>试试搜索「封面」「Go」「知识管理」，或者按 <kbd>/</kbd> 或 <kbd>⌘K</kbd> 随时唤起快速搜索。</p>
+        </div>
+      </section>
     </div>
   </div>
 </template>

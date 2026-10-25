@@ -60,10 +60,12 @@ func (a *API) Routes(r *gin.Engine) {
 	g.GET("/users/:username/following", a.OptionalAuth(), a.Following)
 
 	// 内容（统一文档表）。只有超级管理员和管理员可以创作。
+	g.GET("/search", a.OptionalAuth(), a.Search)
 	g.GET("/docs", a.OptionalAuth(), a.DocList)
 	g.GET("/docs/:id", a.OptionalAuth(), a.DocDetail)
 	g.GET("/docs/:id/access", a.OptionalAuth(), a.docAccessInfo)
 	g.GET("/docs/:id/related", a.RelatedDocs)
+	g.GET("/docs/:id/neighbors", a.OptionalAuth(), a.DocNeighbors)
 	authedDocs := g.Group("")
 	authedDocs.Use(a.Auth())
 	authedDocs.GET("/docs/:id/revisions", a.RevisionList)

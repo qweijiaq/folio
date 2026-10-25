@@ -3,11 +3,13 @@ import { computed } from 'vue'
 import CoverImage from './CoverImage.vue'
 import UserAvatar from './UserAvatar.vue'
 import Icon from './Icon.vue'
+import HighlightText from './HighlightText.vue'
 import { shortDate, formatNumber } from '../utils/format'
 
 const props = defineProps({
   doc: { type: Object, required: true },
-  variant: { type: String, default: 'grid' }
+  variant: { type: String, default: 'grid' },
+  highlight: { type: String, default: '' }
 })
 
 const href = computed(() => `/${props.doc.kind === 'doc' ? 'docs' : 'articles'}/${props.doc.id}`)
@@ -23,8 +25,8 @@ const href = computed(() => `/${props.doc.kind === 'doc' ? 'docs' : 'articles'}/
       <span v-if="doc.pinned" class="doc-pin"><Icon name="star" :size="13" /> 置顶</span>
     </div>
     <div class="doc-card-body">
-      <h3 class="doc-card-title">{{ doc.title }}</h3>
-      <p v-if="doc.abstract" class="doc-card-abstract">{{ doc.abstract }}</p>
+      <h3 class="doc-card-title"><HighlightText :text="doc.title" :query="highlight" /></h3>
+      <p v-if="doc.abstract" class="doc-card-abstract"><HighlightText :text="doc.abstract" :query="highlight" /></p>
       <div class="doc-card-meta">
         <UserAvatar :username="doc.author?.username" :nickname="doc.author?.nickname" :size="22" />
         <span class="author">{{ doc.author?.nickname }}</span>

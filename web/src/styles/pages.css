@@ -5511,3 +5511,75 @@
     transition: none;
   }
 }
+
+/* ---------- 搜索升级 ---------- */
+
+.search-sort-hint {
+  margin-left: 10px;
+  color: var(--ink-faint);
+  font-size: 11px;
+}
+
+.search-related-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  margin: 14px 0 20px;
+  color: var(--ink-faint);
+  font-size: 11.5px;
+}
+
+.search-related-tags > span {
+  font-family: var(--hand);
+}
+
+.search-related-tags .tag {
+  cursor: pointer;
+}
+
+.search-results {
+  scroll-margin-top: 92px;
+}
+
+.search-discovery {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  padding-bottom: 40px;
+}
+
+.search-discovery-block {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 16px;
+  border-top: 1px dashed var(--line);
+}
+
+.search-discovery-block header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.search-discovery-block header .text-link {
+  font-size: 11.5px;
+}
+
+.search-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.search-chip-row .tag {
+  cursor: pointer;
+}
+
+.highlight-text mark {
+  padding: 0 1px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: inherit;
+}

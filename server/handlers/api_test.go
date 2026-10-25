@@ -2722,3 +2722,92 @@ func TestAccessRequestWithdrawAndRevoke(t *testing.T) {
 		t.Fatalf("撤销通知内容不正确: %v", notice)
 	}
 }
+
+func TestSearchRankingAndPrivacy(t *testing.T) {
+	s := newTestAPI(t)
+	ownerToken, _ := s.register(t, "searchowner")
+	readerToken, _ := s.register(t, "searchreader")
+
+	create := func(token string, body map[string]any) uint {
+		status, data := s.do(t, "POST", "/api/docs", token, body)
+		if status != http.StatusCreated {
+			t.Fatalf("创建搜索测试内容失败: %d %v", status, data)
+		}
+		return uint(number(obj(data, "doc")["id"]))
+	}
+	articleID := create(ownerToken, map[string]any{
+		"kind": "article", "title": "星尘检索指南", "abstract": "关于星尘检索的摘要。",
+		"content": "正文介绍星尘检索的方法。", "tags": []string{"检索标签"}, "status": "published",
+	})
+	docID := create(ownerToken, map[string]any{
+		"kind": "doc", "title": "普通文档", "abstract": "另一篇文档。",
+		"content": "正文里也提到了星尘检索。", "tags": []string{"检索标签"}, "status": "published",
+	})
+	privateID := create(ownerToken, map[string]any{
+		"kind": "doc", "title": "星尘检索私密文档", "content": "星尘检索私密内容。", "status": "published", "private": true,
+	})
+
+	status, data := s.do(t, "GET", "/api/search?q=%E6%98%9F%E5%B0%98%E6%A3%80%E7%B4%A2", "", nil)
+	if status != http.StatusOK {
+		t.Fatalf("搜索失败: %d %v", status, data)
+	}
+	if number(obj(data, "counts")["all"]) != 2 || number(data["total"]) != 2 {
+		t.Fatalf("搜索计数不正确: %v", data)
+	}
+	items := list(data, "items")
+	if len(items) != 2 || uint(number(items[0].(map[string]any)["id"])) != articleID {
+		t.Fatalf("搜索排序不正确: %v", items)
+	}
+	if !strings.Contains(items[0].(map[string]any)["abstract"].(string), "星尘检索") {
+		t.Fatalf("搜索摘要片段缺少关键词: %v", items[0])
+	}
+	for _, item := range items {
+		if uint(number(item.(map[string]any)["id"])) == privateID {
+			t.Fatalf("公开搜索不应返回私密文档: %v", item)
+		}
+	}
+
+	status, data = s.do(t, "GET", "/api/search?q=%E6%98%9F%E5%B0%98%E6%A3%80%E7%B4%A2&kind=doc", readerToken, nil)
+	if status != http.StatusOK || number(data["total"]) != 1 || uint(number(list(data, "items")[0].(map[string]any)["id"])) != docID {
+		t.Fatalf("按类型搜索不正确: %d %v", status, data)
+	}
+
+	status, data = s.do(t, "GET", "/api/search?tag=%E6%A3%80%E7%B4%A2%E6%A0%87%E7%AD%BE", "", nil)
+	if status != http.StatusOK || number(data["total"]) != 2 {
+		t.Fatalf("标签搜索不正确: %d %v", status, data)
+	}
+
+	status, data = s.do(t, "GET", "/api/search?q=%E6%98%9F%E5%B0%98%E6%A3%80%E7%B4%A2", ownerToken, nil)
+	if status != http.StatusOK || number(data["total"]) != 3 {
+		t.Fatalf("作者搜索应包含自己的私密文档: %d %v", status, data)
+	}
+
+	status, data = s.do(t, "GET", "/api/search", "", nil)
+	if status != http.StatusOK || len(list(data, "items")) != 0 {
+		t.Fatalf("空搜索应返回空结果: %d %v", status, data)
+	}
+}
+
+func TestArticleNeighbors(t *testing.T) {
+	s := newTestAPI(t)
+	token, _ := s.register(t, "neighborowner")
+	ids := make([]uint, 0, 3)
+	for _, title := range []string{"邻居文章一", "邻居文章二", "邻居文章三"} {
+		status, data := s.do(t, "POST", "/api/docs", token, map[string]any{
+			"kind": "article", "title": title, "content": "正文", "status": "published",
+		})
+		if status != http.StatusCreated {
+			t.Fatalf("创建邻居文章失败: %d %v", status, data)
+		}
+		ids = append(ids, uint(number(obj(data, "doc")["id"])))
+	}
+	status, data := s.do(t, "GET", fmt.Sprintf("/api/docs/%d/neighbors", ids[1]), "", nil)
+	if status != http.StatusOK {
+		t.Fatalf("读取相邻文章失败: %d %v", status, data)
+	}
+	prev := obj(data, "prev")
+	next := obj(data, "next")
+	if uint(number(prev["id"])) != ids[0] || uint(number(next["id"])) != ids[2] {
+		t.Fatalf("相邻文章顺序不正确: %v", data)
+	}
+}
