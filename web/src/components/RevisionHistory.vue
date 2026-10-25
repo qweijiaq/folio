@@ -1,9 +1,10 @@
 <script setup>
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { api } from '../api/client'
 import { toast, toastError } from '../stores/toast'
 import MarkdownView from './MarkdownView.vue'
 import Icon from './Icon.vue'
+import { buildLineDiff } from '../utils/diff'
 
 const props = defineProps({
   docId: { type: [Number, String], required: true }
@@ -12,9 +13,12 @@ const emit = defineEmits(['close', 'restored'])
 
 const revisions = ref([])
 const selected = ref(null)
+const currentDoc = ref(null)
+const view = ref('diff')
 const loading = ref(true)
 const loadingDetail = ref(false)
 const restoring = ref(false)
+const diff = computed(() => buildLineDiff(selected.value?.content || '', currentDoc.value?.content || ''))
 
 function formatTime(value) {
   if (!value) return ''
@@ -26,8 +30,12 @@ function formatTime(value) {
 async function load() {
   loading.value = true
   try {
-    const data = await api.get(`/docs/${props.docId}/revisions`)
+    const [data, edit] = await Promise.all([
+      api.get(`/docs/${props.docId}/revisions`),
+      api.get(`/docs/${props.docId}/edit`)
+    ])
     revisions.value = data.items || []
+    currentDoc.value = edit.doc || null
     if (revisions.value.length) await selectRevision(revisions.value[0])
   } catch (err) {
     toastError(err)
@@ -124,11 +132,41 @@ onBeforeUnmount(() => {
                     <h3>{{ selected.title }}</h3>
                     <p>{{ formatTime(selected.createdAt) }} · {{ selected.editorName || '未知' }}</p>
                   </div>
-                  <button class="btn btn-primary btn-sm" type="button" :disabled="restoring" @click="restore">
-                    {{ restoring ? '恢复中…' : '恢复这一版' }}
-                  </button>
+                  <div class="revision-preview-actions">
+                    <div class="revision-view-tabs" role="tablist" aria-label="版本查看方式">
+                      <button
+                        type="button"
+                        role="tab"
+                        :aria-selected="view === 'diff'"
+                        :class="{ active: view === 'diff' }"
+                        :disabled="!currentDoc"
+                        @click="view = 'diff'"
+                      >
+                        与当前差异
+                        <span class="revision-diff-stats">+{{ diff.stats.added }} −{{ diff.stats.removed }}</span>
+                      </button>
+                      <button type="button" role="tab" :aria-selected="view === 'preview'" :class="{ active: view === 'preview' }" @click="view = 'preview'">
+                        预览
+                      </button>
+                    </div>
+                    <button class="btn btn-primary btn-sm" type="button" :disabled="restoring" @click="restore">
+                      {{ restoring ? '恢复中…' : '恢复这一版' }}
+                    </button>
+                  </div>
                 </header>
-                <div class="revision-content">
+                <div v-if="view === 'diff' && currentDoc" class="revision-diff" role="region" aria-label="与当前内容的差异">
+                  <p v-if="!diff.rows.length" class="empty-inline">这一版与当前内容没有差异。</p>
+                  <div
+                    v-for="(row, index) in diff.rows"
+                    :key="index"
+                    class="revision-diff-row"
+                    :class="row.type"
+                  >
+                    <span class="revision-diff-sign">{{ row.type === 'added' ? '+' : row.type === 'removed' ? '−' : ' ' }}</span>
+                    <span class="revision-diff-text">{{ row.text || ' ' }}</span>
+                  </div>
+                </div>
+                <div v-else class="revision-content">
                   <MarkdownView :source="selected.content" />
                 </div>
               </template>

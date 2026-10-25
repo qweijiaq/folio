@@ -12,6 +12,7 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "diff": "^9.0.0",
     "highlight.js": "^11.10.0",
     "markdown-it": "^14.1.0",
     "roughjs": "^4.6.6",
