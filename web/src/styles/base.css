@@ -635,6 +635,11 @@ button.tag {
   color: var(--ink-faint);
 }
 
+.badge-scheduled {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  color: var(--accent);
+}
+
 .badge-live {
   border-color: color-mix(in srgb, var(--success) 55%, transparent);
   color: var(--success);

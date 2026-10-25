@@ -1048,6 +1048,11 @@
   color: var(--success);
 }
 
+.editor-status.scheduled {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  color: var(--accent);
+}
+
 .editor-shell {
   display: grid;
   grid-template-columns: 320px minmax(0, 1fr);
@@ -2824,6 +2829,11 @@
   border-color: color-mix(in srgb, var(--success) 55%, transparent);
   background: transparent;
   color: var(--success);
+}
+
+.editor-status.scheduled {
+  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+  color: var(--accent);
 }
 
 .editor-cover {

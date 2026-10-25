@@ -70,10 +70,11 @@ func (a *API) AdminDashboard(c *gin.Context) {
 		}
 	}
 
-	var articles, docs, drafts, userCount, comments, likes, favorites, messages, totalViews int64
+	var articles, docs, drafts, scheduled, userCount, comments, likes, favorites, messages, totalViews int64
 	a.DB.Model(&models.Document{}).Where("kind = ? AND status = ?", models.KindArticle, models.StatusPublished).Count(&articles)
 	a.DB.Model(&models.Document{}).Where("kind = ? AND status = ?", models.KindDoc, models.StatusPublished).Count(&docs)
 	a.DB.Model(&models.Document{}).Where("status = ?", models.StatusDraft).Count(&drafts)
+	a.DB.Model(&models.Document{}).Where("status = ?", models.StatusScheduled).Count(&scheduled)
 	a.DB.Model(&models.User{}).Count(&userCount)
 	a.DB.Model(&models.Comment{}).Count(&comments)
 	a.DB.Model(&models.Like{}).Count(&likes)
@@ -132,6 +133,7 @@ func (a *API) AdminDashboard(c *gin.Context) {
 			"articles":    articles,
 			"docs":        docs,
 			"drafts":      drafts,
+			"scheduled":   scheduled,
 			"users":       userCount,
 			"comments":    comments,
 			"likes":       likes,

@@ -2886,3 +2886,60 @@ func TestSeriesFlow(t *testing.T) {
 		t.Fatalf("删除合集后文章应保留且解除归属: %d %v", status, data)
 	}
 }
+
+func TestScheduledPublishing(t *testing.T) {
+	s := newTestAPI(t)
+	token, _ := s.register(t, "scheduler")
+
+	future := time.Now().Add(2 * time.Hour).UTC().Format(time.RFC3339)
+	status, data := s.do(t, "POST", "/api/docs", token, map[string]any{
+		"kind": "article", "title": "定时发布测试", "content": "到点后自动公开的正文。",
+		"status": "scheduled", "publishAt": future,
+	})
+	if status != http.StatusCreated {
+		t.Fatalf("创建定时内容失败: %d %v", status, data)
+	}
+	doc := obj(data, "doc")
+	id := uint(number(doc["id"]))
+	if doc["status"] != models.StatusScheduled || doc["publishAt"] == nil {
+		t.Fatalf("定时内容状态不正确: %v", doc)
+	}
+
+	status, data = s.do(t, "GET", "/api/docs?kind=article&status=all", "", nil)
+	if status != http.StatusOK || len(list(data, "items")) != 0 {
+		t.Fatalf("未到点的内容不应出现在公开列表: %d %v", status, data)
+	}
+	status, _ = s.do(t, "GET", fmt.Sprintf("/api/docs/%d", id), "", nil)
+	if status != http.StatusNotFound {
+		t.Fatalf("访客不应读到定时内容，实际 %d", status)
+	}
+	status, data = s.do(t, "GET", "/api/me/docs?status=scheduled", token, nil)
+	if status != http.StatusOK || len(list(data, "items")) != 1 {
+		t.Fatalf("作者应能在个人列表看到定时内容: %d %v", status, data)
+	}
+	status, _ = s.do(t, "GET", fmt.Sprintf("/api/docs/%d", id), token, nil)
+	if status != http.StatusOK {
+		t.Fatalf("作者应能预览定时内容，实际 %d", status)
+	}
+
+	past := time.Now().Add(-time.Minute).UTC().Format(time.RFC3339)
+	status, _ = s.do(t, "POST", "/api/docs", token, map[string]any{
+		"kind": "article", "title": "错误的定时时间", "content": "正文",
+		"status": "scheduled", "publishAt": past,
+	})
+	if status != http.StatusBadRequest {
+		t.Fatalf("过去的定时时间应被拒绝，实际 %d", status)
+	}
+
+	s.api.DB.Model(&models.Document{}).Where("id = ?", id).UpdateColumn("publish_at", time.Now().Add(-time.Minute))
+	if err := db.PublishScheduled(s.api.DB); err != nil {
+		t.Fatalf("执行定时发布失败: %v", err)
+	}
+	status, data = s.do(t, "GET", fmt.Sprintf("/api/docs/%d", id), "", nil)
+	if status != http.StatusOK || obj(data, "doc")["status"] != models.StatusPublished {
+		t.Fatalf("到点后应公开: %d %v", status, data)
+	}
+	if obj(data, "doc")["publishedAt"] == nil || obj(data, "doc")["publishAt"] != nil {
+		t.Fatalf("到点发布后应写入发布时间并清空定时时间: %v", data)
+	}
+}

@@ -23,10 +23,11 @@ func (a *API) AdminStats(c *gin.Context) {
 	a.DB.Model(&models.Document{}).Where("status = ?", models.StatusPublished).
 		Select("COALESCE(SUM(view_count), 0)").Scan(&views)
 
-	var myArticles, myDocs, myDrafts int64
+	var myArticles, myDocs, myDrafts, myScheduled int64
 	a.DB.Model(&models.Document{}).Where("author_id = ? AND kind = ?", u.ID, models.KindArticle).Count(&myArticles)
 	a.DB.Model(&models.Document{}).Where("author_id = ? AND kind = ?", u.ID, models.KindDoc).Count(&myDocs)
 	a.DB.Model(&models.Document{}).Where("author_id = ? AND status = ?", u.ID, models.StatusDraft).Count(&myDrafts)
+	a.DB.Model(&models.Document{}).Where("author_id = ? AND status = ?", u.ID, models.StatusScheduled).Count(&myScheduled)
 
 	c.JSON(http.StatusOK, gin.H{
 		"role": u.Role,
@@ -40,9 +41,10 @@ func (a *API) AdminStats(c *gin.Context) {
 			"views":     views,
 		},
 		"mine": gin.H{
-			"articles": myArticles,
-			"docs":     myDocs,
-			"drafts":   myDrafts,
+			"articles":  myArticles,
+			"docs":      myDocs,
+			"drafts":    myDrafts,
+			"scheduled": myScheduled,
 		},
 	})
 }
@@ -60,7 +62,7 @@ func (a *API) AdminDocs(c *gin.Context) {
 		q = q.Where("kind = ?", kind)
 	}
 	status := c.Query("status")
-	if status == models.StatusDraft || status == models.StatusPublished {
+	if status == models.StatusDraft || status == models.StatusScheduled || status == models.StatusPublished {
 		q = q.Where("status = ?", status)
 	}
 	var total int64

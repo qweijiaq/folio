@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"folio/server/cache"
 	"folio/server/config"
@@ -47,6 +48,18 @@ func main() {
 	if err := db.CleanupDailyStats(gdb); err != nil {
 		log.Printf("清理阅读统计失败: %v", err)
 	}
+	if err := db.PublishScheduled(gdb); err != nil {
+		log.Printf("发布定时内容失败: %v", err)
+	}
+	go func() {
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			if err := db.PublishScheduled(gdb); err != nil {
+				log.Printf("发布定时内容失败: %v", err)
+			}
+		}
+	}()
 
 	rcache := cache.New(cfg.RedisAddr, cfg.RedisPassword, cfg.RedisDB)
 	defer rcache.Close()

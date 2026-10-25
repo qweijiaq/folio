@@ -26,6 +26,7 @@ func (a *API) saveRevision(doc *models.Document, editor *models.User) error {
 		Content:     doc.Content,
 		Tags:        append([]string{}, doc.Tags...),
 		Status:      doc.Status,
+		PublishAt:   doc.PublishAt,
 		Private:     doc.Private,
 		ParentID:    doc.ParentID,
 		CategoryID:  doc.CategoryID,
@@ -44,6 +45,13 @@ func sameUintPtr(a, b *uint) bool {
 	return *a == *b
 }
 
+func sameTimePtr(a, b *time.Time) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return a.Equal(*b)
+}
+
 func sameTags(a, b []string) bool {
 	if len(a) != len(b) {
 		return false
@@ -58,7 +66,7 @@ func sameTags(a, b []string) bool {
 
 func (a *API) documentChanged(doc *models.Document, in docInput, abstract string, categoryID *uint) bool {
 	if doc.Title != in.Title || doc.Abstract != abstract || doc.Content != in.Content ||
-		doc.Status != in.Status || !sameUintPtr(doc.ParentID, in.ParentID) ||
+		doc.Status != in.Status || !sameTimePtr(doc.PublishAt, in.PublishAt) || !sameUintPtr(doc.ParentID, in.ParentID) ||
 		!sameUintPtr(doc.CategoryID, categoryID) || doc.Sort != in.Sort ||
 		!sameTags(doc.Tags, normalizeTags(in.Tags)) {
 		return true
@@ -168,6 +176,7 @@ func (a *API) RevisionRestore(c *gin.Context) {
 	doc.Content = revision.Content
 	doc.Tags = append([]string{}, revision.Tags...)
 	doc.Status = revision.Status
+	doc.PublishAt = revision.PublishAt
 	doc.Private = revision.Private
 	doc.ParentID = revision.ParentID
 	doc.CategoryID = revision.CategoryID
@@ -176,7 +185,7 @@ func (a *API) RevisionRestore(c *gin.Context) {
 	doc.Pinned = revision.Pinned
 	doc.OpenComment = revision.OpenComment
 	doc.Sort = revision.Sort
-	fields := []string{"title", "abstract", "content", "tags", "status", "private", "parent_id", "category_id", "series_id", "series_order", "pinned", "open_comment", "sort"}
+	fields := []string{"title", "abstract", "content", "tags", "status", "publish_at", "private", "parent_id", "category_id", "series_id", "series_order", "pinned", "open_comment", "sort"}
 	if doc.Status == models.StatusPublished && doc.PublishedAt == nil {
 		now := time.Now()
 		doc.PublishedAt = &now

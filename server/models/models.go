@@ -7,6 +7,7 @@ const (
 	KindDoc     = "doc"
 
 	StatusDraft     = "draft"
+	StatusScheduled = "scheduled"
 	StatusPublished = "published"
 
 	RoleSuperAdmin = "super_admin"
@@ -65,6 +66,7 @@ type Document struct {
 	Tags          []string   `gorm:"type:text;serializer:json" json:"tags"`
 	Status        string     `gorm:"size:16;index;not null;default:draft" json:"status"`
 	Private       bool       `gorm:"not null;default:false" json:"private"`
+	PublishAt     *time.Time `json:"publishAt"`
 	Pinned        bool       `json:"pinned"`
 	OpenComment   bool       `gorm:"not null;default:true" json:"openComment"`
 	Sort          int        `json:"sort"`
@@ -189,22 +191,23 @@ func (AIProviderKey) TableName() string { return "ai_provider_keys" }
 // DocumentRevision 保存内容的历史版本，用于查看和回滚。
 type DocumentRevision struct {
 	Base
-	DocID       uint     `gorm:"index;not null" json:"docID"`
-	EditorID    uint     `json:"editorID"`
-	EditorName  string   `gorm:"size:32" json:"editorName"`
-	Title       string   `gorm:"size:200" json:"title"`
-	Abstract    string   `gorm:"size:500" json:"abstract"`
-	Content     string   `gorm:"type:longtext" json:"content"`
-	Tags        []string `gorm:"type:text;serializer:json" json:"tags"`
-	Status      string   `gorm:"size:16" json:"status"`
-	Private     bool     `json:"private"`
-	ParentID    *uint    `json:"parentID"`
-	CategoryID  *uint    `json:"categoryID"`
-	SeriesID    *uint    `json:"seriesID"`
-	SeriesOrder int      `json:"seriesOrder"`
-	Pinned      bool     `json:"pinned"`
-	OpenComment bool     `json:"openComment"`
-	Sort        int      `json:"sort"`
+	DocID       uint       `gorm:"index;not null" json:"docID"`
+	EditorID    uint       `json:"editorID"`
+	EditorName  string     `gorm:"size:32" json:"editorName"`
+	Title       string     `gorm:"size:200" json:"title"`
+	Abstract    string     `gorm:"size:500" json:"abstract"`
+	Content     string     `gorm:"type:longtext" json:"content"`
+	Tags        []string   `gorm:"type:text;serializer:json" json:"tags"`
+	Status      string     `gorm:"size:16" json:"status"`
+	Private     bool       `json:"private"`
+	PublishAt   *time.Time `json:"publishAt"`
+	ParentID    *uint      `json:"parentID"`
+	CategoryID  *uint      `json:"categoryID"`
+	SeriesID    *uint      `json:"seriesID"`
+	SeriesOrder int        `json:"seriesOrder"`
+	Pinned      bool       `json:"pinned"`
+	OpenComment bool       `json:"openComment"`
+	Sort        int        `json:"sort"`
 }
 
 // InviteCode 是一次性注册邀请码，只有超级管理员可以创建。

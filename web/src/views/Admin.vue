@@ -988,7 +988,7 @@ onMounted(async () => {
 
             <div class="admin-note">
               <span>我的内容</span>
-              <p>{{ myStats.articles || 0 }} 篇文章、{{ myStats.docs || 0 }} 篇文档，其中 {{ myStats.drafts || 0 }} 篇草稿。</p>
+              <p>{{ myStats.articles || 0 }} 篇文章、{{ myStats.docs || 0 }} 篇文档，其中 {{ myStats.drafts || 0 }} 篇草稿、{{ myStats.scheduled || 0 }} 篇定时发布。</p>
             </div>
 
             <div class="admin-quick">
@@ -1152,6 +1152,7 @@ onMounted(async () => {
             <div class="tag-row">
               <button class="tag" :class="{ 'tag--active': statusFilter === '' }" type="button" @click="statusFilter = ''; applyDocFilter()">全部状态</button>
               <button class="tag" :class="{ 'tag--active': statusFilter === 'published' }" type="button" @click="statusFilter = 'published'; applyDocFilter()">已发布</button>
+              <button class="tag" :class="{ 'tag--active': statusFilter === 'scheduled' }" type="button" @click="statusFilter = 'scheduled'; applyDocFilter()">定时发布</button>
               <button class="tag" :class="{ 'tag--active': statusFilter === 'draft' }" type="button" @click="statusFilter = 'draft'; applyDocFilter()">草稿</button>
             </div>
             <div class="tag-row">
@@ -1170,8 +1171,8 @@ onMounted(async () => {
               <div class="content-row-main">
                 <RouterLink :to="docHref(doc)" class="content-row-title">{{ doc.title }}</RouterLink>
                 <div class="content-row-meta">
-                  <span class="badge" :class="doc.status === 'draft' ? 'badge-draft' : 'badge-live'">
-                    {{ doc.status === 'draft' ? '草稿' : '已发布' }}
+                  <span class="badge" :class="doc.status === 'draft' ? 'badge-draft' : doc.status === 'scheduled' ? 'badge-scheduled' : 'badge-live'">
+                    {{ doc.status === 'draft' ? '草稿' : doc.status === 'scheduled' ? '定时发布' : '已发布' }}
                   </span>
                   <span>{{ doc.kind === 'doc' ? '文档' : '文章' }}</span>
                   <span v-if="doc.category">{{ doc.category.name }}</span>

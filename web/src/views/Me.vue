@@ -651,7 +651,7 @@ onMounted(async () => {
           <header class="panel-head panel-head--row">
             <div>
               <h2>{{ tab === 'articles' ? '我的文章' : '我的文档' }}</h2>
-              <p>草稿只有你自己可见，发布后会出现在公开列表。</p>
+              <p>草稿和定时内容不会出现在公开列表，发布后才会公开。</p>
             </div>
             <RouterLink :to="tab === 'docs' ? '/write?kind=doc' : '/write'" class="btn btn-primary btn-sm">
               <Icon name="plus" :size="15" />
@@ -674,8 +674,8 @@ onMounted(async () => {
               <div class="content-row-main">
                 <RouterLink :to="docHref(doc)" class="content-row-title">{{ doc.title }}</RouterLink>
                 <div class="content-row-meta">
-                  <span class="badge" :class="doc.status === 'draft' ? 'badge-draft' : 'badge-live'">
-                    {{ doc.status === 'draft' ? '草稿' : '已发布' }}
+                  <span class="badge" :class="doc.status === 'draft' ? 'badge-draft' : doc.status === 'scheduled' ? 'badge-scheduled' : 'badge-live'">
+                    {{ doc.status === 'draft' ? '草稿' : doc.status === 'scheduled' ? '定时发布' : '已发布' }}
                   </span>
                   <span>{{ shortDate(doc.updatedAt) }} 更新</span>
                   <span>{{ doc.viewCount }} 阅读</span>

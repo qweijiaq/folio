@@ -23,6 +23,7 @@ const form = reactive({
   content: '',
   tags: [],
   status: 'draft',
+  publishAt: '',
   parentID: route.query.parent ? Number(route.query.parent) : null,
   categoryID: null,
   seriesID: null,
@@ -52,11 +53,39 @@ const revisionOpen = ref(false)
 const draftSavedAt = ref(0)
 let autoSaveTimer = null
 
+function toLocalInput(value) {
+  if (!value) return ''
+  const date = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
+function scheduleText(value) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  return date.toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
 const editingId = computed(() => (route.params.id ? Number(route.params.id) : 0))
 const isEdit = computed(() => Boolean(editingId.value))
 const wordCount = computed(() => (form.content || '').replace(/\s/g, '').length)
 const coverSeed = computed(() => editingId.value || `new-${form.kind}`)
 const coverCategory = computed(() => categories.value.find((item) => String(item.id) === String(form.categoryID))?.name || '')
+const minPublishAt = computed(() => toLocalInput(new Date(Date.now() + 60 * 1000)))
+const publishAction = computed(() => (form.publishAt && form.status !== 'published' ? 'scheduled' : 'published'))
+const statusLabel = computed(() => {
+  if (dirty.value) return '未保存'
+  if (form.status === 'published') return '已发布'
+  if (form.status === 'scheduled') return '定时发布'
+  return '草稿'
+})
+const publishLabel = computed(() => {
+  if (saving.value === 'scheduled') return '定时中…'
+  if (saving.value === 'published') return '发布中…'
+  if (form.publishAt && form.status !== 'published') return form.status === 'scheduled' ? '更新定时' : '定时发布'
+  return form.status === 'published' ? '更新并发布' : '发布'
+})
 const parentPrivate = computed(() => {
   if (form.kind !== 'doc' || !form.parentID) return false
   const byId = new Map(parentItems.value.map((item) => [Number(item.id), item]))
@@ -76,6 +105,7 @@ function snapshot() {
     content: form.content,
     tags: form.tags,
     status: form.status,
+    publishAt: form.publishAt,
     parentID: form.parentID,
     categoryID: form.categoryID,
     seriesID: form.seriesID,
@@ -112,6 +142,7 @@ function draftFields(source) {
     content: source.content || '',
     tags: Array.isArray(source.tags) ? source.tags : [],
     status: source.status || 'draft',
+    publishAt: source.publishAt ? toLocalInput(source.publishAt) : '',
     parentID: source.parentID ?? null,
     categoryID: source.categoryID ?? null,
     seriesID: source.seriesID ?? null,
@@ -230,6 +261,7 @@ async function load() {
       form.content = data.doc.content || ''
       form.tags = [...(data.doc.tags || [])]
       form.status = data.doc.status
+      form.publishAt = data.doc.status === 'scheduled' && data.doc.publishAt ? toLocalInput(data.doc.publishAt) : ''
       form.parentID = data.doc.parentID ?? null
       form.categoryID = data.doc.categoryID ?? null
       form.seriesID = data.doc.seriesID ?? null
@@ -417,9 +449,24 @@ async function save(status = 'draft') {
     toast('请先填写标题')
     return
   }
-  if (status === 'published' && !form.content.trim()) {
+  if ((status === 'published' || status === 'scheduled') && !form.content.trim()) {
     toast('发布前请先写正文')
     return
+  }
+  if (status === 'scheduled') {
+    if (!form.publishAt) {
+      toast('请选择定时发布时间')
+      return
+    }
+    const when = new Date(form.publishAt)
+    if (Number.isNaN(when.getTime())) {
+      toast('定时发布时间格式不正确')
+      return
+    }
+    if (form.status !== 'scheduled' && when.getTime() <= Date.now()) {
+      toast('定时发布时间需晚于现在')
+      return
+    }
   }
   addTag()
   saving.value = status
@@ -430,6 +477,7 @@ async function save(status = 'draft') {
     content: form.content,
     tags: form.tags,
     status,
+    publishAt: status === 'scheduled' && form.publishAt ? new Date(form.publishAt).toISOString() : null,
     parentID: form.kind === 'doc' && form.parentID ? Number(form.parentID) : null,
     categoryID: form.kind === 'article' && form.categoryID ? Number(form.categoryID) : null,
     seriesID: form.kind === 'article' && form.seriesID ? Number(form.seriesID) : null,
@@ -443,7 +491,8 @@ async function save(status = 'draft') {
     if (isEdit.value) {
       const data = await api.put(`/docs/${editingId.value}`, payload)
       doc.value = data.doc
-      form.status = status
+      form.status = data.doc.status || status
+      form.publishAt = data.doc.status === 'scheduled' && data.doc.publishAt ? toLocalInput(data.doc.publishAt) : ''
       savedSnapshot.value = snapshot()
       try {
         localStorage.removeItem(draftKey())
@@ -451,10 +500,11 @@ async function save(status = 'draft') {
         /* ignore */
       }
       draftSavedAt.value = 0
-      toast(status === 'published' ? '已更新并保持发布' : '已转为草稿')
+      toast(form.status === 'scheduled' ? '已更新定时发布' : form.status === 'published' ? '已更新并保持发布' : '已转为草稿')
     } else {
       const data = await api.post('/docs', payload)
-      form.status = status
+      form.status = data.doc.status || status
+      form.publishAt = data.doc.status === 'scheduled' && data.doc.publishAt ? toLocalInput(data.doc.publishAt) : ''
       savedSnapshot.value = snapshot()
       try {
         localStorage.removeItem(draftKey())
@@ -462,8 +512,8 @@ async function save(status = 'draft') {
         /* ignore */
       }
       draftSavedAt.value = 0
-      toast(status === 'published' ? '已发布' : '草稿已保存')
-      if (status === 'published') {
+      toast(form.status === 'scheduled' ? `已安排在 ${scheduleText(form.publishAt)} 发布` : form.status === 'published' ? '已发布' : '草稿已保存')
+      if (form.status === 'published') {
         router.push(`/${form.kind === 'doc' ? 'docs' : 'articles'}/${data.doc.id}`)
       } else {
         router.push({ path: '/me', query: { tab: form.kind === 'doc' ? 'docs' : 'articles' } })
@@ -484,6 +534,7 @@ function onRevisionRestored(restored) {
   form.content = restored.content || ''
   form.tags = [...(restored.tags || [])]
   form.status = restored.status
+  form.publishAt = restored.status === 'scheduled' && restored.publishAt ? toLocalInput(restored.publishAt) : ''
   form.parentID = restored.parentID ?? null
   form.categoryID = restored.categoryID ?? null
   form.seriesID = restored.seriesID ?? null
@@ -522,7 +573,8 @@ function onBeforeUnload(event) {
 function onKeydown(event) {
   if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
     event.preventDefault()
-    save(doc.value?.status === 'published' ? 'published' : 'draft')
+    const next = form.status === 'scheduled' && form.publishAt ? 'scheduled' : form.status === 'published' ? 'published' : 'draft'
+    save(next)
   }
 }
 
@@ -556,15 +608,13 @@ onBeforeUnmount(() => {
           </div>
         </div>
         <div class="editor-actions">
-          <span class="editor-status" :class="[form.status, { dirty }]">
-            {{ dirty ? '未保存' : form.status === 'published' ? '已发布' : '草稿' }}
-          </span>
+          <span class="editor-status" :class="[form.status, { dirty }]">{{ statusLabel }}</span>
           <button v-if="isEdit" class="btn btn-ghost btn-sm" type="button" @click="revisionOpen = true">历史版本</button>
           <button class="btn btn-ghost btn-sm" type="button" :disabled="Boolean(saving)" @click="save('draft')">
             {{ saving === 'draft' ? '保存中…' : '存为草稿' }}
           </button>
-          <button class="btn btn-primary btn-sm" type="button" :disabled="Boolean(saving)" @click="save('published')">
-            {{ saving === 'published' ? '发布中…' : form.status === 'published' ? '更新并发布' : '发布' }}
+          <button class="btn btn-primary btn-sm" type="button" :disabled="Boolean(saving)" @click="save(publishAction)">
+            {{ publishLabel }}
           </button>
         </div>
       </header>
@@ -638,6 +688,15 @@ onBeforeUnmount(() => {
                 @blur="addTag"
               />
             </div>
+          </div>
+
+          <div class="field">
+            <label for="editor-publish-at">定时发布 <span class="hint">可选</span></label>
+            <input id="editor-publish-at" v-model="form.publishAt" type="datetime-local" :min="minPublishAt" />
+            <p v-if="form.publishAt && form.status !== 'published'" class="hint">
+              点击「{{ form.status === 'scheduled' ? '更新定时' : '定时发布' }}」后，内容会在 {{ scheduleText(form.publishAt) }} 自动公开。
+            </p>
+            <p v-else class="hint">留空则点击发布时立即公开。</p>
           </div>
 
           <template v-if="form.kind === 'doc'">

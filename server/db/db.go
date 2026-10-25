@@ -100,6 +100,17 @@ func EnsureSiteSetting(gdb *gorm.DB, cfg config.Config) error {
 	}).Error
 }
 
+// PublishScheduled 把到点的定时内容转为已发布。
+func PublishScheduled(gdb *gorm.DB) error {
+	return gdb.Model(&models.Document{}).
+		Where("status = ? AND publish_at IS NOT NULL AND publish_at <= ?", models.StatusScheduled, time.Now()).
+		Updates(map[string]any{
+			"status":       models.StatusPublished,
+			"published_at": gorm.Expr("publish_at"),
+			"publish_at":   nil,
+		}).Error
+}
+
 // CleanupDailyStats 删除已不存在内容的每日统计，避免看板被历史测试数据污染。
 func CleanupDailyStats(gdb *gorm.DB) error {
 	return gdb.Where("doc_id NOT IN (?)", gdb.Model(&models.Document{}).Select("id")).

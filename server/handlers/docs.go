@@ -19,20 +19,37 @@ import (
 )
 
 type docInput struct {
-	Kind        string   `json:"kind"`
-	Title       string   `json:"title"`
-	Abstract    string   `json:"abstract"`
-	Content     string   `json:"content"`
-	Tags        []string `json:"tags"`
-	Status      string   `json:"status"`
-	Private     *bool    `json:"private"`
-	ParentID    *uint    `json:"parentID"`
-	CategoryID  *uint    `json:"categoryID"`
-	SeriesID    *uint    `json:"seriesID"`
-	SeriesOrder int      `json:"seriesOrder"`
-	Pinned      *bool    `json:"pinned"`
-	OpenComment *bool    `json:"openComment"`
-	Sort        int      `json:"sort"`
+	Kind        string     `json:"kind"`
+	Title       string     `json:"title"`
+	Abstract    string     `json:"abstract"`
+	Content     string     `json:"content"`
+	Tags        []string   `json:"tags"`
+	Status      string     `json:"status"`
+	PublishAt   *time.Time `json:"publishAt"`
+	Private     *bool      `json:"private"`
+	ParentID    *uint      `json:"parentID"`
+	CategoryID  *uint      `json:"categoryID"`
+	SeriesID    *uint      `json:"seriesID"`
+	SeriesOrder int        `json:"seriesOrder"`
+	Pinned      *bool      `json:"pinned"`
+	OpenComment *bool      `json:"openComment"`
+	Sort        int        `json:"sort"`
+}
+
+func validateSchedule(status string, publishAt, current *time.Time) error {
+	if status != models.StatusScheduled {
+		return nil
+	}
+	if publishAt == nil {
+		return errors.New("请选择定时发布时间")
+	}
+	if current != nil && current.Equal(*publishAt) {
+		return nil
+	}
+	if !publishAt.After(time.Now()) {
+		return errors.New("定时发布时间需晚于现在")
+	}
+	return nil
 }
 
 var (
@@ -211,7 +228,7 @@ func (a *API) DocList(c *gin.Context) {
 		q = q.Where("kind = ?", kind)
 	}
 	if includeUnpublished {
-		if status == models.StatusDraft || status == models.StatusPublished {
+		if status == models.StatusDraft || status == models.StatusScheduled || status == models.StatusPublished {
 			q = q.Where("status = ?", status)
 		}
 	} else {
@@ -391,16 +408,23 @@ func (a *API) DocCreate(c *gin.Context) {
 		bad(c, "未知的内容类型")
 		return
 	}
-	if in.Status != models.StatusDraft && in.Status != models.StatusPublished {
+	if in.Status != models.StatusDraft && in.Status != models.StatusScheduled && in.Status != models.StatusPublished {
 		in.Status = models.StatusDraft
+	}
+	if in.Status != models.StatusScheduled {
+		in.PublishAt = nil
 	}
 	in.Title = trim(in.Title)
 	if runeLen(in.Title) < 1 || runeLen(in.Title) > 120 {
 		bad(c, "标题长度需在 1-120 个字符之间")
 		return
 	}
-	if in.Status == models.StatusPublished && trim(in.Content) == "" {
+	if (in.Status == models.StatusPublished || in.Status == models.StatusScheduled) && trim(in.Content) == "" {
 		bad(c, "发布前请先填写正文")
+		return
+	}
+	if err := validateSchedule(in.Status, in.PublishAt, nil); err != nil {
+		bad(c, err.Error())
 		return
 	}
 	if err := a.checkParent(in.Kind, in.ParentID, 0); err != nil {
@@ -437,6 +461,7 @@ func (a *API) DocCreate(c *gin.Context) {
 		SeriesOrder: maxInt(0, in.SeriesOrder),
 		Tags:        normalizeTags(in.Tags),
 		Status:      in.Status,
+		PublishAt:   in.PublishAt,
 		Private:     in.Kind == models.KindDoc && in.Private != nil && *in.Private,
 		OpenComment: openComment,
 		Sort:        in.Sort,
@@ -493,11 +518,21 @@ func (a *API) DocUpdate(c *gin.Context) {
 		bad(c, "标题长度需在 1-120 个字符之间")
 		return
 	}
-	if in.Status != models.StatusDraft && in.Status != models.StatusPublished {
+	if in.Status != models.StatusDraft && in.Status != models.StatusScheduled && in.Status != models.StatusPublished {
 		in.Status = doc.Status
 	}
-	if in.Status == models.StatusPublished && trim(in.Content) == "" {
+	if in.Status == models.StatusScheduled && in.PublishAt == nil {
+		in.PublishAt = doc.PublishAt
+	}
+	if in.Status != models.StatusScheduled {
+		in.PublishAt = nil
+	}
+	if (in.Status == models.StatusPublished || in.Status == models.StatusScheduled) && trim(in.Content) == "" {
 		bad(c, "发布前请先填写正文")
+		return
+	}
+	if err := validateSchedule(in.Status, in.PublishAt, doc.PublishAt); err != nil {
+		bad(c, err.Error())
 		return
 	}
 	if err := a.checkParent(doc.Kind, in.ParentID, doc.ID); err != nil {
@@ -529,12 +564,13 @@ func (a *API) DocUpdate(c *gin.Context) {
 	doc.Content = in.Content
 	doc.Tags = normalizeTags(in.Tags)
 	doc.Status = in.Status
+	doc.PublishAt = in.PublishAt
 	doc.ParentID = in.ParentID
 	doc.CategoryID = categoryID
 	doc.SeriesID = seriesID
 	doc.SeriesOrder = maxInt(0, in.SeriesOrder)
 	doc.Sort = in.Sort
-	fields := []string{"title", "abstract", "content", "tags", "status", "parent_id", "category_id", "series_id", "series_order", "sort"}
+	fields := []string{"title", "abstract", "content", "tags", "status", "publish_at", "parent_id", "category_id", "series_id", "series_order", "sort"}
 	if doc.Kind == models.KindDoc && in.Private != nil {
 		doc.Private = *in.Private
 		fields = append(fields, "private")
@@ -642,7 +678,7 @@ func (a *API) MyDocs(c *gin.Context) {
 	if kind == models.KindArticle || kind == models.KindDoc {
 		q = q.Where("kind = ?", kind)
 	}
-	if status == models.StatusDraft || status == models.StatusPublished {
+	if status == models.StatusDraft || status == models.StatusScheduled || status == models.StatusPublished {
 		q = q.Where("status = ?", status)
 	}
 	if kind != models.KindArticle {
