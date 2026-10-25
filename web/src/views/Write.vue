@@ -9,6 +9,7 @@ import CoverImage from '../components/CoverImage.vue'
 import MarkdownView from '../components/MarkdownView.vue'
 import Icon from '../components/Icon.vue'
 import RevisionHistory from '../components/RevisionHistory.vue'
+import SelectBox from '../components/SelectBox.vue'
 import { usePageMeta } from '../composables/usePageMeta'
 
 const route = useRoute()
@@ -51,7 +52,67 @@ const savedSnapshot = ref('')
 const draftAvailable = ref(null)
 const revisionOpen = ref(false)
 const draftSavedAt = ref(0)
+const fieldsCollapsed = ref(readStoredFlag('folio.editor.fieldsCollapsed'))
+const categoryCreating = ref(false)
+const categoryName = ref('')
+const creatingCategory = ref(false)
+const seriesCreating = ref(false)
+const seriesTitle = ref('')
+const creatingSeries = ref(false)
 let autoSaveTimer = null
+
+function readStoredFlag(key) {
+  try {
+    return localStorage.getItem(key) === '1'
+  } catch {
+    return false
+  }
+}
+
+function toggleFields() {
+  fieldsCollapsed.value = !fieldsCollapsed.value
+  try {
+    localStorage.setItem('folio.editor.fieldsCollapsed', fieldsCollapsed.value ? '1' : '0')
+  } catch {
+    /* 隐私模式可能不可用 */
+  }
+}
+
+async function createCategoryInline() {
+  const name = categoryName.value.trim()
+  if (!name || creatingCategory.value) return
+  creatingCategory.value = true
+  try {
+    const data = await api.post('/categories', { name, sort: 0 })
+    categories.value.push({ ...data.category, count: 0 })
+    form.categoryID = data.category.id
+    categoryName.value = ''
+    categoryCreating.value = false
+    toast('分类已创建并选中')
+  } catch (err) {
+    toastError(err)
+  } finally {
+    creatingCategory.value = false
+  }
+}
+
+async function createSeriesInline() {
+  const title = seriesTitle.value.trim()
+  if (!title || creatingSeries.value) return
+  creatingSeries.value = true
+  try {
+    const data = await api.post('/series', { title, description: '' })
+    seriesOptions.value.unshift({ ...data.series, count: 0 })
+    form.seriesID = data.series.id
+    seriesTitle.value = ''
+    seriesCreating.value = false
+    toast('合集已创建并选中')
+  } catch (err) {
+    toastError(err)
+  } finally {
+    creatingSeries.value = false
+  }
+}
 
 function toLocalInput(value) {
   if (!value) return ''
@@ -72,6 +133,21 @@ const isEdit = computed(() => Boolean(editingId.value))
 const wordCount = computed(() => (form.content || '').replace(/\s/g, '').length)
 const coverSeed = computed(() => editingId.value || `new-${form.kind}`)
 const coverCategory = computed(() => categories.value.find((item) => String(item.id) === String(form.categoryID))?.name || '')
+const categoryOptions = computed(() => [
+  { value: null, label: '未分类' },
+  ...categories.value.map((category) => ({ value: category.id, label: category.name }))
+])
+const seriesSelectOptions = computed(() => [
+  { value: null, label: '不属于合集' },
+  ...seriesOptions.value.map((series) => ({ value: series.id, label: `${series.title}（${series.count}）` }))
+])
+const parentSelectOptions = computed(() => [
+  { value: null, label: '无（顶级文档）' },
+  ...parentOptions.value.map((item) => ({
+    value: item.id,
+    label: `${'　'.repeat(item.depth)}${item.title}${item.private ? '（私密）' : ''}`
+  }))
+])
 const minPublishAt = computed(() => toLocalInput(new Date(Date.now() + 60 * 1000)))
 const publishAction = computed(() => (form.publishAt && form.status !== 'published' ? 'scheduled' : 'published'))
 const statusLabel = computed(() => {
@@ -627,8 +703,13 @@ onBeforeUnmount(() => {
 
       <p v-if="loading" class="muted loading-line">正在准备编辑器…</p>
 
-      <div v-else class="editor-shell">
-        <aside class="editor-fields">
+      <div v-else class="editor-shell" :class="{ 'fields-collapsed': fieldsCollapsed }">
+        <aside class="editor-fields" :class="{ collapsed: fieldsCollapsed }">
+          <button class="editor-fields-toggle" type="button" @click="toggleFields" :aria-expanded="!fieldsCollapsed">
+            <Icon :name="fieldsCollapsed ? 'chevronRight' : 'chevronLeft'" :size="15" />
+            <span>{{ fieldsCollapsed ? '展开设置' : '收起设置' }}</span>
+          </button>
+          <template v-if="!fieldsCollapsed">
           <div class="field">
             <label for="editor-title">标题</label>
             <input id="editor-title" v-model="form.title" class="title-input" maxlength="120" placeholder="给这篇内容一个名字" />
@@ -649,20 +730,36 @@ onBeforeUnmount(() => {
           </div>
 
           <div v-if="form.kind === 'article'" class="field">
-            <label for="editor-category">分类 <span class="hint">可选</span></label>
-            <select id="editor-category" v-model="form.categoryID">
-              <option :value="null">未分类</option>
-              <option v-for="category in categories" :key="category.id" :value="category.id">{{ category.name }}</option>
-            </select>
+            <div class="field-label-row">
+              <label for="editor-category">分类 <span class="hint">可选</span></label>
+              <button class="text-link" type="button" @click="categoryCreating = !categoryCreating">
+                {{ categoryCreating ? '收起' : '+ 新建' }}
+              </button>
+            </div>
+            <SelectBox id="editor-category" v-model="form.categoryID" :options="categoryOptions" placeholder="未分类" />
+            <div v-if="categoryCreating" class="inline-create">
+              <input v-model="categoryName" maxlength="16" placeholder="新分类名称" @keydown.enter.prevent="createCategoryInline" />
+              <button class="btn btn-ghost btn-sm" type="button" :disabled="creatingCategory" @click="createCategoryInline">
+                {{ creatingCategory ? '创建中…' : '添加' }}
+              </button>
+            </div>
           </div>
 
           <div v-if="form.kind === 'article'" class="form-row">
             <div class="field">
-              <label for="editor-series">所属合集 <span class="hint">可选</span></label>
-              <select id="editor-series" v-model="form.seriesID">
-                <option :value="null">不属于合集</option>
-                <option v-for="series in seriesOptions" :key="series.id" :value="series.id">{{ series.title }}（{{ series.count }}）</option>
-              </select>
+              <div class="field-label-row">
+                <label for="editor-series">所属合集 <span class="hint">可选</span></label>
+                <button class="text-link" type="button" @click="seriesCreating = !seriesCreating">
+                  {{ seriesCreating ? '收起' : '+ 新建' }}
+                </button>
+              </div>
+              <SelectBox id="editor-series" v-model="form.seriesID" :options="seriesSelectOptions" placeholder="不属于合集" />
+              <div v-if="seriesCreating" class="inline-create">
+                <input v-model="seriesTitle" maxlength="120" placeholder="新合集名称" @keydown.enter.prevent="createSeriesInline" />
+                <button class="btn btn-ghost btn-sm" type="button" :disabled="creatingSeries" @click="createSeriesInline">
+                  {{ creatingSeries ? '创建中…' : '添加' }}
+                </button>
+              </div>
             </div>
             <div class="field">
               <label for="editor-series-order">合集内排序</label>
@@ -702,12 +799,7 @@ onBeforeUnmount(() => {
           <template v-if="form.kind === 'doc'">
             <div class="field">
               <label for="editor-parent">上级文档</label>
-              <select id="editor-parent" v-model="form.parentID">
-                <option :value="null">无（顶级文档）</option>
-                <option v-for="item in parentOptions" :key="item.id" :value="item.id">
-                  {{ '　'.repeat(item.depth) }}{{ item.title }}{{ item.private ? '（私密）' : '' }}
-                </option>
-              </select>
+              <SelectBox id="editor-parent" v-model="form.parentID" :options="parentSelectOptions" placeholder="无（顶级文档）" />
             </div>
             <div class="form-row">
               <div class="field">
@@ -740,6 +832,7 @@ onBeforeUnmount(() => {
             <Icon name="info" :size="15" />
             <span>封面与头像由代码生成，不支持上传。正文图片可以直接粘贴、拖拽，或点工具栏的「图片」上传。</span>
           </div>
+          </template>
         </aside>
 
         <div class="editor-main">

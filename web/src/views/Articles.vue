@@ -7,6 +7,7 @@ import { toastError } from '../stores/toast'
 import DocCard from '../components/DocCard.vue'
 import DocCardSkeleton from '../components/DocCardSkeleton.vue'
 import Pagination from '../components/Pagination.vue'
+import SelectBox from '../components/SelectBox.vue'
 import EmptyState from '../components/EmptyState.vue'
 import Icon from '../components/Icon.vue'
 import { usePageMeta } from '../composables/usePageMeta'
@@ -24,6 +25,10 @@ const categories = ref([])
 
 const activeTag = computed(() => (route.query.tag ? String(route.query.tag) : ''))
 const activeCategory = computed(() => (route.query.category ? String(route.query.category) : ''))
+const categoryFilterOptions = computed(() => [
+  { value: '', label: '全部分类' },
+  ...categories.value.map((category) => ({ value: String(category.id), label: `${category.name} · ${category.count}` }))
+])
 const activeCategoryName = computed(() => categories.value.find((c) => String(c.id) === activeCategory.value)?.name || '')
 const sort = computed(() => (route.query.sort ? String(route.query.sort) : 'latest'))
 const keyword = computed(() => (route.query.q ? String(route.query.q) : ''))
@@ -84,8 +89,8 @@ function setTag(name) {
   router.push({ name: 'articles', query })
 }
 
-function setCategory(event) {
-  const value = String(event.target.value || '')
+function setCategory(value) {
+  value = String(value || '')
   const query = { ...route.query }
   if (!value) delete query.category
   else query.category = value
@@ -151,12 +156,13 @@ onMounted(() => {
           </button>
         </div>
         <div class="filter-right">
-          <select class="category-select" :value="activeCategory" aria-label="按分类筛选" @change="setCategory">
-            <option value="">全部分类</option>
-            <option v-for="category in categories" :key="category.id" :value="String(category.id)">
-              {{ category.name }} · {{ category.count }}
-            </option>
-          </select>
+          <SelectBox
+            class="category-select"
+            :model-value="activeCategory"
+            :options="categoryFilterOptions"
+            aria-label="按分类筛选"
+            @update:model-value="setCategory"
+          />
           <div class="sort-group">
             <button type="button" :class="{ active: sort === 'latest' }" @click="setSort('latest')">最新</button>
             <button type="button" :class="{ active: sort === 'popular' }" @click="setSort('popular')">最多阅读</button>

@@ -143,7 +143,7 @@ func (a *API) aiProviderByID(id string) (qaProviderDef, bool) {
 	return qaProviderDef{}, false
 }
 
-func (a *API) AIProviders(c *gin.Context) {
+func (a *API) aiProviderInfos() []qaProviderInfo {
 	defs := a.aiProviders()
 	items := make([]qaProviderInfo, 0, len(defs))
 	for _, provider := range defs {
@@ -155,7 +155,11 @@ func (a *API) AIProviders(c *gin.Context) {
 			Models:     provider.Models,
 		})
 	}
-	c.JSON(http.StatusOK, gin.H{"providers": items})
+	return items
+}
+
+func (a *API) AIProviders(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{"providers": a.aiProviderInfos()})
 }
 
 func qaModelValid(model string) bool {

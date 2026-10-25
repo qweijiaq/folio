@@ -66,6 +66,54 @@ test('AI asks for a user supplied key before answering', async ({ page }) => {
   await expect(page.getByText(/请先填写你自己的.*API Key/)).toBeVisible()
 })
 
+test('creates category and series in the editor and collapses settings', async ({ page, request }) => {
+  const ownerToken = await apiLogin(request)
+  const suffix = Date.now()
+  const categoryName = `分类${String(suffix).slice(-6)}`
+  const seriesTitle = `E2E 合集 ${suffix}`
+  try {
+    await login(page)
+    await page.goto('/write')
+    await expect(page.locator('#editor-title')).toBeVisible()
+    expect(await page.locator('select').count()).toBe(0)
+
+    const categoryField = page.locator('.field').filter({ has: page.locator('#editor-category') })
+    await categoryField.getByRole('button', { name: '+ 新建' }).click()
+    await categoryField.locator('input[placeholder="新分类名称"]').fill(categoryName)
+    await categoryField.getByRole('button', { name: '添加' }).click()
+    await expect(page.locator('#editor-category')).toContainText(categoryName)
+
+    const seriesField = page.locator('.field').filter({ has: page.locator('#editor-series') })
+    await seriesField.getByRole('button', { name: '+ 新建' }).click()
+    await seriesField.locator('input[placeholder="新合集名称"]').fill(seriesTitle)
+    await seriesField.getByRole('button', { name: '添加' }).click()
+    await expect(page.locator('#editor-series')).toContainText(seriesTitle)
+
+    await page.locator('#editor-category').click()
+    await expect(page.locator('.select-box-menu')).toBeVisible()
+    await page.locator('.select-box-option').filter({ hasText: categoryName }).click()
+    await expect(page.locator('.select-box-menu')).toHaveCount(0)
+
+    await page.getByRole('button', { name: /收起设置/ }).click()
+    await expect(page.locator('#editor-title')).toHaveCount(0)
+    await page.getByRole('button', { name: /展开设置/ }).click()
+    await expect(page.locator('#editor-title')).toBeVisible()
+  } finally {
+    const cats = await request.get('/api/categories')
+    for (const item of (await cats.json()).items || []) {
+      if (item.name === categoryName) {
+        await request.delete(`/api/categories/${item.id}`, { headers: authHeader(ownerToken) })
+      }
+    }
+    const series = await request.get('/api/series')
+    for (const item of (await series.json()).items || []) {
+      if (item.title === seriesTitle) {
+        await request.delete(`/api/series/${item.id}`, { headers: authHeader(ownerToken) })
+      }
+    }
+  }
+})
+
 test('asks AI with a document context', async ({ page, request }) => {
   const ownerToken = await apiLogin(request)
   const title = `E2E AI 上下文 ${Date.now()}`
@@ -112,6 +160,17 @@ test('adjusts reading tools and focus mode', async ({ page, request }) => {
     const res = await request.delete(`/api/docs/${doc.id}`, { headers: authHeader(ownerToken) })
     expect(res.ok()).toBeTruthy()
   }
+})
+
+test('opens AI summary settings in the admin panel', async ({ page }) => {
+  await login(page)
+  await page.goto('/admin?tab=ai')
+  await expect(page.getByRole('heading', { name: 'AI 摘要' })).toBeVisible()
+  await expect(page.locator('#ai-summary-provider')).toBeVisible()
+  await page.locator('#ai-summary-provider').click()
+  await expect(page.locator('.select-box-menu')).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(page.locator('.select-box-menu')).toHaveCount(0)
 })
 
 test('shows the current login session in account security', async ({ page }) => {

@@ -3356,3 +3356,74 @@ func TestAIFeedbackAndDocContext(t *testing.T) {
 		t.Fatalf("针对不存在内容的提问应返回 404，实际 %d %v", status, data)
 	}
 }
+
+func TestAISummaryAdminConfiguration(t *testing.T) {
+	payloadText := `{"title":"后台配置标题","abstract":"后台配置摘要","tags":["配置","AI"]}`
+	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"id":"msg_test","type":"message","role":"assistant","model":"claude-opus-5-5","content":[{"type":"text","text":%s}],"stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":10,"output_tokens":20}}`, strconv.Quote(payloadText))
+	}))
+	defer fake.Close()
+
+	s := newTestAPI(t, func(cfg *config.Config) {
+		cfg.AIBaseURL = fake.URL
+		cfg.AIModel = "claude-opus-5-5"
+	})
+	ownerToken, _ := s.register(t, "aisummaryowner")
+	readerToken, _ := s.register(t, "aisummaryreader")
+
+	status, data := s.do(t, "GET", "/api/admin/ai-summary", ownerToken, nil)
+	if status != http.StatusOK || data["enabled"] != false || data["source"] != "none" {
+		t.Fatalf("未配置 AI 摘要状态不正确: %d %v", status, data)
+	}
+	if len(list(data, "providers")) == 0 {
+		t.Fatalf("AI 摘要服务商列表为空: %v", data)
+	}
+
+	status, data = s.do(t, "PUT", "/api/admin/ai-summary", ownerToken, map[string]any{
+		"enabled": true, "provider": "anthropic", "model": "claude-opus-5-5", "apiKey": "sk-ant-test-1234567890",
+	})
+	if status != http.StatusOK || data["enabled"] != true || data["source"] != "database" || data["hasKey"] != true {
+		t.Fatalf("保存 AI 摘要配置失败: %d %v", status, data)
+	}
+	var row models.AISummarySetting
+	if err := s.api.DB.First(&row, 1).Error; err != nil || row.APIKey == "" || row.APIKey == "sk-ant-test-1234567890" {
+		t.Fatalf("AI 摘要 Key 未加密落库: %+v err=%v", row, err)
+	}
+
+	status, data = s.do(t, "GET", "/api/ai/status", ownerToken, nil)
+	if status != http.StatusOK || data["enabled"] != true || data["source"] != "database" {
+		t.Fatalf("AI 摘要状态没有反映网页配置: %d %v", status, data)
+	}
+	status, data = s.do(t, "POST", "/api/ai/analyze", ownerToken, map[string]any{
+		"content": "这是一篇足够长的测试正文，用来验证超级管理员配置的 AI 摘要服务是否能够正常调用。",
+	})
+	if status != http.StatusOK || data["title"] != "后台配置标题" {
+		t.Fatalf("网页配置的 AI 摘要调用失败: %d %v", status, data)
+	}
+
+	status, _ = s.do(t, "PUT", "/api/admin/ai-summary", readerToken, map[string]any{
+		"enabled": true, "provider": "anthropic", "model": "claude-opus-5-5", "apiKey": "sk-ant-test-1234567890",
+	})
+	if status != http.StatusForbidden {
+		t.Fatalf("读者不应能配置 AI 摘要，实际 %d", status)
+	}
+
+	status, _ = s.do(t, "PUT", "/api/admin/ai-summary", ownerToken, map[string]any{
+		"enabled": false, "provider": "anthropic", "model": "claude-opus-5-5",
+	})
+	if status != http.StatusOK {
+		t.Fatalf("关闭 AI 摘要失败: %d", status)
+	}
+	status, _ = s.do(t, "POST", "/api/ai/analyze", ownerToken, map[string]any{
+		"content": "这是一篇足够长的测试正文，用来验证关闭 AI 摘要后接口不再可用。",
+	})
+	if status != http.StatusServiceUnavailable {
+		t.Fatalf("关闭后 AI 摘要应不可用，实际 %d", status)
+	}
+
+	status, data = s.do(t, "DELETE", "/api/admin/ai-summary", ownerToken, nil)
+	if status != http.StatusOK || data["source"] != "none" || data["enabled"] != false {
+		t.Fatalf("清除 AI 摘要配置失败: %d %v", status, data)
+	}
+}

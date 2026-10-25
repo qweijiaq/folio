@@ -8,6 +8,7 @@ import MarkdownView from '../components/MarkdownView.vue'
 import PasswordInput from '../components/PasswordInput.vue'
 import EmptyState from '../components/EmptyState.vue'
 import Icon from '../components/Icon.vue'
+import SelectBox from '../components/SelectBox.vue'
 
 usePageMeta(() => ({ title: '问 AI', description: '用自己的 API Key 向知微知识库提问', noindex: true }))
 
@@ -47,6 +48,14 @@ const examples = [
 
 const currentProvider = computed(() => providers.value.find((item) => item.id === providerId.value) || null)
 const selectedModel = computed(() => (model.value === CUSTOM_MODEL ? customModel.value.trim() : model.value))
+const providerOptions = computed(() => providers.value.map((provider) => ({ value: provider.id, label: provider.name })))
+const modelSelectOptions = computed(() => [
+  ...(currentProvider.value?.models || []).map((item) => ({
+    value: item.id,
+    label: item.note ? `${item.name}（${item.note}）` : item.name
+  })),
+  { value: CUSTOM_MODEL, label: '其他模型（手动输入）' }
+])
 const knowledge = computed(() => aiMeta.value?.knowledge || {})
 const hasSavedKey = computed(() => Boolean(savedKeys.value[providerId.value]))
 
@@ -108,10 +117,10 @@ function resetForProvider(id) {
   saveProviderPref(id)
 }
 
-function onProviderChange(event) {
+function onProviderChange(id) {
   storeKey(providerId.value, apiKey.value)
   error.value = ''
-  resetForProvider(event.target.value)
+  resetForProvider(id)
 }
 
 async function loadProviders() {
@@ -457,16 +466,13 @@ onBeforeUnmount(() => {
         <form class="ask-form" @submit.prevent="ask">
           <div class="field">
             <label for="ask-provider">服务商</label>
-            <select
+            <SelectBox
               id="ask-provider"
-              :value="providerId"
+              :model-value="providerId"
+              :options="providerOptions"
               :disabled="providersLoading || !providers.length"
-              @change="onProviderChange"
-            >
-              <option v-for="provider in providers" :key="provider.id" :value="provider.id">
-                {{ provider.name }}
-              </option>
-            </select>
+              @update:model-value="onProviderChange"
+            />
             <span v-if="providersLoading" class="hint">正在加载服务商…</span>
             <span v-else-if="providersError" class="form-error">{{ providersError }}</span>
             <span v-else class="hint">本站不提供 Key。请选择你有账号的服务商，费用由你的账号承担。</span>
@@ -500,12 +506,7 @@ onBeforeUnmount(() => {
 
           <div class="field">
             <label for="ask-model">模型</label>
-            <select id="ask-model" v-model="model" :disabled="!currentProvider">
-              <option v-for="item in currentProvider?.models || []" :key="item.id" :value="item.id">
-                {{ item.name }}{{ item.note ? `（${item.note}）` : '' }}
-              </option>
-              <option :value="CUSTOM_MODEL">其他模型（手动输入）</option>
-            </select>
+            <SelectBox id="ask-model" v-model="model" :options="modelSelectOptions" :disabled="!currentProvider" />
             <input
               v-if="model === CUSTOM_MODEL"
               v-model="customModel"

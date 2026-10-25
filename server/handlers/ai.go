@@ -10,7 +10,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/gin-gonic/gin"
 )
 
@@ -21,10 +20,21 @@ type aiAnalysis struct {
 }
 
 func (a *API) AIStatus(c *gin.Context) {
+	status := a.aiSummaryStatus()
 	c.JSON(http.StatusOK, gin.H{
-		"enabled": a.AI != nil,
-		"model":   a.Cfg.AIModel,
+		"enabled":  status["enabled"],
+		"provider": status["provider"],
+		"model":    status["model"],
+		"source":   status["source"],
+		"hasKey":   status["hasKey"],
 	})
+}
+
+func (a *API) callSummaryAI(ctx context.Context, cfg aiSummaryConfig, systemPrompt, userPrompt string) (string, error) {
+	if cfg.Provider.APIStyle == "anthropic" {
+		return a.callAnthropicQA(ctx, cfg.Provider, cfg.APIKey, cfg.Model, systemPrompt, userPrompt, nil)
+	}
+	return a.callOpenAICompatQA(ctx, cfg.Provider, cfg.APIKey, cfg.Model, systemPrompt, userPrompt, nil)
 }
 
 func truncateRunes(s string, n int) string {
@@ -70,8 +80,9 @@ func normalizeAITags(tags []string) []string {
 }
 
 func (a *API) AIAnalyze(c *gin.Context) {
-	if a.AI == nil {
-		fail(c, http.StatusServiceUnavailable, "AI 未配置，请设置 FOLIO_AI_API_KEY")
+	aiConfig, err := a.aiSummaryConfig()
+	if err != nil {
+		fail(c, http.StatusServiceUnavailable, err.Error())
 		return
 	}
 	var in struct {
@@ -101,30 +112,13 @@ func (a *API) AIAnalyze(c *gin.Context) {
 
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 60*time.Second)
 	defer cancel()
-	resp, err := a.AI.Messages.New(ctx, anthropic.MessageNewParams{
-		Model:     anthropic.Model(a.Cfg.AIModel),
-		MaxTokens: 4096,
-		System:    []anthropic.TextBlockParam{{Text: systemPrompt}},
-		Messages: []anthropic.MessageParam{
-			anthropic.NewUserMessage(anthropic.NewTextBlock(userPrompt)),
-		},
-	})
+	text, err := a.callSummaryAI(ctx, aiConfig, systemPrompt, userPrompt)
 	if err != nil {
 		log.Printf("AI 摘要请求失败: %v", err)
 		fail(c, http.StatusBadGateway, "AI 请求失败，请稍后再试")
 		return
 	}
-	if resp.StopReason == anthropic.StopReasonRefusal {
-		fail(c, http.StatusBadGateway, "AI 拒绝了这次请求")
-		return
-	}
-	var text strings.Builder
-	for _, block := range resp.Content {
-		if content, ok := block.AsAny().(anthropic.TextBlock); ok {
-			text.WriteString(content.Text)
-		}
-	}
-	raw := extractJSONObject(text.String())
+	raw := extractJSONObject(text)
 	if raw == "" {
 		fail(c, http.StatusBadGateway, "AI 返回格式异常")
 		return

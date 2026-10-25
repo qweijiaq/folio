@@ -1395,3 +1395,162 @@ kbd {
   font-size: 0.86em;
   line-height: 1.5;
 }
+
+/* ---------- 自定义下拉 ---------- */
+
+.select-box {
+  position: relative;
+  width: 100%;
+}
+
+.select-box-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 13px;
+  border: 1.2px solid var(--line-strong);
+  border-radius: var(--sketch-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 14.5px;
+  line-height: 1.6;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.select-box-trigger:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.select-box-trigger:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 2px 2px 0 var(--accent-soft);
+}
+
+.select-box-trigger:disabled {
+  background: var(--surface-2);
+  color: var(--ink-faint);
+  cursor: not-allowed;
+}
+
+.select-box-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.select-box-label.placeholder {
+  color: var(--ink-faint);
+}
+
+.select-box-arrow {
+  flex: 0 0 auto;
+  color: var(--ink-faint);
+  transition: transform 0.16s ease;
+}
+
+.select-box.open .select-box-arrow {
+  transform: rotate(180deg);
+}
+
+.select-box-menu {
+  z-index: 2000;
+  overflow: auto;
+  min-width: 160px;
+  padding: 5px;
+  border: 1.2px solid var(--line-strong);
+  border-radius: var(--sketch-sm);
+  background: var(--surface);
+  box-shadow: 4px 4px 0 color-mix(in srgb, var(--ink) 13%, transparent);
+}
+
+.select-box-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-soft);
+  font-family: var(--sans);
+  font-size: 13.5px;
+  line-height: 1.45;
+  text-align: left;
+  cursor: pointer;
+}
+
+.select-box-option:hover,
+.select-box-option.active {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+.select-box-option.selected {
+  color: var(--accent);
+}
+
+.select-box-option.disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.select-box-option-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.select-box-option-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.select-box-option small {
+  color: var(--ink-faint);
+  font-size: 11px;
+}
+
+.select-box.category-select,
+.select-box.folder-select,
+.select-box.role-select {
+  width: auto;
+  flex: none;
+}
+
+.select-box.category-select {
+  min-width: 140px;
+}
+
+.select-box.folder-select {
+  min-width: 110px;
+}
+
+.select-box.role-select {
+  min-width: 86px;
+}
+
+.select-box.category-select .select-box-trigger,
+.select-box.folder-select .select-box-trigger,
+.select-box.role-select .select-box-trigger,
+.select-box.invite-days .select-box-trigger {
+  min-height: 0;
+  padding: 5px 9px;
+  font-size: 12px;
+}
+
+.select-box.invite-days {
+  width: 108px;
+  flex: none;
+}

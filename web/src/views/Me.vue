@@ -10,6 +10,7 @@ import EmailCode from '../components/EmailCode.vue'
 import PasswordInput from '../components/PasswordInput.vue'
 import EmptyState from '../components/EmptyState.vue'
 import Icon from '../components/Icon.vue'
+import SelectBox from '../components/SelectBox.vue'
 import { usePageMeta } from '../composables/usePageMeta'
 
 const route = useRoute()
@@ -59,6 +60,12 @@ const passwordForm = reactive({ oldPassword: '', newPassword: '', confirm: '' })
 
 const staff = computed(() => ['super_admin', 'admin'].includes(auth.user?.role))
 const otherSessions = computed(() => sessions.value.filter((session) => !session.current).length)
+const homeStyleOptions = [
+  { value: 'cover', label: '封面：保留顶部自动封面' },
+  { value: 'compact', label: '紧凑：缩小头部高度' },
+  { value: 'plain', label: '纯文字：不显示封面' }
+]
+const folderSelectOptions = computed(() => folders.value.map((folder) => ({ value: folder.id, label: folder.name })))
 const currentFolder = computed(
   () => folders.value.find((folder) => String(folder.id) === String(selectedFolderID.value)) || null
 )
@@ -169,8 +176,8 @@ async function removeFolder(folder) {
   }
 }
 
-async function moveFavorite(doc, event) {
-  const folderID = Number(event.target.value)
+async function moveFavorite(doc, folderValue) {
+  const folderID = Number(folderValue)
   if (!folderID) return
   try {
     await api.post(`/docs/${doc.id}/favorite`, { folderID })
@@ -755,11 +762,7 @@ onMounted(async () => {
 
             <div class="field">
               <label for="me-home-style">公开主页样式</label>
-              <select id="me-home-style" v-model="privacySettings.homeStyle">
-                <option value="cover">封面：保留顶部自动封面</option>
-                <option value="compact">紧凑：较矮的封面条</option>
-                <option value="plain">纯文字：不显示封面</option>
-              </select>
+              <SelectBox id="me-home-style" v-model="privacySettings.homeStyle" :options="homeStyleOptions" />
               <span class="hint">只影响 `/u/{{ auth.user.username }}` 公开主页的头部。</span>
             </div>
 
@@ -885,9 +888,13 @@ onMounted(async () => {
                 </div>
               </div>
               <div class="content-row-actions">
-                <select class="folder-select" :value="selectedFolderID" aria-label="移动到收藏夹" @change="moveFavorite(doc, $event)">
-                  <option v-for="folder in folders" :key="folder.id" :value="folder.id">{{ folder.name }}</option>
-                </select>
+                <SelectBox
+                  class="folder-select"
+                  :model-value="selectedFolderID"
+                  :options="folderSelectOptions"
+                  aria-label="移动到收藏夹"
+                  @update:model-value="moveFavorite(doc, $event)"
+                />
                 <button class="icon-btn danger" type="button" aria-label="取消收藏" @click="removeFavorite(doc)">
                   <Icon name="trash" :size="16" />
                 </button>

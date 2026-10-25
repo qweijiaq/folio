@@ -18,8 +18,6 @@ import (
 	"folio/server/models"
 	"folio/server/storage"
 
-	"github.com/anthropics/anthropic-sdk-go"
-	"github.com/anthropics/anthropic-sdk-go/option"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/mojocn/base64Captcha"
@@ -31,7 +29,6 @@ type API struct {
 	DB      *gorm.DB
 	Cfg     config.Config
 	Cache   *cache.Cache
-	AI      *anthropic.Client
 	Mail    foliomail.Mailer
 	Captcha base64Captcha.Store
 	Hub     *wsHub
@@ -43,20 +40,10 @@ func New(db *gorm.DB, cfg config.Config, rc *cache.Cache) *API {
 	if rc == nil {
 		rc = &cache.Cache{}
 	}
-	var aiClient *anthropic.Client
-	if cfg.AIEnabled() {
-		options := []option.RequestOption{option.WithAPIKey(cfg.AIAPIKey)}
-		if strings.TrimSpace(cfg.AIBaseURL) != "" {
-			options = append(options, option.WithBaseURL(strings.TrimRight(cfg.AIBaseURL, "/")))
-		}
-		client := anthropic.NewClient(options...)
-		aiClient = &client
-	}
 	api := &API{
 		DB:      db,
 		Cfg:     cfg,
 		Cache:   rc,
-		AI:      aiClient,
 		Mail:    foliomail.New(cfg),
 		Captcha: base64Captcha.NewMemoryStore(20240, 5*time.Minute),
 		Hub:     newWSHub(),

@@ -216,6 +216,17 @@ type AIFeedback struct {
 
 func (AIFeedback) TableName() string { return "ai_feedback" }
 
+// AISummarySetting 是超级管理员配置的 AI 摘要服务，单行记录，Key 加密保存。
+type AISummarySetting struct {
+	Base
+	Provider string `gorm:"size:32" json:"provider"`
+	Model    string `gorm:"size:100" json:"model"`
+	APIKey   string `gorm:"size:1024" json:"-"`
+	Enabled  bool   `gorm:"not null;default:false" json:"enabled"`
+}
+
+func (AISummarySetting) TableName() string { return "ai_summary_settings" }
+
 // DocumentRevision 保存内容的历史版本，用于查看和回滚。
 type DocumentRevision struct {
 	Base

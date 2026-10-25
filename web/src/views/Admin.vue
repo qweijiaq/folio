@@ -11,6 +11,7 @@ import EmptyState from '../components/EmptyState.vue'
 import Icon from '../components/Icon.vue'
 import PasswordInput from '../components/PasswordInput.vue'
 import TrendChart from '../components/TrendChart.vue'
+import SelectBox from '../components/SelectBox.vue'
 import { usePageMeta } from '../composables/usePageMeta'
 
 const route = useRoute()
@@ -94,6 +95,23 @@ const storageInfo = reactive({
 const savingStorage = ref(false)
 const testingStorage = ref(false)
 const storageTestResult = ref({ ok: null, message: '' })
+const aiSummaryForm = reactive({
+  enabled: false,
+  provider: 'anthropic',
+  model: '',
+  apiKey: ''
+})
+const aiSummaryInfo = reactive({
+  enabled: false,
+  provider: 'anthropic',
+  model: '',
+  hasKey: false,
+  source: 'none',
+  error: '',
+  providers: []
+})
+const savingAISummary = ref(false)
+const clearingAISummary = ref(false)
 const logs = ref([])
 const logTotal = ref(0)
 const logPage = ref(1)
@@ -108,6 +126,46 @@ const storageSourceLabel = computed(() => ({
   none: '未配置'
 }[storageInfo.source] || '未配置'))
 const storageActiveLabel = computed(() => (storageInfo.active === 'qiniu' ? '七牛云' : '本地磁盘'))
+const aiProvider = computed(() => (aiSummaryInfo.providers || []).find((item) => item.id === aiSummaryForm.provider) || null)
+const aiSourceLabel = computed(() => ({
+  database: '网页设置',
+  env: '环境变量',
+  none: '未配置'
+}[aiSummaryInfo.source] || '未配置'))
+const aiModelOptions = computed(() => {
+  const list = aiProvider.value?.models || []
+  if (aiSummaryForm.model && !list.some((item) => item.id === aiSummaryForm.model)) {
+    return [...list, { id: aiSummaryForm.model, name: aiSummaryForm.model }]
+  }
+  return list
+})
+const roleOptions = [
+  { value: 'user', label: '读者' },
+  { value: 'admin', label: '管理员' }
+]
+const inviteDayOptions = [1, 7, 30, 90].map((days) => ({ value: days, label: `${days} 天` }))
+const storageProviderOptions = [
+  { value: 'local', label: '本地磁盘' },
+  { value: 'qiniu', label: '七牛云对象存储' }
+]
+const storageRegionOptions = [
+  { value: '', label: '自动识别' },
+  { value: 'z0', label: 'z0 · 华东' },
+  { value: 'cn-east-2', label: 'cn-east-2 · 浙江' },
+  { value: 'z1', label: 'z1 · 华北' },
+  { value: 'z2', label: 'z2 · 华南' },
+  { value: 'na0', label: 'na0 · 北美' },
+  { value: 'as0', label: 'as0 · 新加坡' }
+]
+const aiProviderSelectOptions = computed(() =>
+  (aiSummaryInfo.providers || []).map((provider) => ({ value: provider.id, label: provider.name }))
+)
+const aiModelSelectOptions = computed(() =>
+  aiModelOptions.value.map((item) => ({
+    value: item.id,
+    label: item.note ? `${item.name}（${item.note}）` : item.name
+  }))
+)
 const pendingAccess = computed(() => accessRequests.value.filter((item) => item.status === 'pending').length)
 
 const tabs = computed(() => {
@@ -126,6 +184,7 @@ const tabs = computed(() => {
       { key: 'users', label: '用户与权限', icon: 'user' },
       { key: 'access', label: '注册与邀请', icon: 'follow' },
       { key: 'storage', label: '存储设置', icon: 'cloud' },
+      { key: 'ai', label: 'AI 摘要', icon: 'spark' },
       { key: 'settings', label: '站点设置', icon: 'settings' },
       { key: 'logs', label: '操作日志', icon: 'clock' }
     )
@@ -554,6 +613,60 @@ function applyStorageInfo(storage = {}) {
   storageForm.qiniuSecretKey = ''
 }
 
+async function loadAISummary() {
+  try {
+    const data = await api.get('/admin/ai-summary')
+    Object.assign(aiSummaryInfo, data)
+    aiSummaryForm.enabled = Boolean(data.enabled)
+    aiSummaryForm.provider = data.provider || 'anthropic'
+    aiSummaryForm.model = data.model || data.providers?.[0]?.models?.[0]?.id || ''
+    aiSummaryForm.apiKey = ''
+  } catch (err) {
+    toastError(err)
+  }
+}
+
+function onAIProviderChange(id) {
+  const provider = aiSummaryInfo.providers.find((item) => item.id === id)
+  aiSummaryForm.provider = id
+  aiSummaryForm.model = provider?.models?.[0]?.id || ''
+}
+
+async function saveAISummary() {
+  savingAISummary.value = true
+  try {
+    const data = await api.put('/admin/ai-summary', {
+      enabled: aiSummaryForm.enabled,
+      provider: aiSummaryForm.provider,
+      model: aiSummaryForm.model,
+      apiKey: aiSummaryForm.apiKey.trim()
+    })
+    Object.assign(aiSummaryInfo, data)
+    aiSummaryForm.apiKey = ''
+    toast('AI 摘要设置已保存')
+  } catch (err) {
+    toastError(err)
+  } finally {
+    savingAISummary.value = false
+  }
+}
+
+async function clearAISummary() {
+  if (!window.confirm('清除网页端 AI 摘要配置？清除后编辑器将不再显示 AI 摘要按钮。')) return
+  clearingAISummary.value = true
+  try {
+    const data = await api.del('/admin/ai-summary')
+    Object.assign(aiSummaryInfo, data)
+    aiSummaryForm.enabled = false
+    aiSummaryForm.apiKey = ''
+    toast('AI 摘要配置已清除')
+  } catch (err) {
+    toastError(err)
+  } finally {
+    clearingAISummary.value = false
+  }
+}
+
 async function loadStorage() {
   storageTestResult.value = { ok: null, message: '' }
   try {
@@ -810,6 +923,13 @@ async function loadTab() {
       } else {
         await loadStorage()
       }
+    } else if (tab.value === 'ai') {
+      if (!isSuper.value) {
+        tab.value = 'overview'
+        await loadStats()
+      } else {
+        await loadAISummary()
+      }
     } else if (tab.value === 'logs') {
       if (!isSuper.value) {
         tab.value = 'overview'
@@ -834,8 +954,8 @@ async function applyDocFilter() {
   await loadDocs()
 }
 
-async function updateRole(user, event) {
-  const next = event.target.value
+async function updateRole(user, role) {
+  const next = role
   if (!next || next === user.role) return
   savingRole.value = user.id
   try {
@@ -1418,10 +1538,7 @@ onMounted(async () => {
                 <div class="form-row">
                   <div class="field">
                     <label for="new-user-role">角色</label>
-                    <select id="new-user-role" v-model="newUser.role">
-                      <option value="user">读者</option>
-                      <option value="admin">管理员</option>
-                    </select>
+                    <SelectBox id="new-user-role" v-model="newUser.role" :options="roleOptions" />
                   </div>
                   <div class="form-actions">
                     <button class="btn btn-primary btn-sm" type="submit" :disabled="creatingUser">
@@ -1457,15 +1574,13 @@ onMounted(async () => {
                   <span class="badge badge-admin">超级管理员</span>
                 </template>
                 <template v-else>
-                  <select
+                  <SelectBox
                     class="role-select"
-                    :value="user.role"
+                    :model-value="user.role"
+                    :options="roleOptions"
                     :disabled="savingRole === user.id"
-                    @change="updateRole(user, $event)"
-                  >
-                    <option value="user">读者</option>
-                    <option value="admin">管理员</option>
-                  </select>
+                    @update:model-value="updateRole(user, $event)"
+                  />
                 </template>
               </span>
               <span>{{ user.articles }} 文章 / {{ user.docs }} 文档</span>
@@ -1611,12 +1726,7 @@ onMounted(async () => {
               </header>
               <form class="invite-form" @submit.prevent="createInvite">
                 <input v-model="inviteNote" maxlength="100" placeholder="备注，例如「给阿林」" />
-                <select v-model.number="inviteDays" aria-label="有效期">
-                  <option :value="1">1 天</option>
-                  <option :value="7">7 天</option>
-                  <option :value="30">30 天</option>
-                  <option :value="90">90 天</option>
-                </select>
+                <SelectBox v-model="inviteDays" class="invite-days" :options="inviteDayOptions" aria-label="有效期" />
                 <button class="btn btn-primary btn-sm" type="submit" :disabled="creatingInvite">
                   {{ creatingInvite ? '生成中…' : '生成邀请' }}
                 </button>
@@ -1658,10 +1768,7 @@ onMounted(async () => {
 
             <div class="field">
               <label for="storage-provider">新图片存放位置</label>
-              <select id="storage-provider" v-model="storageForm.provider">
-                <option value="local">本地磁盘</option>
-                <option value="qiniu">七牛云对象存储</option>
-              </select>
+              <SelectBox id="storage-provider" v-model="storageForm.provider" :options="storageProviderOptions" />
             </div>
 
             <template v-if="storageForm.provider === 'qiniu'">
@@ -1700,15 +1807,7 @@ onMounted(async () => {
               <div class="form-row">
                 <div class="field">
                   <label for="storage-region">区域</label>
-                  <select id="storage-region" v-model="storageForm.qiniuRegion">
-                    <option value="">自动识别</option>
-                    <option value="z0">z0 · 华东</option>
-                    <option value="cn-east-2">cn-east-2 · 浙江</option>
-                    <option value="z1">z1 · 华北</option>
-                    <option value="z2">z2 · 华南</option>
-                    <option value="na0">na0 · 北美</option>
-                    <option value="as0">as0 · 新加坡</option>
-                  </select>
+                  <SelectBox id="storage-region" v-model="storageForm.qiniuRegion" :options="storageRegionOptions" />
                 </div>
                 <div class="field">
                   <label for="storage-prefix">对象前缀</label>
@@ -1746,6 +1845,77 @@ onMounted(async () => {
               </button>
               <button class="btn btn-primary btn-sm" type="submit" :disabled="savingStorage">
                 {{ savingStorage ? '保存中…' : '保存并切换' }}
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <div v-else-if="tab === 'ai' && isSuper" class="panel">
+          <header class="panel-head">
+            <h2>AI 摘要</h2>
+            <p>配置编辑器里的「AI 摘要」使用哪个服务商。没有配置或关闭时，编辑器不会显示这个按钮。</p>
+          </header>
+
+          <p v-if="tabLoading" class="muted loading-line">正在加载 AI 摘要设置…</p>
+          <form v-else class="settings-form" @submit.prevent="saveAISummary">
+            <div class="storage-current">
+              <span class="badge" :class="aiSummaryInfo.enabled ? 'badge-live' : 'badge-draft'">
+                {{ aiSummaryInfo.enabled ? '已启用' : '未启用' }}
+              </span>
+              <span>配置来源：{{ aiSourceLabel }}</span>
+              <span v-if="aiSummaryInfo.hasKey" class="hint">已保存 API Key，留空保存会保持不变。</span>
+              <span v-if="aiSummaryInfo.error" class="form-error">{{ aiSummaryInfo.error }}</span>
+            </div>
+
+            <label class="switch-row">
+              <input v-model="aiSummaryForm.enabled" type="checkbox" />
+              <span>
+                <strong>启用 AI 摘要</strong>
+                <small>只有开启且配置了 Key 时，编辑器才会显示「AI 摘要」。</small>
+              </span>
+            </label>
+
+            <div class="form-row">
+              <div class="field">
+                <label for="ai-summary-provider">服务商</label>
+                <SelectBox
+                  id="ai-summary-provider"
+                  v-model="aiSummaryForm.provider"
+                  :options="aiProviderSelectOptions"
+                  @update:model-value="onAIProviderChange"
+                />
+              </div>
+              <div class="field">
+                <label for="ai-summary-model">模型</label>
+                <SelectBox id="ai-summary-model" v-model="aiSummaryForm.model" :options="aiModelSelectOptions" />
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="ai-summary-key">API Key</label>
+              <PasswordInput
+                id="ai-summary-key"
+                v-model="aiSummaryForm.apiKey"
+                autocomplete="off"
+                :placeholder="aiSummaryInfo.hasKey ? '已配置，留空保持不变' : '填写服务商的 API Key'"
+              />
+              <span class="hint">
+                Key 会使用 <code>FOLIO_SECRET</code> 加密保存，接口不会回显。本站不提供 Key，费用由站点账号承担。
+              </span>
+            </div>
+
+            <div class="form-actions">
+              <button
+                v-if="aiSummaryInfo.source === 'database'"
+                class="btn btn-ghost btn-sm"
+                type="button"
+                :disabled="clearingAISummary"
+                @click="clearAISummary"
+              >
+                {{ clearingAISummary ? '清除中…' : '清除网页配置' }}
+              </button>
+              <button class="btn btn-primary btn-sm" type="submit" :disabled="savingAISummary">
+                {{ savingAISummary ? '保存中…' : '保存设置' }}
               </button>
             </div>
           </form>
