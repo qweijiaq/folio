@@ -1,8 +1,30 @@
 # 知微 · Folio
 
-一个人的知识花园：把博客文章与知识库文档合并到同一个站点里，共用一套用户、互动与视觉系统。
+[![CI](https://github.com/qweijiaq/folio/actions/workflows/ci.yml/badge.svg)](https://github.com/qweijiaq/folio/actions/workflows/ci.yml)
+[![Go](https://img.shields.io/badge/Go-1.24-00ADD8?logo=go&logoColor=white)](https://go.dev/)
+[![Vue](https://img.shields.io/badge/Vue-3-42b883?logo=vuedotjs&logoColor=white)](https://vuejs.org/)
+[![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+一个人的知识花园：把博客文章、知识库文档、互动社区和 AI 问答合并到同一个站点里，共用一套用户、内容、权限与视觉系统。
 
 这个项目由 `blogx_server` / `blogx_web`（博客）与 `gvd_server` / `gvd_web`（文档库）合并重写而来。原四个项目保持原样，仅作为参考。
+
+**适合谁看**：想找一个可运行的个人知识站全栈样板，或者想了解 Go + Vue 如何把内容、互动、AI 检索、对象存储和后台管理放进一套系统里。
+
+## 界面预览
+
+| 首页 | 文章列表 |
+| --- | --- |
+| ![首页](web/public/about/home.jpg) | ![文章列表](web/public/about/articles.jpg) |
+
+| 编辑器 | AI 问答 |
+| --- | --- |
+| ![编辑器](web/public/about/editor.jpg) | ![AI 问答](web/public/about/ask.jpg) |
+
+| 文档库 | 关于页 |
+| --- | --- |
+| ![文档库](web/public/about/docs.jpg) | ![关于页](web/public/about/about.jpg) |
 
 ## 核心变化
 
@@ -62,15 +84,19 @@ folio/
 │   ├── handlers/           # 路由、接口与集成测试
 │   └── seed/               # 演示数据
 ├── web/
-│   ├── src/views/          # 15 个页面
+│   ├── src/views/          # 19 个页面
 │   ├── src/components/     # 卡片、评论、目录树等组件
 │   ├── src/styles/         # base / components / pages / markdown
 │   └── src/utils/          # API 客户端、Markdown、树结构、格式化
 ├── scripts/
 │   ├── dev-mock.sh         # 内存 Mock 模式
 │   ├── dev-mysql.sh        # 本地开发 + Docker MySQL/Redis
+│   ├── e2e-server.sh       # E2E 独立 SQLite 演示服务
+│   ├── backup.sh           # MySQL + 上传目录备份
 │   └── smoke.py            # 运行中实例的端到端冒烟测试
+├── deploy/Caddyfile        # 可选 Caddy 自动 HTTPS
 ├── docker-compose.yml      # MySQL + Redis + 应用
+├── docker-compose.edge.yml # 可选 Caddy HTTPS 组合
 ├── Dockerfile              # 前端构建 + Go 编译 + 运行镜像
 ├── dev.sh                  # 一键启动前后端
 ├── TESTING.md              # 自测清单与故障排查
@@ -82,7 +108,8 @@ folio/
 ### 1. 完全无依赖：Mock 模式
 
 ```bash
-cd /Users/weijia/Desktop/blog/folio
+git clone https://github.com/qweijiaq/folio.git
+cd folio
 ./scripts/dev-mock.sh
 ```
 
@@ -125,6 +152,14 @@ cd server && go run .
 cd web && npm install && npm run dev
 ```
 
+### 文档与质量
+
+- [测试清单与故障排查](TESTING.md)
+- `go test ./...`：后端集成测试（临时 SQLite，不依赖外部服务）
+- `cd web && npm test`：Vitest 单元测试
+- `cd web && npm run test:e2e`：Playwright 端到端测试（自动启动独立演示库）
+- GitHub Actions：后端测试 + 前端单测/构建 + Playwright 三组任务
+
 ### 端口与地址
 
 - 开发模式前端：<http://localhost:5173>
@@ -143,6 +178,8 @@ cd web && npm install && npm run dev
 | `zhou` | `folio1234` | 读者 |
 
 演示数据包含 5 位用户、10 篇已发布文章、14 篇文档、2 篇草稿、5 个文章分类，以及分布在文章与文档上的点赞、收藏、评论、关注、私信、通知和浏览历史。只有当用户表为空时才会写入演示数据。第一位注册的用户会自动成为超级管理员。
+
+> 上面的账号只用于 `FOLIO_DEMO=1` 的本地演示。正式站点请设置 `FOLIO_DEMO=0`，并在首次注册时设置自己的管理员密码。
 
 ## 角色与权限
 
@@ -677,6 +714,10 @@ docker compose cp /tmp/uploads/. app:/app/data/uploads/
 - **图片**：支持上传、粘贴与拖拽；默认保存在 `FOLIO_UPLOAD_DIR`，可以在管理后台「存储设置」切换到七牛，也可以用环境变量提供初始配置；封面与头像仍然是自动生成，不能上传。
 - **备份**：Docker 部署可直接运行 `./scripts/backup.sh`，会把 MySQL 和 `uploads-data` 打成一个带时间戳的压缩包放到 `backups/`，默认保留 14 天；SQLite 可用 `sqlite3 folio.db ".backup 'backup.db'"`。七牛图片由对象存储侧负责备份与生命周期。
 - **主题**：默认跟随系统明暗偏好，切换后记住选择。
+
+## License
+
+本项目使用 MIT License，详见 [LICENSE](LICENSE)。第三方依赖保留各自许可证。
 
 ## 已知边界
 
