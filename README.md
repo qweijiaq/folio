@@ -6,9 +6,37 @@
 [![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-一个人的知识花园：把博客文章、知识库文档、互动社区和 AI 问答合并到同一个站点里，共用一套用户、内容、权限与视觉系统。
+**Folio（知微）是一个 Go + Vue 3 全栈个人知识站。** 把博客文章、文档库、评论社区和自带 Key 的 AI 问答整合到一套系统里，支持 SQLite/MySQL、Docker、RSS/SEO，可作为个人博客或知识库的全栈样板。
+
+**English:** Folio is a self-hosted personal knowledge site built with Go, Gin, GORM, Vue 3 and Vite. It combines a blog, a documentation tree, comments, RSS/SEO and bring-your-own-key AI Q&A in one deployable stack.
 
 **适合谁看**：想找一个可运行的个人知识站全栈样板，或者想了解 Go + Vue 如何把内容、互动、AI 检索、对象存储和后台管理放进一套系统里。
+
+**关键词**：Go、Vue 3、个人博客、知识库、自托管、AI 问答、SQLite、MySQL、Docker、个人知识管理。
+
+[30 秒体验](#30-秒体验) · [功能一览](#功能一览) · [界面预览](#界面预览) · [技术栈](#技术栈) · [测试](#文档与质量) · [GitHub Actions](https://github.com/qweijiaq/folio/actions/workflows/ci.yml)
+
+> 线上站正在备案，暂时没有公开 Demo；可以先按下面的 Mock 模式在本地一键体验，截图来自当前界面。
+
+## 30 秒体验
+
+无需数据库，也无需 Docker：
+
+```bash
+git clone https://github.com/qweijiaq/folio.git
+cd folio
+./scripts/dev-mock.sh
+```
+
+打开 <http://localhost:5173>，使用演示账号 `weijia / folio1234` 登录。Mock 模式每次启动都会写入演示数据，停止后清空。
+
+## 功能一览
+
+- **博客 + 文档一套后台**：文章和文档共用用户、评论、收藏、搜索、通知和管理后台；
+- **生成式视觉**：rough.js 根据标题、摘要、标签和分类生成封面与头像，不需要上传素材；
+- **完整互动**：两级评论、评论点赞、内容点赞、收藏夹、关注、私信、通知、@提及；
+- **知识库能力**：文档目录树、私密继承与阅读申请、双向链接/反向链接、版本差异、定时发布；
+- **自带 Key 的 AI 问答**：站内内容分块检索，支持严格/通用模式、多轮追问、流式回答和引用来源。
 
 ## 界面预览
 
@@ -23,6 +51,17 @@
 | 文档库 | 关于页 |
 | --- | --- |
 | ![文档库](web/public/about/docs.jpg) | ![关于页](web/public/about/about.jpg) |
+
+## 和其他方案有什么不同
+
+| 方案 | 更适合 | Folio 的不同 |
+| --- | --- | --- |
+| Hugo / Hexo | 纯静态博客，追求构建速度和成熟主题 | Folio 是带数据库和登录的全栈应用，内置评论、私信、收藏、通知和后台管理 |
+| WordPress | 需要成熟插件生态和传统 CMS 工作流 | Folio 用 Go + Vue 重写，文章与文档共享一张内容表，部署更轻，互动和 AI 检索内置 |
+| Docusaurus | 文档站点，重视文档版本和静态发布 | Folio 同时承载博客与文档，文档有目录树和私密继承，也支持评论、关注和 AI 问答 |
+| 其他个人知识库 | 笔记/双链优先 | Folio 更偏“可公开的个人内容站”：博客、文档、互动和阅读体验放在同一个站点 |
+
+它不是静态站点生成器，也不是笔记软件的替代品。它适合想要一个**自己维护、可部署、带互动和 AI 检索的公开知识站**的人。如果你只需要纯静态博客，Hugo/Hexo 可能更省事；如果你依赖 WordPress 插件生态，继续用 WordPress 也更合适。
 
 ## 核心设计
 
