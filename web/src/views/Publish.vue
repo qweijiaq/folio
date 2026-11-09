@@ -131,9 +131,7 @@ function replaceImagePaths(text, map) {
   return output
 }
 
-async function onFile(event) {
-  const file = event.target.files?.[0]
-  event.target.value = ''
+async function handleFile(file) {
   if (!file) return
   fileName.value = file.name
   try {
@@ -202,6 +200,17 @@ async function onFile(event) {
   } catch (err) {
     toastError(err)
   }
+}
+
+async function onFile(event) {
+  const file = event.target.files?.[0]
+  event.target.value = ''
+  await handleFile(file)
+}
+
+function onDrop(event) {
+  const file = event.dataTransfer?.files?.[0]
+  if (file) handleFile(file)
 }
 
 async function uploadZipImages() {
@@ -412,9 +421,16 @@ onMounted(async () => {
         <section class="publish-panel">
           <h2>1. 导入</h2>
           <div class="field">
-            <label for="publish-file">Markdown 或 zip</label>
-            <input id="publish-file" type="file" accept=".md,.zip" @change="onFile" />
-            <p v-if="fileName" class="hint">已读取：{{ fileName }}</p>
+            <label>导入文件</label>
+            <label class="publish-file-picker" for="publish-file" @dragover.prevent @drop.prevent="onDrop">
+              <input id="publish-file" class="publish-file-input" type="file" accept=".md,.zip" @change="onFile" />
+              <span class="publish-file-icon"><Icon name="cloud" :size="22" /></span>
+              <span class="publish-file-text">
+                <strong>{{ fileName || '选择 Markdown 或 zip 文件' }}</strong>
+                <small>点击选择，或把文件拖到这里</small>
+              </span>
+              <span class="publish-file-action">选择文件</span>
+            </label>
             <p class="hint">zip 支持 book.md + chapters/*.md + images/*，会自动读取章节和图片。</p>
           </div>
           <div class="field">
