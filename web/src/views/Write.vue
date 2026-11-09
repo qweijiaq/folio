@@ -31,6 +31,7 @@ const form = reactive({
   seriesID: null,
   seriesOrder: 0,
   private: false,
+  searchHidden: false,
   pinned: false,
   openComment: true,
   sort: 0
@@ -188,6 +189,7 @@ function snapshot() {
     seriesID: form.seriesID,
     seriesOrder: form.seriesOrder,
     private: form.private,
+    searchHidden: form.searchHidden,
     pinned: form.pinned,
     openComment: form.openComment,
     sort: form.sort
@@ -225,6 +227,7 @@ function draftFields(source) {
     seriesID: source.seriesID ?? null,
     seriesOrder: Number(source.seriesOrder) || 0,
     private: Boolean(source.private),
+    searchHidden: Boolean(source.searchHidden),
     pinned: Boolean(source.pinned),
     openComment: source.openComment !== false,
     sort: Number(source.sort) || 0
@@ -344,6 +347,7 @@ async function load() {
       form.seriesID = data.doc.seriesID ?? null
       form.seriesOrder = data.doc.seriesOrder || 0
       form.private = Boolean(data.doc.private)
+      form.searchHidden = Boolean(data.doc.searchHidden)
       form.pinned = data.doc.pinned
       form.openComment = data.doc.openComment !== false
       form.sort = data.doc.sort || 0
@@ -359,26 +363,52 @@ async function load() {
 }
 
 function addTag() {
-  const value = tagInput.value.trim().replace(/^#/, '')
-  if (!value) return
-  if (form.tags.length >= 6) {
-    toast('最多添加 6 个标签')
+  const raw = tagInput.value.trim()
+  if (!raw) return
+  // 支持用逗号、顿号、分号、空格一次输入多个标签
+  const parts = raw
+    .split(/[、,，;；\s]+/)
+    .map((item) => item.trim().replace(/^#+/, ''))
+    .filter(Boolean)
+  if (!parts.length) {
+    tagInput.value = ''
     return
   }
-  if (!form.tags.some((tag) => tag.toLowerCase() === value.toLowerCase())) {
-    form.tags.push(value.slice(0, 16))
+  let added = 0
+  for (const part of parts) {
+    if (form.tags.length >= 6) {
+      toast('最多添加 6 个标签')
+      break
+    }
+    const value = part.slice(0, 16)
+    if (!form.tags.some((tag) => tag.toLowerCase() === value.toLowerCase())) {
+      form.tags.push(value)
+      added += 1
+    }
   }
   tagInput.value = ''
+  if (!added && parts.length) {
+    // 全是重复标签时也给出反馈，避免用户以为没生效
+    toast('这些标签已经添加过了')
+  }
 }
 
 function onTagKey(event) {
-  if (event.key === ',' || event.key === '，') {
+  if (event.key === ',' || event.key === '，' || event.key === '、' || event.key === ';' || event.key === '；') {
     event.preventDefault()
     addTag()
   }
   if (event.key === 'Backspace' && !tagInput.value && form.tags.length) {
     form.tags.pop()
   }
+}
+
+function onTagPaste(event) {
+  const text = event.clipboardData?.getData('text') || ''
+  if (!/[、,，;；\n]/.test(text)) return
+  event.preventDefault()
+  tagInput.value = `${tagInput.value}${text}`
+  addTag()
 }
 
 function removeTag(tag) {
@@ -560,6 +590,7 @@ async function save(status = 'draft') {
     seriesID: form.kind === 'article' && form.seriesID ? Number(form.seriesID) : null,
     seriesOrder: form.kind === 'article' ? Number(form.seriesOrder) || 0 : 0,
     private: form.kind === 'doc' ? form.private : false,
+    searchHidden: form.kind === 'doc' ? form.searchHidden : false,
     pinned: form.pinned,
     openComment: form.openComment,
     sort: Number(form.sort) || 0
@@ -617,6 +648,7 @@ function onRevisionRestored(restored) {
   form.seriesID = restored.seriesID ?? null
   form.seriesOrder = restored.seriesOrder || 0
   form.private = Boolean(restored.private)
+  form.searchHidden = Boolean(restored.searchHidden)
   form.pinned = restored.pinned
   form.openComment = restored.openComment !== false
   form.sort = restored.sort || 0
@@ -779,10 +811,11 @@ onBeforeUnmount(() => {
               </span>
               <input
                 v-model="tagInput"
-                maxlength="16"
-                placeholder="回车添加"
+                maxlength="200"
+                placeholder="回车或逗号添加，可一次粘贴多个"
                 @keydown.enter.prevent="addTag"
                 @keydown="onTagKey"
+                @paste="onTagPaste"
                 @blur="addTag"
               />
             </div>
@@ -818,6 +851,11 @@ onBeforeUnmount(() => {
             </label>
             <p v-if="form.private" class="hint">保存后只有你（和超级管理员）能在列表、目录和详情中看到。</p>
             <p v-else-if="parentPrivate" class="hint">上级文档是私密文档，这篇文档也会按私密处理。</p>
+            <label class="checkbox">
+              <input v-model="form.searchHidden" type="checkbox" />
+              在搜索中隐藏（仅作为目录节点）
+            </label>
+            <p v-if="form.searchHidden" class="hint">不会出现在全站搜索和 AI 检索里，但目录树和详情页仍然正常显示。</p>
           </template>
           <label v-else class="checkbox">
             <input v-model="form.pinned" type="checkbox" />

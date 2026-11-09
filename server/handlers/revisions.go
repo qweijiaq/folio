@@ -18,23 +18,24 @@ func (a *API) saveRevision(doc *models.Document, editor *models.User) error {
 		editorID = editor.ID
 	}
 	return a.DB.Create(&models.DocumentRevision{
-		DocID:       doc.ID,
-		EditorID:    editorID,
-		EditorName:  editorName,
-		Title:       doc.Title,
-		Abstract:    doc.Abstract,
-		Content:     doc.Content,
-		Tags:        append([]string{}, doc.Tags...),
-		Status:      doc.Status,
-		PublishAt:   doc.PublishAt,
-		Private:     doc.Private,
-		ParentID:    doc.ParentID,
-		CategoryID:  doc.CategoryID,
-		SeriesID:    doc.SeriesID,
-		SeriesOrder: doc.SeriesOrder,
-		Pinned:      doc.Pinned,
-		OpenComment: doc.OpenComment,
-		Sort:        doc.Sort,
+		DocID:        doc.ID,
+		EditorID:     editorID,
+		EditorName:   editorName,
+		Title:        doc.Title,
+		Abstract:     doc.Abstract,
+		Content:      doc.Content,
+		Tags:         append([]string{}, doc.Tags...),
+		Status:       doc.Status,
+		PublishAt:    doc.PublishAt,
+		Private:      doc.Private,
+		SearchHidden: doc.SearchHidden,
+		ParentID:     doc.ParentID,
+		CategoryID:   doc.CategoryID,
+		SeriesID:     doc.SeriesID,
+		SeriesOrder:  doc.SeriesOrder,
+		Pinned:       doc.Pinned,
+		OpenComment:  doc.OpenComment,
+		Sort:         doc.Sort,
 	}).Error
 }
 
@@ -78,6 +79,9 @@ func (a *API) documentChanged(doc *models.Document, in docInput, abstract string
 		return true
 	}
 	if doc.Kind == models.KindDoc && in.Private != nil && doc.Private != *in.Private {
+		return true
+	}
+	if doc.Kind == models.KindDoc && in.SearchHidden != nil && doc.SearchHidden != *in.SearchHidden {
 		return true
 	}
 	if doc.Kind == models.KindArticle && (!sameUintPtr(doc.SeriesID, in.SeriesID) || doc.SeriesOrder != maxInt(0, in.SeriesOrder)) {
@@ -178,6 +182,7 @@ func (a *API) RevisionRestore(c *gin.Context) {
 	doc.Status = revision.Status
 	doc.PublishAt = revision.PublishAt
 	doc.Private = revision.Private
+	doc.SearchHidden = revision.SearchHidden
 	doc.ParentID = revision.ParentID
 	doc.CategoryID = revision.CategoryID
 	doc.SeriesID = revision.SeriesID
@@ -185,7 +190,7 @@ func (a *API) RevisionRestore(c *gin.Context) {
 	doc.Pinned = revision.Pinned
 	doc.OpenComment = revision.OpenComment
 	doc.Sort = revision.Sort
-	fields := []string{"title", "abstract", "content", "tags", "status", "publish_at", "private", "parent_id", "category_id", "series_id", "series_order", "pinned", "open_comment", "sort"}
+	fields := []string{"title", "abstract", "content", "tags", "status", "publish_at", "private", "search_hidden", "parent_id", "category_id", "series_id", "series_order", "pinned", "open_comment", "sort"}
 	if doc.Status == models.StatusPublished && doc.PublishedAt == nil {
 		now := time.Now()
 		doc.PublishedAt = &now

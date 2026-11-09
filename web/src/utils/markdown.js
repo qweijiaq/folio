@@ -83,6 +83,12 @@ md.renderer.rules.link_open = (tokens, idx, options, env, self) => {
 
 export function renderMarkdown(source, linkMap = {}) {
   let html = md.render(source || '', { linkMap })
+  // 给单独成段的图片和图注加上类名，方便统一居中
+  html = html.replace(/<p>\s*(<img[^>]*>)\s*<\/p>/g, '<p class="md-image">$1</p>')
+  html = html.replace(
+    /<p>\s*<em>(图\s*\d+[：:][\s\S]*?)<\/em>\s*<\/p>/g,
+    '<p class="md-caption"><em>$1</em></p>'
+  )
   const toc = []
   html = html.replace(/<h([1-4])>(.*?)<\/h\1>/g, (match, level, inner) => {
     const id = `h-${toc.length + 1}`

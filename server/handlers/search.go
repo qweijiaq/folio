@@ -155,7 +155,8 @@ func (a *API) Search(c *gin.Context) {
 	hidden := a.hiddenDocIDs(viewer)
 
 	build := func(withKind string) *gorm.DB {
-		query := a.DB.Model(&models.Document{}).Where("status = ?", models.StatusPublished)
+		query := a.DB.Model(&models.Document{}).Where("status = ?", models.StatusPublished).
+			Where("search_hidden = ?", false)
 		if len(hidden) > 0 {
 			query = query.Where("id NOT IN ?", hidden)
 		}

@@ -1,6 +1,14 @@
 <script setup>
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 
+defineProps({
+  showLeft: { type: Boolean, default: false },
+  showRight: { type: Boolean, default: false },
+  leftCollapsed: { type: Boolean, default: false },
+  rightCollapsed: { type: Boolean, default: false }
+})
+defineEmits(['toggle-left', 'toggle-right'])
+
 const SIZE_KEY = 'folio.reading.fontSize'
 const WIDTH_KEY = 'folio.reading.width'
 const FOCUS_KEY = 'folio.reading.focus'
@@ -96,6 +104,24 @@ onBeforeUnmount(() => {
     <button type="button" :disabled="fontSize >= sizes[sizes.length - 1]" aria-label="增大字号" title="增大字号" @click="changeSize(1)">A+</button>
     <button type="button" :title="`阅读宽度：${widths.find((item) => item.value === width)?.label}`" @click="cycleWidth">
       行宽 · {{ widths.find((item) => item.value === width)?.label }}
+    </button>
+    <button
+      v-if="showLeft"
+      type="button"
+      class="layout-toggle"
+      :aria-pressed="!leftCollapsed"
+      @click="$emit('toggle-left')"
+    >
+      {{ leftCollapsed ? '展开目录' : '收起目录' }}
+    </button>
+    <button
+      v-if="showRight"
+      type="button"
+      class="layout-toggle"
+      :aria-pressed="!rightCollapsed"
+      @click="$emit('toggle-right')"
+    >
+      {{ rightCollapsed ? '展开侧栏' : '收起侧栏' }}
     </button>
     <button type="button" :class="{ active: focus }" :aria-pressed="focus" @click="toggleFocus">
       {{ focus ? '退出专注' : '专注' }}

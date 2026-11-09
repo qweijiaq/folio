@@ -70,7 +70,8 @@ function openMenu() {
   active.value = selectedIndex.value >= 0 ? selectedIndex.value : 0
   nextTick(() => {
     positionMenu()
-    scrollActive()
+    // 等 fixed 定位真正生效后再滚动菜单内部，避免把整个页面滚到底部
+    nextTick(scrollActive)
   })
   document.addEventListener('mousedown', onDocumentMouseDown)
   window.addEventListener('resize', closeMenu)
@@ -114,8 +115,19 @@ function moveActive(delta) {
 }
 
 function scrollActive() {
-  const options = menu.value?.querySelectorAll('.select-box-option')
-  options?.[active.value]?.scrollIntoView({ block: 'nearest' })
+  const menuEl = menu.value
+  const option = menuEl?.querySelectorAll('.select-box-option')?.[active.value]
+  if (!menuEl || !option) return
+  // 只滚动下拉菜单自身，不使用 scrollIntoView，避免页面跟着跳到底部
+  const menuRect = menuEl.getBoundingClientRect()
+  const optionRect = option.getBoundingClientRect()
+  const optionTop = optionRect.top - menuRect.top + menuEl.scrollTop
+  const optionBottom = optionTop + option.offsetHeight
+  if (optionTop < menuEl.scrollTop) {
+    menuEl.scrollTop = optionTop
+  } else if (optionBottom > menuEl.scrollTop + menuEl.clientHeight) {
+    menuEl.scrollTop = optionBottom - menuEl.clientHeight
+  }
 }
 
 function onKeydown(event) {

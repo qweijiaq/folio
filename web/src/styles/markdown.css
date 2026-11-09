@@ -159,6 +159,17 @@
   border-radius: 12px;
 }
 
+.prose p.md-image {
+  text-align: center;
+}
+
+.prose p.md-caption {
+  margin-top: -0.4em;
+  color: var(--ink-faint);
+  font-size: 13px;
+  text-align: center;
+}
+
 .prose hr {
   margin: 2.4em 0;
   border: 0;

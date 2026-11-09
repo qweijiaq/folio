@@ -19,21 +19,22 @@ import (
 )
 
 type docInput struct {
-	Kind        string     `json:"kind"`
-	Title       string     `json:"title"`
-	Abstract    string     `json:"abstract"`
-	Content     string     `json:"content"`
-	Tags        []string   `json:"tags"`
-	Status      string     `json:"status"`
-	PublishAt   *time.Time `json:"publishAt"`
-	Private     *bool      `json:"private"`
-	ParentID    *uint      `json:"parentID"`
-	CategoryID  *uint      `json:"categoryID"`
-	SeriesID    *uint      `json:"seriesID"`
-	SeriesOrder int        `json:"seriesOrder"`
-	Pinned      *bool      `json:"pinned"`
-	OpenComment *bool      `json:"openComment"`
-	Sort        int        `json:"sort"`
+	Kind         string     `json:"kind"`
+	Title        string     `json:"title"`
+	Abstract     string     `json:"abstract"`
+	Content      string     `json:"content"`
+	Tags         []string   `json:"tags"`
+	Status       string     `json:"status"`
+	PublishAt    *time.Time `json:"publishAt"`
+	Private      *bool      `json:"private"`
+	SearchHidden *bool      `json:"searchHidden"`
+	ParentID     *uint      `json:"parentID"`
+	CategoryID   *uint      `json:"categoryID"`
+	SeriesID     *uint      `json:"seriesID"`
+	SeriesOrder  int        `json:"seriesOrder"`
+	Pinned       *bool      `json:"pinned"`
+	OpenComment  *bool      `json:"openComment"`
+	Sort         int        `json:"sort"`
 }
 
 func validateSchedule(status string, publishAt, current *time.Time) error {
@@ -450,21 +451,22 @@ func (a *API) DocCreate(c *gin.Context) {
 		openComment = *in.OpenComment
 	}
 	doc := models.Document{
-		Kind:        in.Kind,
-		Title:       in.Title,
-		Abstract:    abstract,
-		Content:     in.Content,
-		AuthorID:    u.ID,
-		ParentID:    in.ParentID,
-		CategoryID:  categoryID,
-		SeriesID:    seriesID,
-		SeriesOrder: maxInt(0, in.SeriesOrder),
-		Tags:        normalizeTags(in.Tags),
-		Status:      in.Status,
-		PublishAt:   in.PublishAt,
-		Private:     in.Kind == models.KindDoc && in.Private != nil && *in.Private,
-		OpenComment: openComment,
-		Sort:        in.Sort,
+		Kind:         in.Kind,
+		Title:        in.Title,
+		Abstract:     abstract,
+		Content:      in.Content,
+		AuthorID:     u.ID,
+		ParentID:     in.ParentID,
+		CategoryID:   categoryID,
+		SeriesID:     seriesID,
+		SeriesOrder:  maxInt(0, in.SeriesOrder),
+		Tags:         normalizeTags(in.Tags),
+		Status:       in.Status,
+		PublishAt:    in.PublishAt,
+		Private:      in.Kind == models.KindDoc && in.Private != nil && *in.Private,
+		SearchHidden: in.Kind == models.KindDoc && in.SearchHidden != nil && *in.SearchHidden,
+		OpenComment:  openComment,
+		Sort:         in.Sort,
 	}
 	if in.Pinned != nil && *in.Pinned {
 		doc.Pinned = true
@@ -574,6 +576,10 @@ func (a *API) DocUpdate(c *gin.Context) {
 	if doc.Kind == models.KindDoc && in.Private != nil {
 		doc.Private = *in.Private
 		fields = append(fields, "private")
+	}
+	if doc.Kind == models.KindDoc && in.SearchHidden != nil {
+		doc.SearchHidden = *in.SearchHidden
+		fields = append(fields, "search_hidden")
 	}
 	if in.OpenComment != nil {
 		doc.OpenComment = *in.OpenComment

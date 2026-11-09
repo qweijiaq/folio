@@ -23,6 +23,7 @@ import TocDrawer from '../components/TocDrawer.vue'
 import ShareCard from '../components/ShareCard.vue'
 import DocActions from '../components/DocActions.vue'
 import { useReadingProgress } from '../composables/useReadingProgress'
+import { useReadingLayout } from '../composables/useReadingLayout'
 import { usePageMeta } from '../composables/usePageMeta'
 
 const route = useRoute()
@@ -45,6 +46,7 @@ const cancellingAccess = ref(false)
 const sideOpen = ref(false)
 const shareOpen = ref(false)
 const { progress, activeId, refresh: refreshReading } = useReadingProgress()
+const { leftCollapsed, rightCollapsed, toggleLeft, toggleRight } = useReadingLayout()
 
 const canEdit = computed(() => {
   if (!doc.value || !auth.user) return false
@@ -318,7 +320,10 @@ watch(
         </nav>
       </div>
 
-      <div class="container docs-layout docs-layout--toc">
+      <div
+        class="container docs-layout docs-layout--toc"
+        :class="{ 'left-collapsed': leftCollapsed, 'right-collapsed': rightCollapsed }"
+      >
         <aside class="docs-side" :class="{ open: sideOpen }">
           <div class="docs-side-head">
             <RouterLink to="/docs">文档目录</RouterLink>
@@ -366,7 +371,14 @@ watch(
             <CoverImage :doc="doc" />
           </figure>
 
-          <ReadingTools />
+          <ReadingTools
+            show-left
+            show-right
+            :left-collapsed="leftCollapsed"
+            :right-collapsed="rightCollapsed"
+            @toggle-left="toggleLeft"
+            @toggle-right="toggleRight"
+          />
           <MarkdownView :source="doc.content" @toc="toc = $event" />
 
           <div v-if="doc.tags?.length" class="article-tags">

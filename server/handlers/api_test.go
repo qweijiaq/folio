@@ -2849,6 +2849,9 @@ func TestSearchRankingAndPrivacy(t *testing.T) {
 	privateID := create(ownerToken, map[string]any{
 		"kind": "doc", "title": "星尘检索私密文档", "content": "星尘检索私密内容。", "status": "published", "private": true,
 	})
+	hiddenID := create(ownerToken, map[string]any{
+		"kind": "doc", "title": "星尘检索目录节点", "content": "星尘检索目录节点。", "status": "published", "searchHidden": true,
+	})
 
 	status, data := s.do(t, "GET", "/api/search?q=%E6%98%9F%E5%B0%98%E6%A3%80%E7%B4%A2", "", nil)
 	if status != http.StatusOK {
@@ -2868,6 +2871,9 @@ func TestSearchRankingAndPrivacy(t *testing.T) {
 		if uint(number(item.(map[string]any)["id"])) == privateID {
 			t.Fatalf("公开搜索不应返回私密文档: %v", item)
 		}
+		if uint(number(item.(map[string]any)["id"])) == hiddenID {
+			t.Fatalf("搜索隐藏文档不应出现在搜索结果: %v", item)
+		}
 	}
 
 	status, data = s.do(t, "GET", "/api/search?q=%E6%98%9F%E5%B0%98%E6%A3%80%E7%B4%A2&kind=doc", readerToken, nil)
@@ -2883,6 +2889,26 @@ func TestSearchRankingAndPrivacy(t *testing.T) {
 	status, data = s.do(t, "GET", "/api/search?q=%E6%98%9F%E5%B0%98%E6%A3%80%E7%B4%A2", ownerToken, nil)
 	if status != http.StatusOK || number(data["total"]) != 3 {
 		t.Fatalf("作者搜索应包含自己的私密文档: %d %v", status, data)
+	}
+	for _, item := range list(data, "items") {
+		if uint(number(item.(map[string]any)["id"])) == hiddenID {
+			t.Fatalf("搜索隐藏文档对作者也不应出现在搜索结果: %v", item)
+		}
+	}
+
+	status, treeData := s.do(t, "GET", "/api/doc-tree", "", nil)
+	if status != http.StatusOK {
+		t.Fatalf("读取目录树失败: %d %v", status, treeData)
+	}
+	treeFound := false
+	for _, item := range list(treeData, "items") {
+		if uint(number(item.(map[string]any)["id"])) == hiddenID {
+			treeFound = true
+			break
+		}
+	}
+	if !treeFound {
+		t.Fatalf("搜索隐藏文档仍应出现在目录树中: %v", treeData)
 	}
 
 	status, data = s.do(t, "GET", "/api/search", "", nil)

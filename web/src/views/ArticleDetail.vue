@@ -19,6 +19,7 @@ import TocDrawer from '../components/TocDrawer.vue'
 import ShareCard from '../components/ShareCard.vue'
 import DocActions from '../components/DocActions.vue'
 import { useReadingProgress } from '../composables/useReadingProgress'
+import { useReadingLayout } from '../composables/useReadingLayout'
 import { usePageMeta } from '../composables/usePageMeta'
 import { formatDate, formatNumber, readingTime, shortDate } from '../utils/format'
 
@@ -37,6 +38,7 @@ const loading = ref(true)
 const notFound = ref(false)
 const shareOpen = ref(false)
 const { progress, activeId, refresh: refreshReading } = useReadingProgress()
+const { rightCollapsed, toggleRight } = useReadingLayout()
 
 const canEdit = computed(() => {
   if (!doc.value || !auth.user) return false
@@ -246,9 +248,13 @@ watch(
         <span v-if="doc.seriesOrder">第 {{ doc.seriesOrder }} 篇</span>
       </div>
 
-      <div class="article-layout">
+      <div class="article-layout" :class="{ 'right-collapsed': rightCollapsed }">
         <div class="article-body">
-          <ReadingTools />
+          <ReadingTools
+            show-right
+            :right-collapsed="rightCollapsed"
+            @toggle-right="toggleRight"
+          />
           <MarkdownView :source="doc.content" @toc="toc = $event" />
 
           <div v-if="doc.tags?.length" class="article-tags">

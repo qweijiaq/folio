@@ -269,7 +269,9 @@ func (a *API) retrieveQAContext(question string, staff bool) []qaSource {
 	chunks := make([]qaChunk, 0, 160)
 
 	var docs []models.Document
-	docQuery := a.DB.Preload("Category").Where("status = ?", models.StatusPublished)
+	docQuery := a.DB.Preload("Category").
+		Where("status = ?", models.StatusPublished).
+		Where("search_hidden = ?", false)
 	if hidden := a.hiddenDocIDs(nil); len(hidden) > 0 {
 		docQuery = docQuery.Where("documents.id NOT IN ?", hidden)
 	}
