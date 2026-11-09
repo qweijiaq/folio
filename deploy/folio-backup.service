@@ -1,0 +1,9 @@
+[Unit]
+Description=Folio daily backup
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/folio
+ExecStart=/opt/folio/scripts/backup.sh

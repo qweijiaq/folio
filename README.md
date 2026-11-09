@@ -14,7 +14,7 @@
 
 **关键词**：Go、Vue 3、个人博客、知识库、自托管、AI 问答、SQLite、MySQL、Docker、个人知识管理。
 
-[30 秒体验](#30-秒体验) · [功能一览](#功能一览) · [界面预览](#界面预览) · [技术栈](#技术栈) · [测试](#文档与质量) · [GitHub Actions](https://github.com/qweijiaq/folio/actions/workflows/ci.yml)
+[30 秒体验](#30-秒体验) · [功能一览](#功能一览) · [界面预览](#界面预览) · [部署指南](DEPLOY.md) · [技术栈](#技术栈) · [测试](#文档与质量) · [GitHub Actions](https://github.com/qweijiaq/folio/actions/workflows/ci.yml)
 
 > 线上站正在备案，暂时没有公开 Demo；可以先按下面的 Mock 模式在本地一键体验，截图来自当前界面。
 
@@ -136,6 +136,8 @@ folio/
 │   └── smoke.py            # 运行中实例的端到端冒烟测试
 ├── deploy/
 │   ├── Caddyfile           # 可选 Caddy 自动 HTTPS
+│   ├── folio-backup.service
+│   ├── folio-backup.timer
 │   ├── folio-monitor.service
 │   ├── folio-monitor.timer
 │   ├── folio-offsite-backup.service
@@ -144,6 +146,7 @@ folio/
 ├── docker-compose.edge.yml # 可选 Caddy HTTPS 组合
 ├── Dockerfile              # 前端构建 + Go 编译 + 运行镜像
 ├── dev.sh                  # 一键启动前后端
+├── DEPLOY.md               # 从空服务器到 HTTPS 的完整部署与功能开启指南
 ├── TESTING.md              # 自测清单与故障排查
 └── README.md
 ```
@@ -175,6 +178,8 @@ docker compose up -d --build
 - 应用容器内的环境变量已经配置好 MySQL 与 Redis。
 - 没有设置 `FOLIO_SECRET` 时 compose 会直接报错；不再使用弱默认密钥。
 
+> 从零开始部署（DNS、安全组、Caddy、SMTP、七牛、OSS、监控、备份）请看 [DEPLOY.md](DEPLOY.md)。
+
 只启动数据库，应用在本地跑：
 
 ```bash
@@ -202,6 +207,7 @@ cd web && npm install && npm run dev
 
 ### 文档与质量
 
+- [部署与功能开启指南](DEPLOY.md)
 - [测试清单与故障排查](TESTING.md)
 - `go test ./...`：后端集成测试（临时 SQLite，不依赖外部服务）
 - `cd web && npm test`：Vitest 单元测试
