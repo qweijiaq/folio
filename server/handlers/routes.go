@@ -176,6 +176,7 @@ func (a *API) Routes(r *gin.Engine) {
 	admin.GET("/stats", a.StaffOnly(), a.AdminStats)
 	admin.GET("/dashboard", a.StaffOnly(), a.AdminDashboard)
 	admin.GET("/export", a.StaffOnly(), a.ExportContent)
+	admin.POST("/publish/review", a.StaffOnly(), a.PublishReview)
 	admin.GET("/settings", a.SuperAdminOnly(), a.AdminSettings)
 	admin.PUT("/settings", a.SuperAdminOnly(), a.AdminSettingsUpdate)
 	admin.GET("/access", a.SuperAdminOnly(), a.AdminAccess)

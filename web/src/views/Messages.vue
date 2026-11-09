@@ -371,6 +371,16 @@ watch(userQuery, onSearchInput)
 
 onMounted(async () => {
   await refreshInbox()
+  await loadConversations()
+  // 没有私信、只有通知时，默认进入通知页；有私信则保持默认私信
+  if (
+    !route.query.tab &&
+    !withUser.value &&
+    conversations.value.length === 0 &&
+    (auth.unread.notifications > 0 || auth.unread.notices > 0)
+  ) {
+    await router.replace({ path: '/messages', query: { tab: 'notifications' } })
+  }
   connectWS()
   pollTimer = window.setInterval(() => {
     if (document.visibilityState === 'hidden') return

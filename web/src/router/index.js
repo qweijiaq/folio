@@ -22,6 +22,12 @@ const routes = [
     component: () => import('../views/Write.vue'),
     meta: { title: '写作', auth: true, staff: true }
   },
+  {
+    path: '/publish',
+    name: 'publish',
+    component: () => import('../views/Publish.vue'),
+    meta: { title: '发布助手', auth: true, staff: true }
+  },
   { path: '/messages', name: 'messages', component: () => import('../views/Messages.vue'), meta: { title: '消息', auth: true } },
   { path: '/ask', name: 'ask', component: () => import('../views/Ask.vue'), meta: { title: '问 AI', auth: true } },
   { path: '/me', name: 'me', component: () => import('../views/Me.vue'), meta: { title: '我的', auth: true } },

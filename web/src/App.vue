@@ -148,6 +148,9 @@ onBeforeUnmount(() => {
             <Icon name="message" :size="19" />
             <span v-if="unreadTotal" class="nav-badge">{{ unreadTotal > 9 ? '9+' : unreadTotal }}</span>
           </RouterLink>
+          <RouterLink v-if="staff" to="/publish" class="icon-btn" aria-label="发布助手" title="发布助手">
+            <Icon name="spark" :size="18" />
+          </RouterLink>
           <RouterLink v-if="staff" to="/admin" class="icon-btn" aria-label="管理后台" title="管理后台">
             <Icon name="settings" :size="18" />
           </RouterLink>
@@ -178,6 +181,9 @@ onBeforeUnmount(() => {
                 <RouterLink v-if="staff" to="/write" class="dropdown-item">
                   <Icon name="edit" :size="16" /> 写点什么
                 </RouterLink>
+                <RouterLink v-if="staff" to="/publish" class="dropdown-item">
+                  <Icon name="spark" :size="16" /> 发布助手
+                </RouterLink>
                 <RouterLink to="/messages" class="dropdown-item">
                   <Icon name="message" :size="16" /> 消息
                   <span v-if="unreadTotal" class="inline-badge">{{ unreadTotal }}</span>
@@ -206,6 +212,7 @@ onBeforeUnmount(() => {
             <RouterLink to="/docs" class="mobile-link">文档</RouterLink>
             <RouterLink to="/series" class="mobile-link">合集</RouterLink>
             <RouterLink to="/about" class="mobile-link">关于</RouterLink>
+            <RouterLink v-if="staff" to="/publish" class="mobile-link">发布助手</RouterLink>
             <RouterLink v-if="staff" to="/admin" class="mobile-link">管理后台</RouterLink>
             <RouterLink v-if="auth.user" to="/messages" class="mobile-link">消息</RouterLink>
             <RouterLink v-if="auth.user" to="/me" class="mobile-link">我的</RouterLink>
@@ -242,6 +249,7 @@ onBeforeUnmount(() => {
             <div class="footer-col">
               <h4>参与</h4>
               <RouterLink v-if="staff" to="/write">写文章</RouterLink>
+              <RouterLink v-if="staff" to="/publish">发布助手</RouterLink>
               <RouterLink v-if="staff" to="/admin">管理后台</RouterLink>
               <RouterLink to="/messages">消息</RouterLink>
               <RouterLink v-if="auth.user" to="/ask">问 AI</RouterLink>

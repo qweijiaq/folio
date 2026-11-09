@@ -163,8 +163,13 @@
   text-align: center;
 }
 
+.prose p.md-image img {
+  margin-bottom: 0.45em;
+}
+
 .prose p.md-caption {
-  margin-top: -0.4em;
+  margin-top: 0;
+  margin-bottom: 2em;
   color: var(--ink-faint);
   font-size: 13px;
   text-align: center;
