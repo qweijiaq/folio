@@ -131,8 +131,15 @@ folio/
 │   ├── e2e-server.sh       # E2E 独立 SQLite 演示服务
 │   ├── backup.sh           # MySQL + 上传目录备份
 │   ├── deploy.sh           # 生产服务器一键拉取、重建和更新
+│   ├── monitor.py          # 生产健康检查与邮件告警
+│   ├── offsite-backup.sh   # 加密上传每日备份到阿里云 OSS
 │   └── smoke.py            # 运行中实例的端到端冒烟测试
-├── deploy/Caddyfile        # 可选 Caddy 自动 HTTPS
+├── deploy/
+│   ├── Caddyfile           # 可选 Caddy 自动 HTTPS
+│   ├── folio-monitor.service
+│   ├── folio-monitor.timer
+│   ├── folio-offsite-backup.service
+│   └── folio-offsite-backup.timer
 ├── docker-compose.yml      # MySQL + Redis + 应用
 ├── docker-compose.edge.yml # 可选 Caddy HTTPS 组合
 ├── Dockerfile              # 前端构建 + Go 编译 + 运行镜像
@@ -367,6 +374,11 @@ cd /opt/folio
 | `FOLIO_SMTP_FROM_NAME` | 站点名 | 发件人显示名 |
 | `FOLIO_SMTP_TLS` | `465` 端口为 `1` | 是否使用隐式 TLS（465）；587 端口走 STARTTLS |
 | `FOLIO_MAIL_DEBUG` | `0` | 设为 `1` 时不发邮件，把验证码写进日志并在界面显示，仅用于自测 |
+| `FOLIO_ALERT_EMAIL` | 空 | 监控告警收件邮箱；留空时使用 `FOLIO_SMTP_FROM` |
+| `OSS_BUCKET` | 空 | 异地备份 OSS Bucket；留空则关闭异地备份 |
+| `OSS_REGION` | 空 | OSS 区域，例如 `cn-shanghai` |
+| `OSS_PREFIX` | `folio-backups` | 异地备份对象前缀 |
+| `OSS_BACKUP_PASSPHRASE_FILE` | `/root/.folio-backup-pass` | 加密口令文件；存在时上传 `.enc` 加密包 |
 | `FOLIO_LOGIN_CAPTCHA` | `0` | 设为 `1` 时，密码登录和发送邮箱验证码需要图形验证码 |
 | `FOLIO_CAPTCHA_DEBUG` | `0` | 设为 `1` 时接口返回图形验证码答案并在页面自动填入，**仅本地自测** |
 | `FOLIO_QQ_APP_ID` | 空 | QQ 互联应用 ID；三项都填后可在「注册与邀请」开启 QQ 登录 |
@@ -779,6 +791,65 @@ docker compose cp /tmp/uploads/. app:/app/data/uploads/
 ```
 
 如果使用七牛云存储，图片不在本地上传目录里，需要在七牛侧另做备份与生命周期管理。
+
+### 异地备份（可选）
+
+`scripts/offsite-backup.sh` 会先生成本地备份，再用 `openssl` 加密并上传到阿里云 OSS。
+
+1. 创建一个**私有** Bucket，建议开启服务端加密，并在 Bucket 设置生命周期（例如保留 30 / 90 天）。
+2. 推荐给 ECS 绑定一个只授权该 Bucket 的 RAM 角色，然后配置 `aliyun` CLI：
+   ```bash
+   aliyun configure set --profile default --mode EcsRamRole \
+     --ram-role-name <角色名> --region cn-shanghai
+   ```
+   也可以使用 RAM 子账号 AccessKey：`aliyun configure`。
+3. 在 `.env` 设置 `OSS_BUCKET`、`OSS_REGION`、`OSS_PREFIX`。
+4. 生成加密口令，**同时保存到你的密码管理器**：
+   ```bash
+   openssl rand -base64 32 > /root/.folio-backup-pass
+   chmod 600 /root/.folio-backup-pass
+   ```
+5. 手动测试：
+   ```bash
+   ./scripts/offsite-backup.sh
+   ```
+6. 安装每日 04:00 的定时器：
+   ```bash
+   sudo install -m 644 deploy/folio-offsite-backup.service /etc/systemd/system/
+   sudo install -m 644 deploy/folio-offsite-backup.timer /etc/systemd/system/
+   sudo systemctl daemon-reload
+   sudo systemctl enable --now folio-offsite-backup.timer
+   ```
+
+> 加密口令文件丢失后，OSS 上的备份将无法解密；请务必在服务器之外保留一份。
+
+## 监控与告警
+
+`scripts/monitor.py` 每 5 分钟检查一次：
+
+- 应用本地 `/api/health` 和公网 HTTPS `/api/health`；
+- app / db / redis / caddy 容器状态；
+- 根分区磁盘使用率、可用内存；
+- 最近一次备份是否超过 36 小时；
+- HTTPS 证书是否在 14 天内过期。
+
+异常时通过 `.env` 里的 SMTP 配置发邮件到 `FOLIO_ALERT_EMAIL`；同一异常 6 小时内不会重复发送，恢复后会再发一封恢复邮件。
+
+安装 systemd 定时器：
+
+```bash
+sudo install -m 644 deploy/folio-monitor.service /etc/systemd/system/
+sudo install -m 644 deploy/folio-monitor.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now folio-monitor.timer
+sudo systemctl list-timers folio-monitor.timer
+```
+
+手动测试邮件：
+
+```bash
+python3 scripts/monitor.py --test-email
+```
 
 ## 一些实现约定
 

@@ -1,0 +1,9 @@
+[Unit]
+Description=Folio offsite backup to Aliyun OSS
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/folio
+ExecStart=/opt/folio/scripts/offsite-backup.sh

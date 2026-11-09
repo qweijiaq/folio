@@ -1,0 +1,9 @@
+[Unit]
+Description=Folio health monitor
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/folio
+ExecStart=/usr/bin/python3 /opt/folio/scripts/monitor.py
