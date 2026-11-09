@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"folio/server/art"
@@ -12,12 +13,15 @@ import (
 
 func CORS(cfg config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if origin := c.GetHeader("Origin"); origin != "" {
-			c.Header("Access-Control-Allow-Origin", origin)
+		if origin := strings.TrimSpace(c.GetHeader("Origin")); origin != "" {
 			c.Header("Vary", "Origin")
-			c.Header("Access-Control-Allow-Credentials", "true")
-			c.Header("Access-Control-Allow-Headers", "Authorization, Content-Type")
-			c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+			if originAllowed(cfg, origin) {
+				c.Header("Access-Control-Allow-Origin", origin)
+				c.Header("Access-Control-Allow-Credentials", "true")
+				c.Header("Access-Control-Allow-Headers", "Authorization, Content-Type")
+				c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+				c.Header("Access-Control-Max-Age", "600")
+			}
 		}
 		if c.Request.Method == http.MethodOptions {
 			c.AbortWithStatus(http.StatusNoContent)
@@ -68,7 +72,7 @@ func (a *API) Routes(r *gin.Engine) {
 	g.GET("/docs/:id", a.OptionalAuth(), a.DocDetail)
 	g.GET("/docs/:id/access", a.OptionalAuth(), a.docAccessInfo)
 	g.GET("/docs/:id/backlinks", a.OptionalAuth(), a.DocBacklinks)
-	g.GET("/docs/:id/related", a.RelatedDocs)
+	g.GET("/docs/:id/related", a.OptionalAuth(), a.RelatedDocs)
 	g.GET("/docs/:id/neighbors", a.OptionalAuth(), a.DocNeighbors)
 	authedDocs := g.Group("")
 	authedDocs.Use(a.Auth())
@@ -211,7 +215,11 @@ func (a *API) Health(c *gin.Context) {
 			redisStatus = "up"
 		}
 	}
-	c.JSON(http.StatusOK, gin.H{
+	status := http.StatusOK
+	if dbStatus != "up" {
+		status = http.StatusServiceUnavailable
+	}
+	c.JSON(status, gin.H{
 		"ok":       dbStatus == "up",
 		"db":       a.Cfg.DBDriver,
 		"dbStatus": dbStatus,

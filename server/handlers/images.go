@@ -112,6 +112,10 @@ func (a *API) ImageUpload(c *gin.Context) {
 	}
 
 	user := currentUser(c)
+	if ok, retry := a.Limiter.Allow(userRateKey("upload", user.ID), 30, 10*time.Minute); !ok {
+		tooMany(c, retry)
+		return
+	}
 	sum := sha256.Sum256(data)
 	hash := hex.EncodeToString(sum[:])
 

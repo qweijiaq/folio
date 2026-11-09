@@ -36,10 +36,23 @@ func toBrief(u models.User) userBrief {
 }
 
 func (a *API) countsFor(u *models.User) gin.H {
+	return a.countsForUser(u, true)
+}
+
+// countsForUser 对访客隐藏私密文档及其收藏数量；作者本人和超管仍然看到完整计数。
+func (a *API) countsForUser(u *models.User, includePrivate bool) gin.H {
 	var articles, docs, favorites, followers, following int64
 	a.DB.Model(&models.Document{}).Where("author_id = ? AND kind = ? AND status = ?", u.ID, models.KindArticle, models.StatusPublished).Count(&articles)
-	a.DB.Model(&models.Document{}).Where("author_id = ? AND kind = ? AND status = ?", u.ID, models.KindDoc, models.StatusPublished).Count(&docs)
-	a.DB.Model(&models.Favorite{}).Where("user_id = ?", u.ID).Count(&favorites)
+	docQuery := a.DB.Model(&models.Document{}).Where("author_id = ? AND kind = ? AND status = ?", u.ID, models.KindDoc, models.StatusPublished)
+	if !includePrivate {
+		docQuery = docQuery.Where("private = ?", false)
+	}
+	docQuery.Count(&docs)
+	favQuery := a.DB.Model(&models.Favorite{}).Where("user_id = ?", u.ID)
+	if !includePrivate {
+		favQuery = favQuery.Where("doc_id NOT IN (?)", a.DB.Model(&models.Document{}).Select("id").Where("private = ?", true))
+	}
+	favQuery.Count(&favorites)
 	a.DB.Model(&models.Follow{}).Where("followee_id = ?", u.ID).Count(&followers)
 	a.DB.Model(&models.Follow{}).Where("follower_id = ?", u.ID).Count(&following)
 	return gin.H{
@@ -365,7 +378,7 @@ func (a *API) UserProfile(c *gin.Context) {
 		isFollowing = n > 0
 	}
 	setting := a.userSetting(u.ID)
-	counts := a.countsFor(&u)
+	counts := a.countsForUser(&u, isSelf || isSuperAdmin(viewer))
 	if !isSelf && !isSuperAdmin(viewer) {
 		if !setting.OpenFollow {
 			counts["following"] = int64(0)
@@ -420,7 +433,7 @@ func (a *API) peopleList(c *gin.Context, ids []uint, total int64) {
 			continue
 		}
 		var docs int64
-		a.DB.Model(&models.Document{}).Where("author_id = ? AND status = ?", u.ID, models.StatusPublished).Count(&docs)
+		a.DB.Model(&models.Document{}).Where("author_id = ? AND status = ? AND private = ?", u.ID, models.StatusPublished, false).Count(&docs)
 		following := false
 		if viewer != nil && viewer.ID != u.ID {
 			var n int64

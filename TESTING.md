@@ -4,6 +4,8 @@
 
 ## 0. 先选运行模式
 
+> 非演示模式必须设置至少 32 个字符的 `FOLIO_SECRET`，否则服务会拒绝启动。Docker 全栈请先 `cp .env.example .env`；首次部署可同时设置 `FOLIO_ADMIN_USERNAME` / `FOLIO_ADMIN_PASSWORD` 创建超管。
+
 | 目的 | 命令 |
 | --- | --- |
 | 没有 Docker、没有数据库，只想看效果 | `./scripts/dev-mock.sh` |
@@ -605,7 +607,7 @@ Redis 只存缓存和黑名单，清空不会影响业务数据。
 Cannot connect to the Docker daemon
 ```
 
-打开 Docker Desktop，等状态变为 Running 后重试。第一次构建需要拉取 `node:22-alpine`、`golang:1.24-alpine`、`alpine:3.20`，网络慢时可能超时，单独 `docker pull` 后重试即可。
+打开 Docker Desktop，等状态变为 Running 后重试。第一次构建需要拉取 `node:22-alpine`、`golang:1.26-alpine`、`alpine:3.22`，网络慢时可能超时，单独 `docker pull` 后重试即可。
 
 ### 端口被占用
 

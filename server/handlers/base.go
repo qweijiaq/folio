@@ -66,6 +66,9 @@ func pageParams(c *gin.Context) (page, size int) {
 	if page < 1 {
 		page = 1
 	}
+	if page > 10000 {
+		page = 10000
+	}
 	if size < 1 || size > 50 {
 		size = 12
 	}

@@ -8,6 +8,7 @@ const props = defineProps({
   modelValue: { type: String, default: '' },
   email: { type: String, default: '' },
   purpose: { type: String, required: true },
+  invite: { type: String, default: '' },
   disabled: { type: Boolean, default: false }
 })
 
@@ -50,6 +51,7 @@ async function send() {
     const data = await api.post('/auth/email/code', {
       email,
       purpose: props.purpose,
+      invite: props.invite.trim(),
       captchaId: captchaId.value,
       captchaCode: captchaCode.value
     })

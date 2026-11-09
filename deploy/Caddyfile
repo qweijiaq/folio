@@ -10,5 +10,10 @@
 		Referrer-Policy "strict-origin-when-cross-origin"
 		Permissions-Policy "camera=(), microphone=(), geolocation=()"
 	}
-	reverse_proxy app:8080
+	reverse_proxy app:8080 {
+		# 覆盖客户端伪造的转发头，只把真实客户端 IP 交给应用。
+		header_up X-Real-IP {remote_host}
+		header_up X-Forwarded-For {remote_host}
+		header_up X-Forwarded-Proto {scheme}
+	}
 }

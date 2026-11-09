@@ -1,27 +1,32 @@
 services:
   db:
     image: mysql:8.4
+    restart: unless-stopped
     command:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
     environment:
-      MYSQL_ROOT_PASSWORD: folio_root
-      MYSQL_DATABASE: folio
-      MYSQL_USER: folio
-      MYSQL_PASSWORD: folio_pass
+      MYSQL_ROOT_PASSWORD: "${MYSQL_ROOT_PASSWORD:-folio_root}"
+      MYSQL_DATABASE: "${MYSQL_DATABASE:-folio}"
+      MYSQL_USER: "${MYSQL_USER:-folio}"
+      MYSQL_PASSWORD: "${MYSQL_PASSWORD:-folio_pass}"
+      TZ: "${TZ:-Asia/Shanghai}"
     ports:
       - "127.0.0.1:3306:3306"
     volumes:
       - mysql-data:/var/lib/mysql
     healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -ufolio -pfolio_pass --silent"]
+      test: ["CMD-SHELL", 'mysqladmin ping -h 127.0.0.1 -u"$$MYSQL_USER" -p"$$MYSQL_PASSWORD" --silent']
       interval: 5s
       timeout: 3s
       retries: 30
 
   redis:
     image: redis:7-alpine
+    restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
+    environment:
+      TZ: "${TZ:-Asia/Shanghai}"
     ports:
       - "127.0.0.1:6379:6379"
     volumes:
@@ -33,7 +38,11 @@ services:
       retries: 20
 
   app:
-    build: .
+    build:
+      context: .
+      args:
+        NPM_REGISTRY: "${NPM_REGISTRY:-https://registry.npmjs.org}"
+        GOPROXY: "${GOPROXY:-https://proxy.golang.org,direct}"
     depends_on:
       db:
         condition: service_healthy
@@ -43,7 +52,8 @@ services:
       FOLIO_ADDR: ":8080"
       FOLIO_WEB: "/app/web/dist"
       FOLIO_DB_DRIVER: "mysql"
-      FOLIO_MYSQL_DSN: "folio:folio_pass@tcp(db:3306)/folio?charset=utf8mb4&parseTime=True&loc=Local"
+      FOLIO_MYSQL_DSN: "${FOLIO_MYSQL_DSN:-folio:folio_pass@tcp(db:3306)/folio?charset=utf8mb4&parseTime=True&loc=Local}"
+      TZ: "${TZ:-Asia/Shanghai}"
       FOLIO_STORAGE: "${FOLIO_STORAGE:-local}"
       FOLIO_UPLOAD_DIR: "/app/data/uploads"
       FOLIO_QINIU_ACCESS_KEY: "${FOLIO_QINIU_ACCESS_KEY:-}"
@@ -74,11 +84,15 @@ services:
       FOLIO_QQ_APP_KEY: "${FOLIO_QQ_APP_KEY:-}"
       FOLIO_QQ_REDIRECT: "${FOLIO_QQ_REDIRECT:-}"
       FOLIO_WEB_URL: "${FOLIO_WEB_URL:-}"
-      FOLIO_SECRET: "${FOLIO_SECRET:-please-change-this-secret}"
-      FOLIO_DEMO: "${FOLIO_DEMO:-1}"
+      FOLIO_SECRET: "${FOLIO_SECRET:?请先在 .env 设置至少 32 个字符的 FOLIO_SECRET}"
+      FOLIO_DEMO: "${FOLIO_DEMO:-0}"
+      FOLIO_ADMIN_USERNAME: "${FOLIO_ADMIN_USERNAME:-}"
+      FOLIO_ADMIN_PASSWORD: "${FOLIO_ADMIN_PASSWORD:-}"
+      FOLIO_TRUSTED_PROXIES: "${FOLIO_TRUSTED_PROXIES:-}"
       FOLIO_SITE_URL: "${FOLIO_SITE_URL:-}"
-      FOLIO_SITE_NAME: "知微"
-      FOLIO_SITE_OWNER: "weijia"
+      FOLIO_SITE_NAME: "${FOLIO_SITE_NAME:-知微}"
+      FOLIO_SITE_DESC: "${FOLIO_SITE_DESC:-}"
+      FOLIO_SITE_OWNER: "${FOLIO_SITE_OWNER:-weijia}"
     ports:
       - "127.0.0.1:8080:8080"
     volumes:

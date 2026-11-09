@@ -3,6 +3,8 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
+	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -113,15 +115,46 @@ func (h *wsHub) send(userIDs []uint, payload any) {
 	}
 }
 
-var wsUpgrader = websocket.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
-	CheckOrigin:     func(*http.Request) bool { return true },
+// wsUpgrader 把 token 放进 WebSocket 子协议，避免 JWT 出现在 URL 和访问日志里。
+// 同时只允许同源、站点域名和本地开发地址发起连接。
+func (a *API) wsUpgrader(token string) websocket.Upgrader {
+	upgrader := websocket.Upgrader{ReadBufferSize: 1024, WriteBufferSize: 1024}
+	if token != "" {
+		upgrader.Subprotocols = []string{token}
+	}
+	upgrader.CheckOrigin = func(r *http.Request) bool {
+		origin := strings.TrimSpace(r.Header.Get("Origin"))
+		if origin == "" {
+			return true
+		}
+		if parsed, err := url.Parse(origin); err == nil && strings.EqualFold(parsed.Host, r.Host) {
+			return true
+		}
+		return originAllowed(a.Cfg, origin)
+	}
+	return upgrader
 }
 
-// WebSocket 建立实时连接。浏览器无法设置 Authorization 头，因此 token 通过查询参数传入。
+func wsProtocolToken(r *http.Request) string {
+	protocols := websocket.Subprotocols(r)
+	for _, protocol := range protocols {
+		if strings.HasPrefix(protocol, "ey") && strings.Count(protocol, ".") == 2 {
+			return protocol
+		}
+	}
+	if len(protocols) == 1 {
+		return protocols[0]
+	}
+	return ""
+}
+
+// WebSocket 建立实时连接。浏览器无法设置 Authorization 头，因此 token 放在
+// Sec-WebSocket-Protocol 子协议里；同时保留 ?token= 和 Authorization 作为兼容回退。
 func (a *API) WebSocket(c *gin.Context) {
-	token := c.Query("token")
+	token := wsProtocolToken(c.Request)
+	if token == "" {
+		token = c.Query("token")
+	}
 	if token == "" {
 		header := c.GetHeader("Authorization")
 		token = header
@@ -135,7 +168,8 @@ func (a *API) WebSocket(c *gin.Context) {
 		return
 	}
 
-	conn, err := wsUpgrader.Upgrade(c.Writer, c.Request, nil)
+	upgrader := a.wsUpgrader(token)
+	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		return
 	}

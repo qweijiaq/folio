@@ -22,7 +22,15 @@ if ! docker compose cp app:/app/data/uploads "$TMP/uploads" >/dev/null 2>&1; the
 fi
 
 ARCHIVE="$DEST/folio-$STAMP.tar.gz"
-tar -czf "$ARCHIVE" -C "$TMP" folio.sql uploads
+FILES=(folio.sql uploads)
+# FOLIO_SECRET 丢失会导致已有 AI Key / 七牛密钥无法解密，必须一起备份。
+if [ -f "$ROOT/.env" ]; then
+  cp "$ROOT/.env" "$TMP/env.backup"
+  chmod 600 "$TMP/env.backup"
+  FILES+=(env.backup)
+fi
+tar -czf "$ARCHIVE" -C "$TMP" "${FILES[@]}"
+chmod 600 "$ARCHIVE"
 ln -sfn "$(basename "$ARCHIVE")" "$DEST/latest.tar.gz"
 
 if [[ "$KEEP_DAYS" =~ ^[0-9]+$ ]] && (( KEEP_DAYS > 0 )); then
@@ -32,3 +40,4 @@ fi
 echo "备份完成：$ARCHIVE"
 echo "恢复数据库：tar -xzf <备份> -C /tmp && docker compose exec -T db sh -c 'exec mysql -u\"\$MYSQL_USER\" -p\"\$MYSQL_PASSWORD\" \"\$MYSQL_DATABASE\"' < /tmp/folio.sql"
 echo "恢复上传目录：docker compose cp /tmp/uploads/. app:/app/data/uploads/"
+echo "恢复密钥：备份包内的 env.backup 含 FOLIO_SECRET，请妥善保管；丢失后加密的 AI/七牛密钥无法解密。"

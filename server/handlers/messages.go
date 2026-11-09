@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -109,6 +110,10 @@ func (a *API) MessageThread(c *gin.Context) {
 
 func (a *API) MessageSend(c *gin.Context) {
 	me := currentUser(c)
+	if ok, retry := a.Limiter.Allow(userRateKey("message", me.ID), 120, time.Minute); !ok {
+		tooMany(c, retry)
+		return
+	}
 	peer, err := a.userByName(c.Param("username"))
 	if err != nil {
 		fail(c, http.StatusNotFound, "用户不存在")
@@ -151,14 +156,29 @@ func (a *API) MessageSend(c *gin.Context) {
 			bad(c, "图片说明最多 500 个字符")
 			return
 		}
-		if in.ImageURL == "" || !strings.HasPrefix(in.ImageURL, "/uploads/") ||
-			strings.Contains(in.ImageURL, "..") || runeLen(in.ImageURL) > 512 {
+		if in.ImageURL == "" || strings.Contains(in.ImageURL, "..") || runeLen(in.ImageURL) > 512 {
 			bad(c, "图片地址不正确")
 			return
 		}
-		relative := strings.TrimPrefix(in.ImageURL, "/uploads/")
+		// 本地存储返回 /uploads/...，七牛存储返回完整 URL；两种都要能发。
+		query := a.DB.Where("user_id = ?", me.ID)
+		switch {
+		case strings.HasPrefix(in.ImageURL, "/uploads/"):
+			query = query.Where("path = ?", strings.TrimPrefix(in.ImageURL, "/uploads/"))
+		case strings.HasPrefix(in.ImageURL, "http://"), strings.HasPrefix(in.ImageURL, "https://"):
+			parsed, err := url.Parse(in.ImageURL)
+			if err != nil || parsed.Host == "" {
+				bad(c, "图片地址不正确")
+				return
+			}
+			// 同时按对象键匹配，切换七牛绑定域名后旧图仍可发送。
+			query = query.Where("(url = ? OR path = ?)", in.ImageURL, strings.TrimPrefix(parsed.Path, "/"))
+		default:
+			bad(c, "图片地址不正确")
+			return
+		}
 		var image models.Image
-		if err := a.DB.Where("user_id = ? AND path = ?", me.ID, relative).First(&image).Error; err != nil {
+		if err := query.First(&image).Error; err != nil {
 			bad(c, "图片不存在或不属于你")
 			return
 		}

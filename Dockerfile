@@ -1,13 +1,16 @@
 # ---------- 前端构建 ----------
 FROM node:22-alpine AS web
 WORKDIR /app/web
+ARG NPM_REGISTRY=https://registry.npmjs.org
 COPY web/package.json web/package-lock.json ./
-RUN npm ci
+RUN npm ci --registry=${NPM_REGISTRY}
 COPY web/ ./
 RUN npm run build
 
 # ---------- 后端构建 ----------
-FROM golang:1.24-alpine AS server
+FROM golang:1.26-alpine AS server
+ARG GOPROXY=https://proxy.golang.org,direct
+ENV GOPROXY=${GOPROXY}
 WORKDIR /src
 COPY server/go.mod server/go.sum ./
 RUN go mod download
@@ -16,7 +19,7 @@ ENV CGO_ENABLED=0
 RUN go build -trimpath -ldflags "-s -w" -o /out/folio .
 
 # ---------- 运行镜像 ----------
-FROM alpine:3.20
+FROM alpine:3.22
 RUN apk add --no-cache ca-certificates tzdata
 WORKDIR /app
 COPY --from=server /out/folio /app/folio
@@ -25,6 +28,7 @@ RUN mkdir -p /app/data/uploads
 ENV FOLIO_ADDR=:8080 \
     FOLIO_WEB=/app/web/dist \
     FOLIO_DB=/app/data/folio.db \
-    FOLIO_UPLOAD_DIR=/app/data/uploads
+    FOLIO_UPLOAD_DIR=/app/data/uploads \
+    TZ=Asia/Shanghai
 EXPOSE 8080
 CMD ["/app/folio"]

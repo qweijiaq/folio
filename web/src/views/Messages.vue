@@ -278,7 +278,8 @@ function handleRealtimeMessage(message) {
 function connectWS() {
   if (socket || !getToken() || closedByUser) return
   const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
-  const ws = new WebSocket(`${protocol}://${window.location.host}/api/ws?token=${encodeURIComponent(getToken())}`)
+  // token 放在 WebSocket 子协议里，避免出现在 URL、访问日志和代理日志中。
+  const ws = new WebSocket(`${protocol}://${window.location.host}/api/ws`, [getToken()])
   socket = ws
   ws.onopen = () => {
     wsConnected.value = true

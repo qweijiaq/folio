@@ -11,13 +11,16 @@ if [ "${FOLIO_NO_ENV:-0}" != "1" ] && [ -f .env ]; then
   set +a
 fi
 
+# 本地开发没有 .env 时也给出一个不用于生产的密钥，避免启动检查拦截。
+export FOLIO_SECRET="${FOLIO_SECRET:-folio-local-dev-secret-not-for-production-please-override}"
+
 if [ ! -d web/node_modules ]; then
   echo "首次运行，安装前端依赖…"
   (cd web && npm install)
 fi
 
 if [ ! -f server/data/folio.db ] && [ "${FOLIO_DB_DRIVER:-sqlite}" = "sqlite" ]; then
-  echo "首次启动会写入演示内容（可用 FOLIO_DEMO=0 关闭）。"
+  echo "首次启动：数据库为空。需要演示数据请设置 FOLIO_DEMO=1（默认不写入）。"
 fi
 
 if [ "${FOLIO_ADDR:-:8080}" = ":8080" ] && lsof -nP -iTCP:8080 -sTCP:LISTEN >/dev/null 2>&1; then
@@ -28,7 +31,7 @@ fi
 
 echo "数据库模式：${FOLIO_DB_DRIVER:-sqlite}　Redis：${FOLIO_REDIS_ADDR:-关闭}"
 
-(cd server && FOLIO_DEMO="${FOLIO_DEMO:-1}" go run .) &
+(cd server && FOLIO_DEMO="${FOLIO_DEMO:-0}" go run .) &
 SERVER_PID=$!
 
 cleanup() {

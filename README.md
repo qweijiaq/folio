@@ -1,7 +1,7 @@
 # 知微 · Folio
 
 [![CI](https://github.com/qweijiaq/folio/actions/workflows/ci.yml/badge.svg)](https://github.com/qweijiaq/folio/actions/workflows/ci.yml)
-[![Go](https://img.shields.io/badge/Go-1.24-00ADD8?logo=go&logoColor=white)](https://go.dev/)
+[![Go](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go&logoColor=white)](https://go.dev/)
 [![Vue](https://img.shields.io/badge/Vue-3-42b883?logo=vuedotjs&logoColor=white)](https://vuejs.org/)
 [![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -93,7 +93,7 @@ Mock 模式每次启动都会重新写入演示数据，退出即清空，适合
 
 | 层 | 选型 |
 | --- | --- |
-| 后端 | Go 1.24 · Gin · GORM |
+| 后端 | Go 1.26 · Gin · GORM |
 | 数据库 | SQLite（默认）/ MySQL 8.4 |
 | 缓存 | Redis 7（可选） |
 | 图片存储 | 本地磁盘（默认）/ 七牛云对象存储（可选） |
@@ -130,6 +130,7 @@ folio/
 │   ├── dev-mysql.sh        # 本地开发 + Docker MySQL/Redis
 │   ├── e2e-server.sh       # E2E 独立 SQLite 演示服务
 │   ├── backup.sh           # MySQL + 上传目录备份
+│   ├── deploy.sh           # 生产服务器一键拉取、重建和更新
 │   └── smoke.py            # 运行中实例的端到端冒烟测试
 ├── deploy/Caddyfile        # 可选 Caddy 自动 HTTPS
 ├── docker-compose.yml      # MySQL + Redis + 应用
@@ -157,12 +158,15 @@ cd folio
 ### 2. Docker 全栈（MySQL + Redis + 应用）
 
 ```bash
+cp .env.example .env
+# 修改 .env：FOLIO_SECRET 至少 32 个字符；首次部署建议同时设置 FOLIO_ADMIN_USERNAME/PASSWORD
 docker compose up -d --build
 ```
 
 - 站点：<http://localhost:8080>（Go 直接托管构建好的前端）
 - MySQL：`127.0.0.1:3306`，Redis：`127.0.0.1:6379`（默认只绑定本机，不暴露公网）
 - 应用容器内的环境变量已经配置好 MySQL 与 Redis。
+- 没有设置 `FOLIO_SECRET` 时 compose 会直接报错；不再使用弱默认密钥。
 
 只启动数据库，应用在本地跑：
 
@@ -182,7 +186,7 @@ docker compose up -d db redis
 也可以分开启动：
 
 ```bash
-cd server && go run .
+cd server && FOLIO_SECRET="本地开发用的至少32位随机字符串请不要用于生产" FOLIO_DEMO=0 go run .
 ```
 
 ```bash
@@ -216,7 +220,7 @@ cd web && npm install && npm run dev
 
 演示数据包含 5 位用户、10 篇已发布文章、14 篇文档、2 篇草稿、5 个文章分类，以及分布在文章与文档上的点赞、收藏、评论、关注、私信、通知和浏览历史。只有当用户表为空时才会写入演示数据。第一位注册的用户会自动成为超级管理员。
 
-> 上面的账号只用于 `FOLIO_DEMO=1` 的本地演示。正式站点请设置 `FOLIO_DEMO=0`，并在首次注册时设置自己的管理员密码。
+> 上面的账号只用于 `FOLIO_DEMO=1` 的本地演示。正式站点请设置 `FOLIO_DEMO=0`，并通过 `FOLIO_ADMIN_USERNAME` / `FOLIO_ADMIN_PASSWORD` 或首次注册创建自己的管理员。
 
 ## 角色与权限
 
@@ -299,17 +303,39 @@ Caddy 会自动申请和续期证书，并把请求反代到 `app:8080`；配置
 ```bash
 cd web && npm install && npm run build
 cd ../server && go build -o folio .
-FOLIO_SECRET="换成一个足够长的随机串" FOLIO_DEMO=0 ./folio
+FOLIO_SECRET="$(openssl rand -hex 32)" FOLIO_DEMO=0 \
+FOLIO_ADMIN_USERNAME=admin FOLIO_ADMIN_PASSWORD='换成一个强密码' ./folio
 ```
 
 Go 服务会自动托管 `../web/dist`，访问 <http://localhost:8080> 即可。前端路由已做 SPA 回退。
+
+> 如果空库启动时没有设置 `FOLIO_ADMIN_USERNAME` / `FOLIO_ADMIN_PASSWORD`，**第一位注册用户会成为超级管理员**。请先通过本机地址完成注册并关闭公开注册，再把站点暴露到公网。
+
+### Git 部署（服务器）
+
+```bash
+git clone https://github.com/qweijiaq/folio.git /opt/folio
+cd /opt/folio
+cp .env.example .env
+# 修改 .env：FOLIO_SECRET、域名、SMTP、MySQL 密码等
+./scripts/deploy.sh
+```
+
+后续更新只需要：
+
+```bash
+cd /opt/folio
+./scripts/deploy.sh
+```
+
+脚本会执行 `git pull --ff-only`、重建应用镜像，并用 `docker-compose.edge.yml` 更新全部容器。`.env`、`backups/` 等运行时文件已被 `.gitignore` 排除，不会被覆盖。
 
 ## 环境变量
 
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
 | `FOLIO_ADDR` | `:8080` | 监听地址 |
-| `FOLIO_SECRET` | 开发用默认值 | JWT 签名密钥，同时用于加密后台七牛密钥和用户选择保存的 AI Key；**部署时必须修改，修改后需重新填写这些密钥** |
+| `FOLIO_SECRET` | 开发用默认值 | JWT 签名密钥，同时用于加密后台七牛密钥和用户选择保存的 AI Key；**非演示模式必须设置 32 个字符以上的随机串，否则服务拒绝启动**；修改后需重新填写这些密钥 |
 | `FOLIO_DB_DRIVER` | `sqlite` | `sqlite` / `mysql` / `memory` |
 | `FOLIO_DB` | `./data/folio.db` | SQLite 文件路径 |
 | `FOLIO_MYSQL_DSN` | 空 | MySQL DSN，例如 `folio:folio_pass@tcp(127.0.0.1:3306)/folio?charset=utf8mb4&parseTime=True&loc=Local` |
@@ -349,13 +375,21 @@ Go 服务会自动托管 `../web/dist`，访问 <http://localhost:8080> 即可�
 | `FOLIO_QQ_API_BASE` | `https://graph.qq.com` | QQ 接口地址，一般无需修改 |
 | `FOLIO_WEB_URL` | 空 | QQ 登录成功后的前端地址；Vite 开发填 `http://localhost:5173`，同源部署留空 |
 | `FOLIO_WEB` | `../web/dist` | 前端构建产物目录 |
-| `FOLIO_DEMO` | `1` | 是否在空库时写入演示数据；`0` 关闭 |
+| `FOLIO_DEMO` | `0` | 是否在空库时写入演示数据；**正式部署保持 `0`** |
+| `FOLIO_ADMIN_USERNAME` | 空 | 可选：空库启动时创建超级管理员的用户名；避免第一个公网注册者抢到超管 |
+| `FOLIO_ADMIN_PASSWORD` | 空 | 可选：配合 `FOLIO_ADMIN_USERNAME` 使用，8-64 位；创建后建议从 `.env` 删除 |
+| `FOLIO_TRUSTED_PROXIES` | 本机 + Docker 私网 | 允许携带 `X-Forwarded-For` 的反向代理地址，逗号分隔；公网直连时应留空或只填代理地址 |
+| `TZ` | `Asia/Shanghai` | 容器和服务时区，影响每日阅读统计与数据看板日期 |
+| `NPM_REGISTRY` | npm 官方源 | 构建前端时的 npm 源；国内服务器可设为 `https://registry.npmmirror.com` |
+| `GOPROXY` | Go 官方代理 | 构建后端时的 Go 模块代理；国内服务器可设为 `https://goproxy.cn,direct` |
 | `FOLIO_SITE_NAME` | `知微` | 站点名 |
 | `FOLIO_SITE_DESC` | 一句话简介 | 站点描述 |
 | `FOLIO_SITE_OWNER` | `weijia` | 页脚署名 |
 | `FOLIO_SITE_URL` | 空 | 站点公开地址，例如 `https://example.com`；留空时按请求 Host 推导，生产环境建议显式配置 |
 
 复制 `.env.example` 为 `.env` 即可让 `./dev.sh` 读取。DSN 中含 `&`，在 `.env` 里请用引号包住。
+
+> 非演示模式下，弱 `FOLIO_SECRET` 会让服务拒绝启动；`.env` 含 JWT 密钥和 SMTP 授权码，请执行 `chmod 600 .env` 并纳入安全备份。首次部署建议用 `FOLIO_ADMIN_*` 创建超管，再关闭公开注册。
 
 ## 数据模型
 
@@ -731,7 +765,9 @@ Docker 部署使用内置脚本：
 ./scripts/backup.sh
 ```
 
-脚本会调用 `mysqldump --single-transaction` 导出数据库，复制 `app:/app/data/uploads`，生成 `backups/folio-YYYYMMDD-HHMMSS.tar.gz`，并更新 `backups/latest.tar.gz`。可以用 `BACKUP_DIR` 改目录，用 `BACKUP_KEEP_DAYS` 改保留天数（默认 14 天）。
+脚本会调用 `mysqldump --single-transaction` 导出数据库，复制 `app:/app/data/uploads`，同时把 `.env` 备份为 `env.backup`（含 `FOLIO_SECRET`），生成 `backups/folio-YYYYMMDD-HHMMSS.tar.gz`，并更新 `backups/latest.tar.gz`。可以用 `BACKUP_DIR` 改目录，用 `BACKUP_KEEP_DAYS` 改保留天数（默认 14 天）。
+
+> 备份包包含数据库、上传文件和站点密钥，请设置 `chmod 600` 并妥善保管；丢失 `env.backup` 会导致已加密的 AI Key 和七牛密钥无法解密。
 
 恢复时先解压，再导入数据库并复制上传目录：
 
@@ -739,6 +775,7 @@ Docker 部署使用内置脚本：
 tar -xzf backups/folio-YYYYMMDD-HHMMSS.tar.gz -C /tmp
 docker compose exec -T db sh -c 'exec mysql -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE"' < /tmp/folio.sql
 docker compose cp /tmp/uploads/. app:/app/data/uploads/
+# 如需恢复站点密钥，把 env.backup 放回项目根目录的 .env
 ```
 
 如果使用七牛云存储，图片不在本地上传目录里，需要在七牛侧另做备份与生命周期管理。
@@ -761,7 +798,7 @@ docker compose cp /tmp/uploads/. app:/app/data/uploads/
 - 通知仍然靠 10 秒轮询；私信有 WebSocket 实时推送与轮询兜底。
 - 邮件是可选的：未配置 SMTP 时邮箱验证码、邮箱登录和找回密码会自动关闭，用户名密码登录不受影响。
 - 搜索使用 `LIKE`，适合个人规模的数据量；MySQL 下同样可用。
-- 演示数据默认开启；正式使用请设置 `FOLIO_DEMO=0` 并修改 `FOLIO_SECRET`。
+- 演示数据默认关闭；本地演示脚本会显式设置 `FOLIO_DEMO=1`。正式部署请保持 `0` 并设置强 `FOLIO_SECRET`。
 - 目前不包含从其他博客或文档系统导入历史数据的脚本；如有需要，可以按现有表结构单独编写导入工具。
 - 操作日志没有自动归档；个人站点数据量下通常无需处理，数据量大时可以按时间手动清理 `operation_logs`。
 - 限流是进程内固定窗口实现，适合单实例部署；多实例时应改为 Redis 共享计数。

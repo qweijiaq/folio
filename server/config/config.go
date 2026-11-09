@@ -1,7 +1,9 @@
 package config
 
 import (
+	"errors"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -69,6 +71,54 @@ type Config struct {
 	RedisAddr     string
 	RedisPassword string
 	RedisDB       int
+
+	// 反向代理信任列表；只信任这些来源传来的 X-Forwarded-For。
+	TrustedProxies string
+
+	// 首次启动时可直接创建超级管理员，避免“第一个注册者成为超管”的竞态。
+	AdminUsername string
+	AdminPassword string
+}
+
+var adminUsernamePattern = regexp.MustCompile(`^[A-Za-z0-9_]{2,20}$`)
+
+// Validate 拒绝不安全的默认配置，避免带着演示密钥或演示数据上公网。
+func (c Config) Validate() error {
+	if !c.Demo {
+		secret := strings.TrimSpace(c.Secret)
+		switch secret {
+		case "", "folio-dev-secret-change-me", "please-change-this-secret", "change-me-to-a-long-random-string":
+			return errors.New("非演示模式必须设置 FOLIO_SECRET，且不能使用示例默认值")
+		}
+		if len(secret) < 32 {
+			return errors.New("非演示模式的 FOLIO_SECRET 至少需要 32 个字符")
+		}
+	}
+	if c.AdminUsername != "" || c.AdminPassword != "" {
+		if !adminUsernamePattern.MatchString(strings.TrimSpace(c.AdminUsername)) {
+			return errors.New("FOLIO_ADMIN_USERNAME 需为 2-20 位字母、数字或下划线")
+		}
+		if len(c.AdminPassword) < 8 || len(c.AdminPassword) > 64 {
+			return errors.New("FOLIO_ADMIN_PASSWORD 需为 8-64 位")
+		}
+	}
+	return nil
+}
+
+// TrustedProxyList 返回允许携带 X-Forwarded-For 的代理地址。
+// 默认只信任本机与 Docker 私网；公网直连时 Gin 会使用连接本身的 IP。
+func (c Config) TrustedProxyList() []string {
+	raw := strings.TrimSpace(c.TrustedProxies)
+	if raw == "" {
+		raw = "127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+	}
+	items := make([]string, 0, 8)
+	for _, item := range strings.Split(raw, ",") {
+		if item = strings.TrimSpace(item); item != "" {
+			items = append(items, item)
+		}
+	}
+	return items
 }
 
 func getenv(key, fallback string) string {
@@ -115,7 +165,7 @@ func Load() Config {
 		driver = "sqlite"
 	}
 
-	demo := getenv("FOLIO_DEMO", "1") != "0"
+	demo := getenv("FOLIO_DEMO", "0") != "0"
 	if driver == "memory" {
 		// 内存模式每次启动都是空库，必须写入演示数据
 		demo = true
@@ -186,5 +236,9 @@ func Load() Config {
 		RedisAddr:     getenv("FOLIO_REDIS_ADDR", ""),
 		RedisPassword: getenv("FOLIO_REDIS_PASSWORD", ""),
 		RedisDB:       redisDB,
+
+		TrustedProxies: getenv("FOLIO_TRUSTED_PROXIES", ""),
+		AdminUsername:  getenv("FOLIO_ADMIN_USERNAME", ""),
+		AdminPassword:  os.Getenv("FOLIO_ADMIN_PASSWORD"),
 	}
 }

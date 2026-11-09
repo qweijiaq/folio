@@ -993,6 +993,29 @@ func TestCommentToggle(t *testing.T) {
 	}
 }
 
+func TestWebSocketSubprotocolToken(t *testing.T) {
+	s := newTestAPI(t)
+	token, _ := s.register(t, "wsprotocol")
+
+	server := httptest.NewServer(s.handler)
+	defer server.Close()
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/api/ws"
+	dialer := websocket.Dialer{Subprotocols: []string{token}}
+	conn, _, err := dialer.Dial(wsURL, nil)
+	if err != nil {
+		t.Fatalf("通过子协议建立 WebSocket 失败: %v", err)
+	}
+	defer conn.Close()
+	if conn.Subprotocol() != token {
+		t.Fatalf("服务端应回选 token 子协议, 实际 %q", conn.Subprotocol())
+	}
+	_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	var ready map[string]any
+	if err := conn.ReadJSON(&ready); err != nil || ready["type"] != "ready" {
+		t.Fatalf("没有收到 WebSocket 就绪事件: %v %v", ready, err)
+	}
+}
+
 func TestMessageImagesAndWebSocket(t *testing.T) {
 	s := newTestAPI(t)
 	senderToken, _ := s.register(t, "msg_sender")
@@ -1507,6 +1530,64 @@ func TestAdminDashboard(t *testing.T) {
 	s.api.DB.Model(&models.DocDailyStat{}).Where("doc_id = ?", docID).Count(&daily)
 	if daily != 0 {
 		t.Fatalf("删除内容后每日统计应一并清理，实际 %d", daily)
+	}
+}
+
+func TestInviteRegisterWithEmail(t *testing.T) {
+	s := newTestAPI(t)
+	ownerToken, _ := s.register(t, "emailinviteowner")
+	// 先创建超管，再启用调试邮件，避免“启用邮件后注册必须填验证码”影响测试准备。
+	s.api.Cfg.MailDebug = true
+	s.api.Mail = &recordingMailer{messages: make(chan mailMessage, 10)}
+
+	status, _ := s.do(t, "PUT", "/api/admin/settings", ownerToken, map[string]any{
+		"siteName": "测试站", "siteDesc": "测试", "siteOwner": "tester",
+		"allowRegister": false, "loginCaptcha": false,
+	})
+	if status != http.StatusOK {
+		t.Fatalf("关闭注册失败: %d", status)
+	}
+
+	status, inviteData := s.do(t, "POST", "/api/admin/invites", ownerToken, map[string]any{
+		"note": "邮件邀请", "expiresInDays": 7,
+	})
+	if status != http.StatusCreated {
+		t.Fatalf("创建邀请码失败: %d %v", status, inviteData)
+	}
+	inviteCode, _ := obj(inviteData, "invite")["code"].(string)
+	if inviteCode == "" {
+		t.Fatalf("邀请码为空: %v", inviteData)
+	}
+
+	email := "invited-by-email@example.com"
+	status, sent := s.do(t, "POST", "/api/auth/email/code", "", map[string]string{
+		"email": email, "purpose": "register", "invite": inviteCode,
+	})
+	if status != http.StatusOK {
+		t.Fatalf("关闭注册后带邀请码应能发送注册验证码: %d %v", status, sent)
+	}
+	code, _ := sent["debugCode"].(string)
+	if len(code) != 6 {
+		t.Fatalf("调试模式应返回验证码: %v", sent)
+	}
+
+	status, registered := s.do(t, "POST", "/api/auth/register", "", map[string]string{
+		"username": "invitedemail", "nickname": "邮件受邀", "email": email,
+		"password": "password123", "code": code, "invite": inviteCode,
+	})
+	if status != http.StatusCreated {
+		t.Fatalf("邀请 + 邮箱验证码注册失败: %d %v", status, registered)
+	}
+	if registered["token"] == "" {
+		t.Fatal("邀请注册后应返回 token")
+	}
+
+	// 没有邀请码时仍然应拒绝注册验证码，避免公开注册被绕过。
+	status, _ = s.do(t, "POST", "/api/auth/email/code", "", map[string]string{
+		"email": "no-invite@example.com", "purpose": "register",
+	})
+	if status != http.StatusForbidden {
+		t.Fatalf("关闭注册且无邀请码时应拒绝发送验证码, 实际 %d", status)
 	}
 }
 

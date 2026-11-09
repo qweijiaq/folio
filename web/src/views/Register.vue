@@ -150,7 +150,7 @@ async function submit() {
             </div>
             <div v-if="emailEnabled" class="field">
               <label>邮箱验证码</label>
-              <EmailCode v-model="form.code" :email="form.email" purpose="register" />
+              <EmailCode v-model="form.code" :email="form.email" :invite="form.invite" purpose="register" />
             </div>
             <div class="field">
               <label for="reg-password">密码</label>

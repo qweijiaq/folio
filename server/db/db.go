@@ -5,12 +5,14 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"folio/server/config"
 	"folio/server/models"
 
 	"github.com/glebarez/sqlite"
+	"golang.org/x/crypto/bcrypt"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -83,6 +85,43 @@ func ensureSuperAdmin(gdb *gorm.DB) error {
 		}
 	}
 	return gdb.Model(&models.User{}).Where("id = ?", u.ID).UpdateColumn("role", models.RoleSuperAdmin).Error
+}
+
+// UserCount 返回用户总数，用于启动时的初始化和安全提示。
+func UserCount(gdb *gorm.DB) (int64, error) {
+	var count int64
+	err := gdb.Model(&models.User{}).Count(&count).Error
+	return count, err
+}
+
+// EnsureBootstrapAdmin 在空库且配置了 FOLIO_ADMIN_USERNAME/PASSWORD 时创建超级管理员。
+// 这样可以在对外暴露站点之前先确定管理员，避免第一个访客抢注超管。
+func EnsureBootstrapAdmin(gdb *gorm.DB, cfg config.Config) (bool, error) {
+	username := strings.TrimSpace(cfg.AdminUsername)
+	if username == "" || cfg.AdminPassword == "" {
+		return false, nil
+	}
+	count, err := UserCount(gdb)
+	if err != nil {
+		return false, err
+	}
+	if count > 0 {
+		return false, nil
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(cfg.AdminPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return false, err
+	}
+	user := models.User{
+		Username: username,
+		Nickname: username,
+		Password: string(hash),
+		Role:     models.RoleSuperAdmin,
+	}
+	if err := gdb.Create(&user).Error; err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // EnsureSiteSetting 为老库补一条站点设置，之后以数据库里的值为准。

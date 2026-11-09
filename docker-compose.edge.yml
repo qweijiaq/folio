@@ -1,6 +1,6 @@
 services:
   caddy:
-    image: caddy:2.8-alpine
+    image: caddy:2-alpine
     restart: unless-stopped
     depends_on:
       app:
@@ -10,8 +10,8 @@ services:
       - "443:443"
       - "443:443/udp"
     environment:
-      FOLIO_DOMAIN: "${FOLIO_DOMAIN:-folio.weijia.asia}"
-      ACME_EMAIL: "${ACME_EMAIL:-2112025700@qq.com}"
+      FOLIO_DOMAIN: "${FOLIO_DOMAIN:?请先在 .env 设置 FOLIO_DOMAIN}"
+      ACME_EMAIL: "${ACME_EMAIL:-}"
     volumes:
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data

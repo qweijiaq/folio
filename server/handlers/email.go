@@ -100,6 +100,7 @@ func (a *API) SendEmailCode(c *gin.Context) {
 	var in struct {
 		Email       string `json:"email"`
 		Purpose     string `json:"purpose"`
+		Invite      string `json:"invite"`
 		CaptchaID   string `json:"captchaId"`
 		CaptchaCode string `json:"captchaCode"`
 	}
@@ -119,9 +120,21 @@ func (a *API) SendEmailCode(c *gin.Context) {
 		bad(c, "验证码用途不正确")
 		return
 	}
-	if purpose == emailPurposeRegister && !a.allowRegistration() {
-		fail(c, http.StatusForbidden, "站点暂未开放注册")
+	if ok, retry := a.Limiter.Allow(ipRateKey("email-code", c.ClientIP()), 20, 10*time.Minute); !ok {
+		tooMany(c, retry)
 		return
+	}
+	if purpose == emailPurposeRegister && !a.allowRegistration() {
+		// 关闭公开注册时，邀请注册仍然需要邮箱验证码；此时必须同时校验邀请码，
+		// 否则被邀请人会卡在“验证码发不出去”的步骤。
+		if trim(in.Invite) == "" {
+			fail(c, http.StatusForbidden, "站点暂未开放注册，请使用邀请链接")
+			return
+		}
+		if _, err := a.findValidInvite(in.Invite); err != nil {
+			bad(c, err.Error())
+			return
+		}
 	}
 	if !a.requireCaptcha(c, in.CaptchaID, in.CaptchaCode) {
 		return
