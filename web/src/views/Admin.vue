@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { api, getToken } from '../api/client'
 import { auth, refreshMe } from '../stores/auth'
 import { toast, toastError } from '../stores/toast'
+import { confirmDialog } from '../stores/confirm'
 import { formatBytes, roleLabel, shortDate } from '../utils/format'
 import { mergeSite } from '../stores/site'
 import UserAvatar from '../components/UserAvatar.vue'
@@ -35,6 +36,19 @@ const seriesList = ref([])
 const seriesForm = reactive({ title: '', description: '' })
 const editingSeries = ref(0)
 const savingSeries = ref(false)
+const projectList = ref([])
+const projectForm = reactive({
+  title: '',
+  summary: '',
+  url: '',
+  repoURL: '',
+  coverURL: '',
+  tagsText: '',
+  visible: true,
+  sort: 0
+})
+const editingProject = ref(0)
+const savingProject = ref(false)
 const inviteNote = ref('')
 const inviteDays = ref(7)
 const creatingInvite = ref(false)
@@ -177,6 +191,7 @@ const tabs = computed(() => {
     { key: 'content', label: '内容管理', icon: 'edit' },
     { key: 'categories', label: '分类管理', icon: 'tag' },
     { key: 'series', label: '合集管理', icon: 'layers' },
+    { key: 'projects', label: '项目管理', icon: 'star' },
     { key: 'images', label: '图片管理', icon: 'image' },
     { key: 'requests', label: '阅读申请', icon: 'lock' },
     { key: 'notices', label: '全站通知', icon: 'bell' }
@@ -596,6 +611,109 @@ async function removeSeries(item) {
   }
 }
 
+async function loadProjectsAdmin() {
+  try {
+    const data = await api.get('/admin/projects')
+    projectList.value = data.items || []
+  } catch (err) {
+    toastError(err)
+  }
+}
+
+function resetProjectForm() {
+  editingProject.value = 0
+  projectForm.title = ''
+  projectForm.summary = ''
+  projectForm.url = ''
+  projectForm.repoURL = ''
+  projectForm.coverURL = ''
+  projectForm.tagsText = ''
+  projectForm.visible = true
+  projectForm.sort = 0
+}
+
+function editProject(item) {
+  editingProject.value = item.id
+  projectForm.title = item.title || ''
+  projectForm.summary = item.summary || ''
+  projectForm.url = item.url || ''
+  projectForm.repoURL = item.repoURL || ''
+  projectForm.coverURL = item.coverURL || ''
+  projectForm.tagsText = (item.tags || []).join('、')
+  projectForm.visible = item.visible !== false
+  projectForm.sort = item.sort || 0
+}
+
+function parseProjectTags(value) {
+  const seen = new Set()
+  const items = []
+  for (const part of String(value || '').split(/[、,，;；\s]+/)) {
+    const tag = part.trim().replace(/^#+/, '').slice(0, 16)
+    if (!tag) continue
+    const key = tag.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    items.push(tag)
+    if (items.length >= 6) break
+  }
+  return items
+}
+
+function validProjectLink(value) {
+  const text = String(value || '').trim()
+  return !text || text.startsWith('http://') || text.startsWith('https://')
+}
+
+async function saveProject() {
+  const title = projectForm.title.trim()
+  if (!title) {
+    toast('项目名称不能为空')
+    return
+  }
+  if (!validProjectLink(projectForm.url) || !validProjectLink(projectForm.repoURL) || !validProjectLink(projectForm.coverURL)) {
+    toast('项目链接需要以 http:// 或 https:// 开头', 'error')
+    return
+  }
+  savingProject.value = true
+  try {
+    const payload = {
+      title,
+      summary: projectForm.summary.trim(),
+      url: projectForm.url.trim(),
+      repoURL: projectForm.repoURL.trim(),
+      coverURL: projectForm.coverURL.trim(),
+      tags: parseProjectTags(projectForm.tagsText),
+      visible: projectForm.visible,
+      sort: Number(projectForm.sort) || 0
+    }
+    if (editingProject.value) {
+      await api.put(`/admin/projects/${editingProject.value}`, payload)
+      toast('项目已更新')
+    } else {
+      await api.post('/admin/projects', payload)
+      toast('项目已创建')
+    }
+    resetProjectForm()
+    await loadProjectsAdmin()
+  } catch (err) {
+    toastError(err)
+  } finally {
+    savingProject.value = false
+  }
+}
+
+async function removeProject(item) {
+  if (!(await confirmDialog({ title: '删除项目', message: `删除项目「${item.title}」？项目墙上的卡片会一并移除。`, confirmText: '删除', danger: true }))) return
+  try {
+    await api.del(`/admin/projects/${item.id}`)
+    if (editingProject.value === item.id) resetProjectForm()
+    await loadProjectsAdmin()
+    toast('项目已删除')
+  } catch (err) {
+    toastError(err)
+  }
+}
+
 function applyStorageInfo(storage = {}) {
   Object.assign(storageInfo, {
     provider: storage.provider || 'local',
@@ -899,6 +1017,7 @@ async function loadTab() {
     else if (tab.value === 'requests') await loadAccessRequests()
     else if (tab.value === 'categories') await loadCategories()
     else if (tab.value === 'series') await loadSeriesAdmin()
+    else if (tab.value === 'projects') await loadProjectsAdmin()
     else if (tab.value === 'images') await loadImages()
     else if (tab.value === 'notices') await loadNotices()
     else if (tab.value === 'users') {
@@ -1400,6 +1519,89 @@ onMounted(async () => {
                 <RouterLink :to="`/series/${item.id}`" class="text-link">查看</RouterLink>
                 <button class="text-link" type="button" @click="editSeries(item)">编辑</button>
                 <button class="text-link danger" type="button" @click="removeSeries(item)">删除</button>
+              </div>
+            </article>
+          </div>
+        </div>
+
+        <div v-else-if="tab === 'projects'" class="panel">
+          <header class="panel-head">
+            <h2>项目管理</h2>
+            <p>项目墙上的卡片。可以链接到项目主页或 GitHub，也可以只放一张说明卡片。</p>
+          </header>
+
+          <form class="settings-form project-admin-form" @submit.prevent="saveProject">
+            <div class="form-row">
+              <div class="field">
+                <label for="project-title">项目名称</label>
+                <input id="project-title" v-model="projectForm.title" maxlength="80" placeholder="例如：知微" />
+              </div>
+              <div class="field">
+                <label for="project-sort">排序 <span class="hint">数字越小越靠前</span></label>
+                <input id="project-sort" v-model.number="projectForm.sort" class="sort-input" type="number" />
+              </div>
+            </div>
+            <div class="field">
+              <label for="project-summary">项目简介 <span class="hint">最多 300 字</span></label>
+              <textarea id="project-summary" v-model="projectForm.summary" rows="2" maxlength="300" placeholder="一句话说明这个项目解决什么问题。"></textarea>
+            </div>
+            <div class="form-row">
+              <div class="field">
+                <label for="project-url">项目主页 <span class="hint">可选</span></label>
+                <input id="project-url" v-model="projectForm.url" type="url" placeholder="https://..." />
+              </div>
+              <div class="field">
+                <label for="project-repo">GitHub / 仓库 <span class="hint">可选</span></label>
+                <input id="project-repo" v-model="projectForm.repoURL" type="url" placeholder="https://github.com/..." />
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="field">
+                <label for="project-cover">封面图 URL <span class="hint">可选</span></label>
+                <input id="project-cover" v-model="projectForm.coverURL" type="url" placeholder="https://..." />
+              </div>
+              <div class="field">
+                <label for="project-tags">标签 <span class="hint">用、或逗号分隔</span></label>
+                <input id="project-tags" v-model="projectForm.tagsText" placeholder="Go、Vue、开源" />
+              </div>
+            </div>
+            <label class="checkbox">
+              <input v-model="projectForm.visible" type="checkbox" />
+              在项目墙公开显示
+            </label>
+            <div class="form-actions">
+              <button v-if="editingProject" class="btn btn-ghost btn-sm" type="button" @click="resetProjectForm">取消编辑</button>
+              <button class="btn btn-primary btn-sm" type="submit" :disabled="savingProject">
+                {{ savingProject ? '保存中…' : editingProject ? '保存修改' : '新建项目' }}
+              </button>
+            </div>
+          </form>
+
+          <p v-if="tabLoading" class="muted loading-line">正在加载项目…</p>
+          <EmptyState
+            v-else-if="!projectList.length"
+            icon="star"
+            title="还没有项目"
+            description="先创建一个项目，它会出现在公开的项目墙里。"
+          />
+          <div v-else class="project-admin-list">
+            <article v-for="item in projectList" :key="item.id" class="project-admin-row">
+              <div class="project-admin-main">
+                <strong>{{ item.title }}</strong>
+                <p>{{ item.summary || '暂无简介' }}</p>
+                <span>
+                  {{ item.visible ? '公开' : '隐藏' }} · 排序 {{ item.sort }}
+                  <template v-if="item.tags?.length"> · {{ item.tags.join('、') }}</template>
+                </span>
+                <div v-if="item.url || item.repoURL" class="project-admin-links">
+                  <a v-if="item.url" :href="item.url" target="_blank" rel="noopener noreferrer">项目主页</a>
+                  <a v-if="item.repoURL" :href="item.repoURL" target="_blank" rel="noopener noreferrer">GitHub</a>
+                </div>
+              </div>
+              <div class="project-admin-actions">
+                <RouterLink to="/projects" class="text-link">查看</RouterLink>
+                <button class="text-link" type="button" @click="editProject(item)">编辑</button>
+                <button class="text-link danger" type="button" @click="removeProject(item)">删除</button>
               </div>
             </article>
           </div>

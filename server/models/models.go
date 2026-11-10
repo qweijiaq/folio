@@ -111,6 +111,21 @@ type Category struct {
 	Sort int    `json:"sort"`
 }
 
+// Project 是项目墙上的一个条目，可以指向项目主页、代码仓库或两者。
+type Project struct {
+	Base
+	Title    string   `gorm:"size:120;not null" json:"title"`
+	Summary  string   `gorm:"size:300" json:"summary"`
+	URL      string   `gorm:"size:500" json:"url"`
+	RepoURL  string   `gorm:"size:500" json:"repoURL"`
+	CoverURL string   `gorm:"size:500" json:"coverURL"`
+	Tags     []string `gorm:"type:text;serializer:json" json:"tags"`
+	Visible  bool     `gorm:"not null" json:"visible"`
+	Sort     int      `json:"sort"`
+}
+
+func (Project) TableName() string { return "projects" }
+
 type Like struct {
 	Base
 	UserID uint `gorm:"uniqueIndex:idx_like_user_doc" json:"userID"`

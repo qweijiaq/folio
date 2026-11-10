@@ -149,6 +149,8 @@ func (a *API) Sitemap(c *gin.Context) {
 		{Loc: base + "/", ChangeFreq: "daily", Priority: "1.0"},
 		{Loc: base + "/articles", ChangeFreq: "daily", Priority: "0.9"},
 		{Loc: base + "/docs", ChangeFreq: "weekly", Priority: "0.8"},
+		{Loc: base + "/timeline", ChangeFreq: "weekly", Priority: "0.7"},
+		{Loc: base + "/projects", ChangeFreq: "weekly", Priority: "0.7"},
 		{Loc: base + "/about", ChangeFreq: "monthly", Priority: "0.6"},
 	}
 

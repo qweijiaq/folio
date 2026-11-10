@@ -2953,6 +2953,124 @@ func TestSearchRankingAndPrivacy(t *testing.T) {
 	}
 }
 
+func TestTimelineFiltersPublishedVisibleContent(t *testing.T) {
+	s := newTestAPI(t)
+	token, _ := s.register(t, "timelineowner")
+
+	create := func(body map[string]any) uint {
+		status, data := s.do(t, "POST", "/api/docs", token, body)
+		if status != http.StatusCreated {
+			t.Fatalf("创建时间线内容失败: %d %v", status, data)
+		}
+		return uint(number(obj(data, "doc")["id"]))
+	}
+	articleID := create(map[string]any{
+		"kind": "article", "title": "时间线文章", "abstract": "文章摘要", "content": "时间线文章正文。", "status": "published",
+	})
+	docID := create(map[string]any{
+		"kind": "doc", "title": "时间线文档", "abstract": "文档摘要", "content": "时间线文档正文。", "status": "published",
+	})
+	hiddenID := create(map[string]any{
+		"kind": "doc", "title": "时间线隐藏目录", "content": "目录页。", "status": "published", "searchHidden": true,
+	})
+	privateID := create(map[string]any{
+		"kind": "doc", "title": "时间线私密文档", "content": "私密内容。", "status": "published", "private": true,
+	})
+	draftID := create(map[string]any{
+		"kind": "article", "title": "时间线草稿", "content": "草稿正文。", "status": "draft",
+	})
+
+	status, data := s.do(t, "GET", "/api/timeline?pageSize=50", "", nil)
+	if status != http.StatusOK {
+		t.Fatalf("读取时间线失败: %d %v", status, data)
+	}
+	if number(data["total"]) != 2 || len(list(data, "items")) != 2 {
+		t.Fatalf("时间线应只包含两条公开内容: %v", data)
+	}
+	seen := map[uint]bool{}
+	for _, item := range list(data, "items") {
+		seen[uint(number(item.(map[string]any)["id"]))] = true
+	}
+	if !seen[articleID] || !seen[docID] {
+		t.Fatalf("时间线缺少公开内容: %v", data)
+	}
+	for _, id := range []uint{hiddenID, privateID, draftID} {
+		if seen[id] {
+			t.Fatalf("时间线不应包含内容 %d: %v", id, data)
+		}
+	}
+	if uint(number(list(data, "items")[0].(map[string]any)["id"])) != docID {
+		t.Fatalf("时间线应按发布时间倒序: %v", data)
+	}
+
+	status, data = s.do(t, "GET", "/api/timeline?kind=article&pageSize=50", "", nil)
+	if status != http.StatusOK || number(data["total"]) != 1 || uint(number(list(data, "items")[0].(map[string]any)["id"])) != articleID {
+		t.Fatalf("文章时间线不正确: %d %v", status, data)
+	}
+	status, data = s.do(t, "GET", "/api/timeline?kind=doc&pageSize=50", "", nil)
+	if status != http.StatusOK || number(data["total"]) != 1 || uint(number(list(data, "items")[0].(map[string]any)["id"])) != docID {
+		t.Fatalf("文档时间线不正确: %d %v", status, data)
+	}
+}
+
+func TestProjectWallCRUD(t *testing.T) {
+	s := newTestAPI(t)
+	token, _ := s.register(t, "projectowner")
+
+	status, data := s.do(t, "POST", "/api/admin/projects", token, map[string]any{
+		"title": "知微", "summary": "一个可自托管的个人知识站。", "url": "https://folio.weijia.asia",
+		"repoURL": "https://github.com/qweijiaq/folio", "tags": []string{"Go", "Vue"}, "visible": true, "sort": 2,
+	})
+	if status != http.StatusCreated {
+		t.Fatalf("创建项目失败: %d %v", status, data)
+	}
+	projectID := uint(number(obj(data, "project")["id"]))
+
+	status, _ = s.do(t, "POST", "/api/admin/projects", token, map[string]any{
+		"title": "隐藏项目", "summary": "", "visible": false, "sort": 1,
+	})
+	if status != http.StatusCreated {
+		t.Fatalf("创建隐藏项目失败: %d", status)
+	}
+
+	status, data = s.do(t, "GET", "/api/projects", "", nil)
+	if status != http.StatusOK || len(list(data, "items")) != 1 {
+		t.Fatalf("公开项目墙应只返回可见项目: %d %v", status, data)
+	}
+	first := list(data, "items")[0].(map[string]any)
+	if first["title"] != "知微" || first["url"] != "https://folio.weijia.asia" || first["repoURL"] != "https://github.com/qweijiaq/folio" {
+		t.Fatalf("项目字段不正确: %v", first)
+	}
+
+	status, data = s.do(t, "GET", "/api/admin/projects", token, nil)
+	if status != http.StatusOK || len(list(data, "items")) != 2 {
+		t.Fatalf("后台项目列表不正确: %d %v", status, data)
+	}
+
+	status, data = s.do(t, "PUT", fmt.Sprintf("/api/admin/projects/%d", projectID), token, map[string]any{
+		"title": "知微 2.0", "summary": "更新后的简介。", "url": "https://folio.weijia.asia", "visible": false, "sort": 0,
+	})
+	if status != http.StatusOK || obj(data, "project")["title"] != "知微 2.0" {
+		t.Fatalf("更新项目失败: %d %v", status, data)
+	}
+
+	status, _ = s.do(t, "POST", "/api/admin/projects", token, map[string]any{
+		"title": "坏链接", "url": "javascript:alert(1)",
+	})
+	if status != http.StatusBadRequest {
+		t.Fatalf("非法项目链接应被拒绝，实际 %d", status)
+	}
+
+	status, _ = s.do(t, "DELETE", fmt.Sprintf("/api/admin/projects/%d", projectID), token, nil)
+	if status != http.StatusOK {
+		t.Fatalf("删除项目失败: %d", status)
+	}
+	status, data = s.do(t, "GET", "/api/admin/projects", token, nil)
+	if status != http.StatusOK || len(list(data, "items")) != 1 {
+		t.Fatalf("删除后后台项目列表不正确: %d %v", status, data)
+	}
+}
+
 func TestArticleNeighbors(t *testing.T) {
 	s := newTestAPI(t)
 	token, _ := s.register(t, "neighborowner")
