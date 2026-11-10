@@ -10,6 +10,7 @@ import CoverImage from '../components/CoverImage.vue'
 import MarkdownView from '../components/MarkdownView.vue'
 import Icon from '../components/Icon.vue'
 import RevisionHistory from '../components/RevisionHistory.vue'
+import { formatBytes } from '../utils/format'
 import SelectBox from '../components/SelectBox.vue'
 import { usePageMeta } from '../composables/usePageMeta'
 
@@ -24,6 +25,7 @@ const form = reactive({
   abstract: '',
   content: '',
   tags: [],
+  attachments: [],
   status: 'draft',
   publishAt: '',
   parentID: route.query.parent ? Number(route.query.parent) : null,
@@ -50,6 +52,12 @@ const preview = ref(true)
 const uploading = ref(false)
 const aiEnabled = ref(false)
 const aiLoading = ref(false)
+const attachmentInput = ref(null)
+const attachmentUploading = ref(false)
+const attachmentLinkOpen = ref(false)
+const attachmentLink = reactive({ title: '', url: '' })
+const markdownFormatting = ref(false)
+const markdownBackup = ref('')
 const savedSnapshot = ref('')
 const draftAvailable = ref(null)
 const revisionOpen = ref(false)
@@ -182,6 +190,7 @@ function snapshot() {
     abstract: form.abstract,
     content: form.content,
     tags: form.tags,
+    attachments: form.attachments,
     status: form.status,
     publishAt: form.publishAt,
     parentID: form.parentID,
@@ -220,6 +229,7 @@ function draftFields(source) {
     abstract: source.abstract || '',
     content: source.content || '',
     tags: Array.isArray(source.tags) ? source.tags : [],
+    attachments: Array.isArray(source.attachments) ? source.attachments : [],
     status: source.status || 'draft',
     publishAt: source.publishAt ? toLocalInput(source.publishAt) : '',
     parentID: source.parentID ?? null,
@@ -340,6 +350,7 @@ async function load() {
       form.abstract = data.doc.abstract || ''
       form.content = data.doc.content || ''
       form.tags = [...(data.doc.tags || [])]
+      form.attachments = Array.isArray(data.doc.attachments) ? data.doc.attachments.map((item) => ({ ...item })) : []
       form.status = data.doc.status
       form.publishAt = data.doc.status === 'scheduled' && data.doc.publishAt ? toLocalInput(data.doc.publishAt) : ''
       form.parentID = data.doc.parentID ?? null
@@ -512,6 +523,111 @@ function onDragOver(event) {
   }
 }
 
+function onAttachmentPick(event) {
+  const files = Array.from(event.target.files || [])
+  event.target.value = ''
+  uploadAttachments(files)
+}
+
+async function uploadAttachments(files) {
+  if (!files.length || attachmentUploading.value) return
+  if (form.attachments.length + files.length > 12) {
+    toast('最多添加 12 个附件')
+    return
+  }
+  attachmentUploading.value = true
+  try {
+    let added = 0
+    for (const file of files) {
+      if (form.attachments.length >= 12) break
+      const item = await api.uploadAttachment(file)
+      form.attachments.push({ ...item, kind: 'file' })
+      added += 1
+    }
+    if (added) toast(`已添加 ${added} 个附件`)
+  } catch (err) {
+    toastError(err)
+  } finally {
+    attachmentUploading.value = false
+  }
+}
+
+function addAttachmentLink() {
+  const url = attachmentLink.url.trim()
+  if (!url) {
+    toast('请填写附件链接')
+    return
+  }
+  if (!/^https?:\/\//i.test(url)) {
+    toast('附件链接需要以 http:// 或 https:// 开头', 'error')
+    return
+  }
+  let title = attachmentLink.title.trim()
+  if (!title) {
+    try {
+      title = new URL(url).hostname
+    } catch {
+      title = '外部链接'
+    }
+  }
+  if (form.attachments.length >= 12) {
+    toast('最多添加 12 个附件')
+    return
+  }
+  form.attachments.push({ kind: 'link', title, url, size: 0, mime: '' })
+  attachmentLink.title = ''
+  attachmentLink.url = ''
+  attachmentLinkOpen.value = false
+  toast('已添加链接附件')
+}
+
+function removeAttachment(index) {
+  form.attachments.splice(index, 1)
+}
+
+function moveAttachment(index, delta) {
+  const target = index + delta
+  if (target < 0 || target >= form.attachments.length) return
+  const list = [...form.attachments]
+  ;[list[index], list[target]] = [list[target], list[index]]
+  form.attachments = list
+}
+
+async function formatMarkdown() {
+  if (!form.content.trim()) {
+    toast('先写一点正文，再让 AI 排版')
+    return
+  }
+  const ok = await confirmDialog({
+    title: 'Markdown 排版',
+    message: 'AI 会调整标题层级、空行、列表、代码围栏和链接语法，不改写正文。应用后可以点「撤销排版」恢复。',
+    confirmText: '开始排版'
+  })
+  if (!ok) return
+  markdownFormatting.value = true
+  try {
+    const data = await api.post('/admin/markdown/format', { content: form.content })
+    if (!data.markdown || data.markdown === form.content) {
+      toast('排版完成，没有需要调整的地方')
+      return
+    }
+    markdownBackup.value = form.content
+    form.content = data.markdown
+    toast('Markdown 已排版，可点「撤销排版」恢复')
+  } catch (err) {
+    toastError(err)
+  } finally {
+    markdownFormatting.value = false
+  }
+}
+
+function undoMarkdownFormat() {
+  if (!markdownBackup.value) return
+  form.content = markdownBackup.value
+  markdownBackup.value = ''
+  toast('已撤销排版')
+}
+
 async function aiAnalyze() {
   if (!form.content.trim()) {
     toast('先写一点正文，再让 AI 提炼')
@@ -583,6 +699,7 @@ async function save(status = 'draft') {
     abstract: form.abstract.trim(),
     content: form.content,
     tags: form.tags,
+    attachments: form.attachments,
     status,
     publishAt: status === 'scheduled' && form.publishAt ? new Date(form.publishAt).toISOString() : null,
     parentID: form.kind === 'doc' && form.parentID ? Number(form.parentID) : null,
@@ -821,6 +938,43 @@ onBeforeUnmount(() => {
             </div>
           </div>
 
+          <div class="field attachment-field">
+            <div class="field-label-row">
+              <label>附件 <span class="hint">最多 12 个</span></label>
+              <button class="text-link" type="button" @click="attachmentLinkOpen = !attachmentLinkOpen">
+                {{ attachmentLinkOpen ? '收起链接' : '+ 添加链接' }}
+              </button>
+            </div>
+            <div v-if="form.attachments.length" class="attachment-editor-list">
+              <div v-for="(item, index) in form.attachments" :key="`${item.kind}-${item.url}-${index}`" class="attachment-editor-row">
+                <span class="attachment-editor-icon">
+                  <Icon :name="item.kind === 'link' ? 'link' : 'cloud'" :size="15" />
+                </span>
+                <span class="attachment-editor-main">
+                  <strong>{{ item.title }}</strong>
+                  <small>{{ item.kind === 'link' ? '外部链接' : formatBytes(item.size) }}</small>
+                </span>
+                <span class="attachment-editor-actions">
+                  <button type="button" title="上移" :disabled="index === 0" @click="moveAttachment(index, -1)">↑</button>
+                  <button type="button" title="下移" :disabled="index === form.attachments.length - 1" @click="moveAttachment(index, 1)">↓</button>
+                  <button type="button" title="移除" @click="removeAttachment(index)">×</button>
+                </span>
+              </div>
+            </div>
+            <div class="attachment-editor-actions-row">
+              <button class="btn btn-ghost btn-sm" type="button" :disabled="attachmentUploading" @click="attachmentInput?.click()">
+                {{ attachmentUploading ? '上传中…' : '上传文件' }}
+              </button>
+              <span class="hint">PDF、Office、压缩包、Markdown、图片等</span>
+            </div>
+            <div v-if="attachmentLinkOpen" class="attachment-link-form">
+              <input v-model="attachmentLink.title" maxlength="120" placeholder="链接名称（留空用域名）" />
+              <input v-model="attachmentLink.url" placeholder="https://..." @keydown.enter.prevent="addAttachmentLink" />
+              <button class="btn btn-primary btn-sm" type="button" @click="addAttachmentLink">添加</button>
+            </div>
+            <p v-if="form.attachments.length" class="hint">附件会显示在正文末尾，可拖动排序或删除。</p>
+          </div>
+
           <div class="field">
             <label for="editor-publish-at">定时发布 <span class="hint">可选</span></label>
             <input id="editor-publish-at" v-model="form.publishAt" type="datetime-local" :min="minPublishAt" />
@@ -904,6 +1058,10 @@ onBeforeUnmount(() => {
             <button v-if="aiEnabled" type="button" title="根据正文生成标题、摘要和标签" :disabled="aiLoading" @click="aiAnalyze">
               {{ aiLoading ? '思考中…' : 'AI 摘要' }}
             </button>
+            <button type="button" title="用 AI 整理 Markdown 语法和标题层级" :disabled="markdownFormatting" @click="formatMarkdown">
+              {{ markdownFormatting ? '排版中…' : 'Markdown 排版' }}
+            </button>
+            <button v-if="markdownBackup" type="button" class="preview-toggle" title="撤销上一次 AI 排版" @click="undoMarkdownFormat">撤销排版</button>
             <button type="button" title="无序列表" @click="prefix('- ')">列表</button>
             <button type="button" title="代码块" @click="insertSnippet('\n```go\n\n```\n')">代码块</button>
             <button type="button" title="分割线" @click="insertSnippet('\n\n---\n\n')">分割线</button>
@@ -933,6 +1091,13 @@ onBeforeUnmount(() => {
             accept="image/jpeg,image/png,image/gif,image/webp"
             multiple
             @change="onFilePick"
+          />
+          <input
+            ref="attachmentInput"
+            class="hidden-file"
+            type="file"
+            multiple
+            @change="onAttachmentPick"
           />
 
           <div class="editor-foot">

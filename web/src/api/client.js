@@ -66,10 +66,19 @@ export const api = {
   post: (path, body) => request(path, { method: 'POST', body }),
   put: (path, body) => request(path, { method: 'PUT', body }),
   del: (path) => request(path, { method: 'DELETE' }),
-  uploadImage: (file) => uploadImage(file)
+  uploadImage: (file) => uploadImage(file),
+  uploadAttachment: (file) => uploadAttachment(file)
 }
 
 async function uploadImage(file) {
+  return uploadFile('/api/images', file, '图片上传失败', 'image')
+}
+
+async function uploadAttachment(file) {
+  return uploadFile('/api/attachments', file, '附件上传失败', 'attachment')
+}
+
+async function uploadFile(endpoint, file, fallbackMessage, key) {
   const form = new FormData()
   form.append('file', file)
   const headers = { Accept: 'application/json' }
@@ -78,12 +87,12 @@ async function uploadImage(file) {
 
   let res
   try {
-    res = await fetch('/api/images', { method: 'POST', headers, body: form })
+    res = await fetch(endpoint, { method: 'POST', headers, body: form })
   } catch {
-    throw new ApiError('图片上传失败，请检查网络', 0)
+    throw new ApiError(`${fallbackMessage}，请检查网络`, 0)
   }
   if (!res.ok) {
-    let message = '图片上传失败'
+    let message = fallbackMessage
     try {
       const data = await res.json()
       message = data.error || message
@@ -96,5 +105,5 @@ async function uploadImage(file) {
     throw new ApiError(message, res.status)
   }
   const data = await res.json()
-  return data.image
+  return data[key]
 }

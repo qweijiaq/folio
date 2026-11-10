@@ -94,6 +94,7 @@ func (a *API) Routes(r *gin.Engine) {
 	g.POST("/images", a.Auth(), a.ImageUpload)
 	g.GET("/images", a.Auth(), a.StaffOnly(), a.ImageList)
 	g.DELETE("/images/:id", a.Auth(), a.StaffOnly(), a.ImageDelete)
+	g.POST("/attachments", a.Auth(), a.StaffOnly(), a.AttachmentUpload)
 
 	g.DELETE("/comments/:id", a.Auth(), a.CommentDelete)
 	g.POST("/comments/:id/like", a.Auth(), a.CommentLike)
@@ -179,6 +180,7 @@ func (a *API) Routes(r *gin.Engine) {
 	admin.GET("/dashboard", a.StaffOnly(), a.AdminDashboard)
 	admin.GET("/export", a.StaffOnly(), a.ExportContent)
 	admin.POST("/publish/review", a.StaffOnly(), a.PublishReview)
+	admin.POST("/markdown/format", a.StaffOnly(), a.MarkdownFormat)
 	admin.GET("/settings", a.SuperAdminOnly(), a.AdminSettings)
 	admin.PUT("/settings", a.SuperAdminOnly(), a.AdminSettingsUpdate)
 	admin.GET("/access", a.SuperAdminOnly(), a.AdminAccess)

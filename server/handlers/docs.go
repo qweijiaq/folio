@@ -19,22 +19,23 @@ import (
 )
 
 type docInput struct {
-	Kind         string     `json:"kind"`
-	Title        string     `json:"title"`
-	Abstract     string     `json:"abstract"`
-	Content      string     `json:"content"`
-	Tags         []string   `json:"tags"`
-	Status       string     `json:"status"`
-	PublishAt    *time.Time `json:"publishAt"`
-	Private      *bool      `json:"private"`
-	SearchHidden *bool      `json:"searchHidden"`
-	ParentID     *uint      `json:"parentID"`
-	CategoryID   *uint      `json:"categoryID"`
-	SeriesID     *uint      `json:"seriesID"`
-	SeriesOrder  int        `json:"seriesOrder"`
-	Pinned       *bool      `json:"pinned"`
-	OpenComment  *bool      `json:"openComment"`
-	Sort         int        `json:"sort"`
+	Kind         string               `json:"kind"`
+	Title        string               `json:"title"`
+	Abstract     string               `json:"abstract"`
+	Content      string               `json:"content"`
+	Tags         []string             `json:"tags"`
+	Attachments  *[]models.Attachment `json:"attachments"`
+	Status       string               `json:"status"`
+	PublishAt    *time.Time           `json:"publishAt"`
+	Private      *bool                `json:"private"`
+	SearchHidden *bool                `json:"searchHidden"`
+	ParentID     *uint                `json:"parentID"`
+	CategoryID   *uint                `json:"categoryID"`
+	SeriesID     *uint                `json:"seriesID"`
+	SeriesOrder  int                  `json:"seriesOrder"`
+	Pinned       *bool                `json:"pinned"`
+	OpenComment  *bool                `json:"openComment"`
+	Sort         int                  `json:"sort"`
 }
 
 func validateSchedule(status string, publishAt, current *time.Time) error {
@@ -179,6 +180,7 @@ func (a *API) resolveSeries(kind string, seriesID *uint, author *models.User) (*
 func blankContent(docs []models.Document) {
 	for i := range docs {
 		docs[i].Content = ""
+		docs[i].Attachments = nil
 	}
 }
 
@@ -451,6 +453,14 @@ func (a *API) DocCreate(c *gin.Context) {
 	if abstract == "" {
 		abstract = plainText(in.Content)
 	}
+	var attachments []models.Attachment
+	if in.Attachments != nil {
+		attachments, err = normalizeAttachments(*in.Attachments)
+		if err != nil {
+			bad(c, err.Error())
+			return
+		}
+	}
 	openComment := true
 	if in.OpenComment != nil {
 		openComment = *in.OpenComment
@@ -460,6 +470,7 @@ func (a *API) DocCreate(c *gin.Context) {
 		Title:        in.Title,
 		Abstract:     abstract,
 		Content:      in.Content,
+		Attachments:  attachments,
 		AuthorID:     u.ID,
 		ParentID:     in.ParentID,
 		CategoryID:   categoryID,
@@ -560,7 +571,19 @@ func (a *API) DocUpdate(c *gin.Context) {
 	if abstract == "" {
 		abstract = plainText(in.Content)
 	}
-	if a.documentChanged(&doc, in, abstract, categoryID) {
+	var attachments []models.Attachment
+	if in.Attachments != nil {
+		attachments, err = normalizeAttachments(*in.Attachments)
+		if err != nil {
+			bad(c, err.Error())
+			return
+		}
+	}
+	changed := a.documentChanged(&doc, in, abstract, categoryID)
+	if !changed && in.Attachments != nil && !sameAttachments(doc.Attachments, attachments) {
+		changed = true
+	}
+	if changed {
 		if err := a.saveRevision(&doc, u); err != nil {
 			fail(c, http.StatusInternalServerError, "保存历史版本失败")
 			return
@@ -578,6 +601,10 @@ func (a *API) DocUpdate(c *gin.Context) {
 	doc.SeriesOrder = maxInt(0, in.SeriesOrder)
 	doc.Sort = in.Sort
 	fields := []string{"title", "abstract", "content", "tags", "status", "publish_at", "parent_id", "category_id", "series_id", "series_order", "sort"}
+	if in.Attachments != nil {
+		doc.Attachments = attachments
+		fields = append(fields, "attachments")
+	}
 	if doc.Kind == models.KindDoc && in.Private != nil {
 		doc.Private = *in.Private
 		fields = append(fields, "private")

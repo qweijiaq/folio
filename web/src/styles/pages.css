@@ -6625,6 +6625,188 @@
   }
 }
 
+/* ---------- 附件 ---------- */
+
+.attachment-section {
+  margin-top: 48px;
+  padding-top: 26px;
+  border-top: 1px solid var(--line);
+}
+
+.attachment-head h2 {
+  margin: 6px 0 4px;
+  font-family: var(--hand);
+  font-size: 1.35rem;
+  font-weight: 500;
+}
+
+.attachment-head p {
+  margin: 0;
+  color: var(--ink-faint);
+  font-size: 12px;
+}
+
+.attachment-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.attachment-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  transition: border-color 0.16s ease, transform 0.16s ease;
+}
+
+.attachment-card:hover {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+
+.attachment-icon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--accent);
+}
+
+.attachment-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.attachment-main strong {
+  overflow: hidden;
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachment-main small {
+  color: var(--ink-faint);
+  font-size: 11px;
+}
+
+.attachment-action {
+  flex: 0 0 auto;
+  color: var(--ink-faint);
+}
+
+.attachment-field {
+  padding-top: 2px;
+}
+
+.attachment-editor-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.attachment-editor-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 7px 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface-2);
+}
+
+.attachment-editor-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+
+.attachment-editor-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.attachment-editor-main strong {
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachment-editor-main small {
+  color: var(--ink-faint);
+  font-size: 10.5px;
+}
+
+.attachment-editor-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 1px;
+}
+
+.attachment-editor-actions button {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ink-faint);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.attachment-editor-actions button:hover:not(:disabled) {
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.attachment-editor-actions button:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.attachment-editor-actions-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.attachment-link-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 10px;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.attachment-link-form input {
+  font-size: 12px;
+}
+
 /* ---------- 发布助手 ---------- */
 
 .publish-page {

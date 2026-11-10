@@ -5,17 +5,19 @@
 .article-body .prose,
 .docs-article .prose {
   max-width: var(--reading-width, 760px);
-  font-size: var(--reading-font-size, 17px);
+  font-size: var(--reading-font-size, 17.5px);
 }
 
 .prose {
-  max-width: 760px;
+  max-width: 740px;
   color: var(--ink);
   font-family: var(--serif);
-  font-size: 17px;
-  line-height: 1.98;
-  letter-spacing: 0.005em;
-  word-break: break-word;
+  font-size: 17.5px;
+  line-height: 2.05;
+  letter-spacing: 0.01em;
+  line-break: strict;
+  text-rendering: optimizeLegibility;
+  overflow-wrap: break-word;
 }
 
 .prose > :first-child {
@@ -23,7 +25,7 @@
 }
 
 .prose > * + * {
-  margin-top: 1.15em;
+  margin-top: 1.5em;
 }
 
 .prose h1,
@@ -59,26 +61,33 @@
   color: var(--accent);
 }
 
+.prose h1,
+.prose h2,
+.prose h3,
+.prose h4 {
+  letter-spacing: -0.015em;
+}
+
 .prose h1 {
-  margin-top: 2em;
-  font-size: 1.9rem;
+  margin-top: 2.4em;
+  font-size: 2.05rem;
 }
 
 .prose h2 {
-  margin-top: 2em;
-  padding-bottom: 0.4em;
+  margin-top: 2.5em;
+  padding-bottom: 0.5em;
   border-bottom: 1px solid var(--line);
-  font-size: 1.55rem;
+  font-size: 1.6rem;
 }
 
 .prose h3 {
-  margin-top: 1.7em;
-  font-size: 1.22rem;
+  margin-top: 2em;
+  font-size: 1.26rem;
 }
 
 .prose h4 {
-  margin-top: 1.5em;
-  font-size: 1.05rem;
+  margin-top: 1.7em;
+  font-size: 1.08rem;
 }
 
 .prose p {
@@ -88,9 +97,9 @@
 .prose a {
   color: var(--accent);
   text-decoration: underline;
-  text-decoration-color: color-mix(in srgb, var(--accent) 40%, transparent);
-  text-decoration-thickness: 1px;
-  text-underline-offset: 4px;
+  text-decoration-color: color-mix(in srgb, var(--accent) 42%, transparent);
+  text-decoration-thickness: 1.2px;
+  text-underline-offset: 3px;
 }
 
 .prose a:hover {
@@ -110,16 +119,26 @@
 }
 
 .prose strong {
-  font-weight: 600;
+  color: var(--ink);
+  font-weight: 650;
 }
 
 .prose ul,
 .prose ol {
   display: flex;
   flex-direction: column;
-  gap: 0.35em;
-  margin: 1em 0;
-  padding-left: 1.45em;
+  gap: 0.55em;
+  margin: 1.3em 0;
+  padding-left: 1.6em;
+}
+
+.prose li > p {
+  margin: 0;
+}
+
+.prose li > ul,
+.prose li > ol {
+  margin: 0.45em 0 0.2em;
 }
 
 .prose li::marker {
@@ -127,36 +146,42 @@
 }
 
 .prose blockquote {
-  margin: 1.6em 0;
-  padding: 14px 20px;
+  margin: 1.9em 0;
+  padding: 17px 22px;
   border-left: 3px solid var(--accent);
   border-radius: 0 10px 10px 0;
-  background: var(--surface-2);
+  background: linear-gradient(90deg, var(--surface-2), color-mix(in srgb, var(--surface-2) 55%, transparent));
   color: var(--ink-soft);
   font-family: var(--serif);
-  font-size: 1.05em;
+  font-size: 1.03em;
+  line-height: 1.9;
 }
 
 .prose blockquote p {
   margin: 0;
 }
 
+.prose blockquote p + p {
+  margin-top: 0.8em;
+}
+
 .prose code {
-  padding: 0.12em 0.4em;
+  padding: 0.14em 0.42em;
   border: 1px solid var(--line);
   border-radius: 5px;
   background: var(--surface-2);
   color: var(--accent);
   font-family: var(--mono);
-  font-size: 0.86em;
+  font-size: 0.88em;
 }
 
 .prose img {
   max-width: 100%;
   height: auto;
-  margin: 1.6em 0;
+  margin: 2em 0;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 10px;
+  box-shadow: 0 12px 32px color-mix(in srgb, var(--ink) 7%, transparent);
 }
 
 .prose p.md-image {
@@ -169,33 +194,38 @@
 
 .prose p.md-caption {
   margin-top: 0;
-  margin-bottom: 2em;
+  margin-bottom: 2.4em;
   color: var(--ink-faint);
-  font-size: 13px;
+  font-size: 12.5px;
+  line-height: 1.7;
+  letter-spacing: 0.02em;
   text-align: center;
 }
 
 .prose hr {
-  margin: 2.4em 0;
+  width: 80px;
+  margin: 3.2em auto;
   border: 0;
-  border-top: 1px solid var(--line);
+  border-top: 1.5px solid var(--line-strong);
 }
 
 .prose table {
   display: block;
   max-width: 100%;
-  margin: 1.6em 0;
+  margin: 1.9em 0;
   overflow-x: auto;
   border-collapse: collapse;
-  font-size: 14px;
+  font-size: 13.5px;
+  line-height: 1.7;
 }
 
 .prose th,
 .prose td {
-  padding: 9px 13px;
+  padding: 10px 14px;
   border: 1px solid var(--line);
   text-align: left;
-  white-space: nowrap;
+  vertical-align: top;
+  white-space: normal;
 }
 
 .prose th {
@@ -344,8 +374,8 @@
 
 @media (max-width: 640px) {
   .prose {
-    font-size: 15.5px;
-    line-height: 1.9;
+    font-size: 16.5px;
+    line-height: 1.95;
   }
 
   .prose h2 {

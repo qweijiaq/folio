@@ -62,35 +62,46 @@ type UserSession struct {
 	RevokedAt  *time.Time `json:"revokedAt"`
 }
 
+// Attachment 是随文章/文档一起保存的附件，可以是一个上传文件，也可以是一个外部链接。
+// 文件本体存放在图片存储中，这里只保留展示和下载所需的信息。
+type Attachment struct {
+	Kind  string `json:"kind"`
+	Title string `json:"title"`
+	URL   string `json:"url"`
+	Size  int64  `json:"size"`
+	MIME  string `json:"mime"`
+}
+
 // Document 同时承载博客文章（article）与知识库文档（doc）。
 // 文档通过 ParentID 组成树，文章始终是平的。
 type Document struct {
 	Base
-	Kind          string     `gorm:"size:16;index;not null" json:"kind"`
-	Title         string     `gorm:"size:200;not null" json:"title"`
-	Abstract      string     `gorm:"size:500" json:"abstract"`
-	Content       string     `gorm:"type:longtext" json:"content,omitempty"`
-	AuthorID      uint       `gorm:"index" json:"authorID"`
-	Author        User       `gorm:"foreignKey:AuthorID" json:"author"`
-	ParentID      *uint      `gorm:"index" json:"parentID"`
-	CategoryID    *uint      `gorm:"index" json:"categoryID"`
-	Category      *Category  `gorm:"foreignKey:CategoryID" json:"category,omitempty"`
-	SeriesID      *uint      `gorm:"index" json:"seriesID"`
-	SeriesOrder   int        `json:"seriesOrder"`
-	Series        *Series    `gorm:"foreignKey:SeriesID" json:"series,omitempty"`
-	Tags          []string   `gorm:"type:text;serializer:json" json:"tags"`
-	Status        string     `gorm:"size:16;index;not null;default:draft" json:"status"`
-	Private       bool       `gorm:"not null;default:false" json:"private"`
-	SearchHidden  bool       `gorm:"not null;default:false" json:"searchHidden"`
-	PublishAt     *time.Time `json:"publishAt"`
-	Pinned        bool       `json:"pinned"`
-	OpenComment   bool       `gorm:"not null;default:true" json:"openComment"`
-	Sort          int        `json:"sort"`
-	ViewCount     int        `json:"viewCount"`
-	LikeCount     int        `json:"likeCount"`
-	CommentCount  int        `json:"commentCount"`
-	FavoriteCount int        `json:"favoriteCount"`
-	PublishedAt   *time.Time `json:"publishedAt"`
+	Kind          string       `gorm:"size:16;index;not null" json:"kind"`
+	Title         string       `gorm:"size:200;not null" json:"title"`
+	Abstract      string       `gorm:"size:500" json:"abstract"`
+	Content       string       `gorm:"type:longtext" json:"content,omitempty"`
+	Attachments   []Attachment `gorm:"type:text;serializer:json" json:"attachments"`
+	AuthorID      uint         `gorm:"index" json:"authorID"`
+	Author        User         `gorm:"foreignKey:AuthorID" json:"author"`
+	ParentID      *uint        `gorm:"index" json:"parentID"`
+	CategoryID    *uint        `gorm:"index" json:"categoryID"`
+	Category      *Category    `gorm:"foreignKey:CategoryID" json:"category,omitempty"`
+	SeriesID      *uint        `gorm:"index" json:"seriesID"`
+	SeriesOrder   int          `json:"seriesOrder"`
+	Series        *Series      `gorm:"foreignKey:SeriesID" json:"series,omitempty"`
+	Tags          []string     `gorm:"type:text;serializer:json" json:"tags"`
+	Status        string       `gorm:"size:16;index;not null;default:draft" json:"status"`
+	Private       bool         `gorm:"not null;default:false" json:"private"`
+	SearchHidden  bool         `gorm:"not null;default:false" json:"searchHidden"`
+	PublishAt     *time.Time   `json:"publishAt"`
+	Pinned        bool         `json:"pinned"`
+	OpenComment   bool         `gorm:"not null;default:true" json:"openComment"`
+	Sort          int          `json:"sort"`
+	ViewCount     int          `json:"viewCount"`
+	LikeCount     int          `json:"likeCount"`
+	CommentCount  int          `json:"commentCount"`
+	FavoriteCount int          `json:"favoriteCount"`
+	PublishedAt   *time.Time   `json:"publishedAt"`
 }
 
 // Series 是文章的合集/系列，按 SeriesOrder 排序。

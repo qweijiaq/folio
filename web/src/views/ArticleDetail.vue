@@ -12,6 +12,7 @@ import Backlinks from '../components/Backlinks.vue'
 import ReadingTools from '../components/ReadingTools.vue'
 import ArticleSkeleton from '../components/ArticleSkeleton.vue'
 import TagPill from '../components/TagPill.vue'
+import AttachmentList from '../components/AttachmentList.vue'
 import EmptyState from '../components/EmptyState.vue'
 import Icon from '../components/Icon.vue'
 import ReadingBar from '../components/ReadingBar.vue'
@@ -261,6 +262,8 @@ watch(
             <Icon name="tag" :size="15" />
             <TagPill v-for="tag in doc.tags" :key="tag" :name="tag" />
           </div>
+
+          <AttachmentList :attachments="doc.attachments || []" />
 
           <DocActions
             class="doc-actions--mobile"

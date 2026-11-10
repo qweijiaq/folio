@@ -141,6 +141,11 @@ func (s *testAPI) register(t *testing.T, username string) (string, uint) {
 
 func (s *testAPI) upload(t *testing.T, token, field, filename string, content []byte) (int, map[string]any) {
 	t.Helper()
+	return s.uploadTo(t, "/api/images", token, field, filename, content)
+}
+
+func (s *testAPI) uploadTo(t *testing.T, path, token, field, filename string, content []byte) (int, map[string]any) {
+	t.Helper()
 	var buf bytes.Buffer
 	writer := multipart.NewWriter(&buf)
 	part, err := writer.CreateFormFile(field, filename)
@@ -152,7 +157,7 @@ func (s *testAPI) upload(t *testing.T, token, field, filename string, content []
 	}
 	writer.Close()
 
-	req := httptest.NewRequest("POST", "/api/images", &buf)
+	req := httptest.NewRequest("POST", path, &buf)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
@@ -484,6 +489,109 @@ func TestImageUpload(t *testing.T) {
 	}
 	if _, err := os.Stat(diskPath); !os.IsNotExist(err) {
 		t.Fatalf("删除图片后文件仍然存在: %v", err)
+	}
+}
+
+func TestDocumentAttachments(t *testing.T) {
+	s := newTestAPI(t)
+	ownerToken, _ := s.register(t, "attachmentowner")
+	readerToken, _ := s.register(t, "attachmentreader")
+
+	status, data := s.uploadTo(t, "/api/attachments", ownerToken, "file", "手册.pdf", []byte("%PDF-1.4 folio attachment test"))
+	if status != http.StatusCreated {
+		t.Fatalf("上传附件失败: %d %v", status, data)
+	}
+	fileAttachment := obj(data, "attachment")
+	if fileAttachment["kind"] != "file" || fileAttachment["title"] != "手册.pdf" {
+		t.Fatalf("附件上传结果不正确: %v", fileAttachment)
+	}
+	if !strings.HasPrefix(fmt.Sprint(fileAttachment["url"]), "/uploads/attachments/") {
+		t.Fatalf("附件 URL 异常: %v", fileAttachment)
+	}
+
+	status, data = s.uploadTo(t, "/api/attachments", readerToken, "file", "reader.pdf", []byte("%PDF-1.4 reader"))
+	if status != http.StatusForbidden {
+		t.Fatalf("读者不应能上传附件，实际 %d %v", status, data)
+	}
+
+	status, data = s.do(t, "POST", "/api/docs", ownerToken, map[string]any{
+		"kind": "article", "title": "带附件的文章", "content": "这是一篇带附件的文章正文。", "status": "published",
+		"attachments": []map[string]any{
+			{"kind": "file", "title": fileAttachment["title"], "url": fileAttachment["url"], "size": fileAttachment["size"], "mime": fileAttachment["mime"]},
+			{"kind": "link", "title": "项目主页", "url": "https://folio.weijia.asia"},
+		},
+	})
+	if status != http.StatusCreated {
+		t.Fatalf("创建带附件内容失败: %d %v", status, data)
+	}
+	docID := uint(number(obj(data, "doc")["id"]))
+
+	status, data = s.do(t, "GET", fmt.Sprintf("/api/docs/%d", docID), "", nil)
+	if status != http.StatusOK {
+		t.Fatalf("读取带附件内容失败: %d %v", status, data)
+	}
+	attachments, _ := obj(data, "doc")["attachments"].([]any)
+	if len(attachments) != 2 {
+		t.Fatalf("附件没有正确保存: %v", attachments)
+	}
+	if attachments[0].(map[string]any)["kind"] != "file" || attachments[1].(map[string]any)["kind"] != "link" {
+		t.Fatalf("附件类型不正确: %v", attachments)
+	}
+
+	status, data = s.do(t, "PUT", fmt.Sprintf("/api/docs/%d", docID), ownerToken, map[string]any{
+		"title": "带附件的文章", "content": "这是一篇带附件的文章正文。", "status": "published",
+		"attachments": []map[string]any{{"kind": "link", "title": "只保留链接", "url": "https://example.com"}},
+	})
+	if status != http.StatusOK {
+		t.Fatalf("更新附件失败: %d %v", status, data)
+	}
+	attachments, _ = obj(data, "doc")["attachments"].([]any)
+	if len(attachments) != 1 || attachments[0].(map[string]any)["title"] != "只保留链接" {
+		t.Fatalf("附件更新结果不正确: %v", attachments)
+	}
+
+	status, _ = s.do(t, "POST", "/api/docs", ownerToken, map[string]any{
+		"kind": "article", "title": "非法附件", "content": "正文足够长。", "status": "published",
+		"attachments": []map[string]any{{"kind": "link", "title": "坏链接", "url": "javascript:alert(1)"}},
+	})
+	if status != http.StatusBadRequest {
+		t.Fatalf("非法附件链接应被拒绝，实际 %d", status)
+	}
+}
+
+func TestMarkdownFormatUsesAI(t *testing.T) {
+	formatted := "# 标题\n\n这是一段正文。\n\n## 小节\n\n- 第一项\n- 第二项\n"
+	var captured string
+	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		captured = string(body)
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"choices":[{"message":{"content":%s},"finish_reason":"stop"}]}`, strconv.Quote(formatted))
+	}))
+	defer fake.Close()
+
+	s := newTestAPI(t, func(cfg *config.Config) {
+		cfg.DeepSeekBaseURL = fake.URL
+	})
+	token, _ := s.register(t, "markdownformatter")
+	status, data := s.do(t, "PUT", "/api/admin/ai-summary", token, map[string]any{
+		"enabled": true, "provider": "deepseek", "model": "deepseek-chat", "apiKey": "sk-test-1234567890",
+	})
+	if status != http.StatusOK {
+		t.Fatalf("配置 AI 摘要失败: %d %v", status, data)
+	}
+
+	status, data = s.do(t, "POST", "/api/admin/markdown/format", token, map[string]any{
+		"content": "# 标题\n\n这是一段正文。\n\n## 小节\n\n- 第一项\n- 第二项\n",
+	})
+	if status != http.StatusOK {
+		t.Fatalf("Markdown 排版失败: %d %v", status, data)
+	}
+	if data["markdown"] != strings.TrimSpace(formatted) {
+		t.Fatalf("排版结果不正确: %v", data)
+	}
+	if !strings.Contains(captured, "Markdown") || !strings.Contains(captured, "标题层级") {
+		t.Fatalf("排版提示词没有进入 AI 请求: %s", captured)
 	}
 }
 

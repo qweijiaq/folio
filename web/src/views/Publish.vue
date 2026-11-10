@@ -5,6 +5,7 @@ import JSZip from 'jszip'
 import { api } from '../api/client'
 import { auth } from '../stores/auth'
 import { toast, toastError } from '../stores/toast'
+import { confirmDialog } from '../stores/confirm'
 import MarkdownView from '../components/MarkdownView.vue'
 import SelectBox from '../components/SelectBox.vue'
 import Icon from '../components/Icon.vue'
@@ -23,6 +24,8 @@ const uploadedCount = ref(0)
 const reusedCount = ref(0)
 const imagesUploaded = ref(true)
 const reviewing = ref(false)
+const markdownFormatting = ref(false)
+const markdownBackup = ref(null)
 const publishing = ref(false)
 const issues = ref([])
 const edits = ref([])
@@ -499,6 +502,63 @@ watch(referenceID, (id) => {
   loadReference(id)
 })
 
+async function formatMarkdown() {
+  const targets = chapters.value.length > 1
+    ? chapters.value.map((chapter) => chapter.content)
+    : [rawMarkdown.value]
+  if (!targets.some((item) => item.trim())) {
+    toast('先导入或粘贴正文')
+    return
+  }
+  const ok = await confirmDialog({
+    title: 'Markdown 排版',
+    message: chapters.value.length > 1
+      ? `AI 会依次整理 ${chapters.value.length} 个章节的标题层级、空行、列表和链接语法，不改写正文。`
+      : 'AI 会整理标题层级、空行、列表、代码围栏和链接语法，不改写正文。应用后可以撤销。',
+    confirmText: '开始排版'
+  })
+  if (!ok) return
+  markdownFormatting.value = true
+  try {
+    const results = []
+    for (const content of targets) {
+      if (!content.trim()) {
+        results.push(content)
+        continue
+      }
+      const data = await api.post('/admin/markdown/format', { content })
+      results.push(data.markdown || content)
+    }
+    const backup = {
+      raw: rawMarkdown.value,
+      chapters: chapters.value.map((chapter) => chapter.content)
+    }
+    if (chapters.value.length > 1) {
+      chapters.value = chapters.value.map((chapter, index) => ({ ...chapter, content: results[index] }))
+      rawMarkdown.value = results[0]
+    } else {
+      rawMarkdown.value = results[0]
+    }
+    markdownBackup.value = backup
+    toast(chapters.value.length > 1 ? `已排版 ${results.length} 个章节` : 'Markdown 已排版，可撤销')
+  } catch (err) {
+    toastError(err)
+  } finally {
+    markdownFormatting.value = false
+  }
+}
+
+function undoMarkdownFormat() {
+  if (!markdownBackup.value) return
+  rawMarkdown.value = markdownBackup.value.raw
+  chapters.value = chapters.value.map((chapter, index) => ({
+    ...chapter,
+    content: markdownBackup.value.chapters[index] ?? chapter.content
+  }))
+  markdownBackup.value = null
+  toast('已撤销排版')
+}
+
 async function review() {
   if (!rawMarkdown.value.trim()) {
     toast('先导入或粘贴正文')
@@ -678,6 +738,10 @@ onMounted(async () => {
           <p class="page-lede">粘贴 Markdown 或上传 zip，自动上传图片、AI 审校、生成上级文档。</p>
         </div>
         <div class="publish-actions">
+          <button class="btn btn-ghost btn-sm" type="button" :disabled="markdownFormatting" @click="formatMarkdown">
+            {{ markdownFormatting ? '排版中…' : 'Markdown 排版' }}
+          </button>
+          <button v-if="markdownBackup" class="btn btn-ghost btn-sm" type="button" @click="undoMarkdownFormat">撤销排版</button>
           <button class="btn btn-ghost btn-sm" type="button" :disabled="reviewing" @click="review">
             {{ reviewing ? '审校中…' : 'AI 审校' }}
           </button>
