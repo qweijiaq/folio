@@ -853,9 +853,9 @@ onBeforeUnmount(() => {
             <p v-else-if="parentPrivate" class="hint">上级文档是私密文档，这篇文档也会按私密处理。</p>
             <label class="checkbox">
               <input v-model="form.searchHidden" type="checkbox" />
-              在搜索中隐藏（仅作为目录节点）
+              在搜索和文档列表中隐藏（仅作为目录节点）
             </label>
-            <p v-if="form.searchHidden" class="hint">不会出现在全站搜索和 AI 检索里，但目录树和详情页仍然正常显示。</p>
+            <p v-if="form.searchHidden" class="hint">不会出现在全站搜索、AI 检索和公开文档列表里，但目录树和详情页仍然正常显示。</p>
           </template>
           <label v-else class="checkbox">
             <input v-model="form.pinned" type="checkbox" />

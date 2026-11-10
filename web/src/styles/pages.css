@@ -6239,6 +6239,11 @@
   font-size: 12.5px;
 }
 
+.publish-warn {
+  margin: 10px 0 0;
+  color: var(--danger, #b4473a);
+}
+
 .publish-file-input {
   position: absolute;
   width: 1px;

@@ -27,6 +27,7 @@ func (a *API) tagStats(limit int, kind string) []tagCount {
 		if hidden := a.hiddenDocIDs(nil); len(hidden) > 0 {
 			q = q.Where("id NOT IN ?", hidden)
 		}
+		q = q.Where("search_hidden = ?", false)
 	}
 	q.Pluck("tags", &raw)
 	counts := map[string]int{}
@@ -67,7 +68,7 @@ func (a *API) SiteHome(c *gin.Context) {
 	var articles, docs, users int64
 	hiddenDocs := a.hiddenDocIDs(nil)
 	a.DB.Model(&models.Document{}).Where("status = ? AND kind = ?", models.StatusPublished, models.KindArticle).Count(&articles)
-	docQuery := a.DB.Model(&models.Document{}).Where("status = ? AND kind = ?", models.StatusPublished, models.KindDoc)
+	docQuery := a.DB.Model(&models.Document{}).Where("status = ? AND kind = ? AND search_hidden = ?", models.StatusPublished, models.KindDoc, false)
 	if len(hiddenDocs) > 0 {
 		docQuery = docQuery.Where("id NOT IN ?", hiddenDocs)
 	}
@@ -93,7 +94,7 @@ func (a *API) SiteHome(c *gin.Context) {
 
 	var recentDocs []models.Document
 	recentDocQuery := a.DB.Preload("Category").Preload("Author", authorSelect).
-		Where("status = ? AND kind = ?", models.StatusPublished, models.KindDoc)
+		Where("status = ? AND kind = ? AND search_hidden = ?", models.StatusPublished, models.KindDoc, false)
 	if len(hiddenDocs) > 0 {
 		recentDocQuery = recentDocQuery.Where("documents.id NOT IN ?", hiddenDocs)
 	}

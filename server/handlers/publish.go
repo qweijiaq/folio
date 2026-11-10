@@ -12,13 +12,15 @@ import (
 )
 
 type publishReviewInput struct {
-	Content     string   `json:"content"`
-	Title       string   `json:"title"`
-	Abstract    string   `json:"abstract"`
-	Tags        []string `json:"tags"`
-	Perspective string   `json:"perspective"`
-	Mode        string   `json:"mode"`
-	Kind        string   `json:"kind"`
+	Content        string   `json:"content"`
+	Title          string   `json:"title"`
+	Abstract       string   `json:"abstract"`
+	Tags           []string `json:"tags"`
+	Perspective    string   `json:"perspective"`
+	Mode           string   `json:"mode"`
+	Kind           string   `json:"kind"`
+	Reference      string   `json:"reference"`
+	ReferenceTitle string   `json:"referenceTitle"`
 }
 
 type publishEdit struct {
@@ -69,6 +71,10 @@ func (a *API) PublishReview(c *gin.Context) {
 		bad(c, "正文超过 6 万字，建议分章审校")
 		return
 	}
+	in.Reference = strings.TrimSpace(in.Reference)
+	if runeLen(in.Reference) > 6000 {
+		in.Reference = truncateRunes(in.Reference, 6000)
+	}
 	kind := "文章"
 	if in.Kind == "doc" {
 		kind = "文档"
@@ -85,8 +91,9 @@ func (a *API) PublishReview(c *gin.Context) {
 1. 找出错别字、标点错误、重复词、病句、逻辑跳跃、标题层级或编号错误、图注编号不连续。
 2. ` + publishModeText(in.Mode) + `
 3. ` + publishPerspectiveText(in.Perspective) + `
-4. 不改变事实、观点和原文结构；不要新增原文没有的信息。
-5. 只输出一个 JSON 对象，不要 Markdown 代码块，不要解释。
+4. 如果提供了「参考文风」，先体会它的叙述视角、句子长短、段落节奏、标题层级、用词习惯和举例方式，再把待审内容改写到接近这种写法。只学习写法，不要照抄参考文中的句子、事实或观点；不要改变待审内容本身的事实和信息。
+5. 不改变事实、观点和原文结构；不要新增原文没有的信息。
+6. 只输出一个 JSON 对象，不要 Markdown 代码块，不要解释。
 
 JSON 格式：
 {
@@ -99,13 +106,20 @@ JSON 格式：
   "tags": ["标签1", "标签2"]
 }
 
-edits 的 find 必须与原文逐字匹配且尽量短；不要返回整篇全文。最多 30 条 edits。`
+edits 的 find 必须与原文逐字匹配；可以是短句，也可以是一个完整段落。优先用整段替换来统一文风，单条 find 不超过 500 字，不要返回整篇全文。最多 30 条 edits。`
 
 	userPrompt := "标题：" + strings.TrimSpace(in.Title) +
 		"\n摘要：" + strings.TrimSpace(in.Abstract) +
 		"\n标签：" + strings.Join(in.Tags, "、") +
-		"\n类型：" + kind +
-		"\n\n正文：\n" + in.Content
+		"\n类型：" + kind
+	if in.Reference != "" {
+		name := strings.TrimSpace(in.ReferenceTitle)
+		if name == "" {
+			name = "未命名参考文档"
+		}
+		userPrompt += "\n\n参考文风（《" + name + "》，只学习写法，不要照抄）：\n" + in.Reference
+	}
+	userPrompt += "\n\n待审正文：\n" + in.Content
 
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 120*time.Second)
 	defer cancel()

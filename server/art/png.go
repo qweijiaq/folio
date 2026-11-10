@@ -10,7 +10,7 @@ import (
 	"strconv"
 )
 
-// CoverPNG 生成 1200x630 的分享卡片底图。与 SVG 封面同一套种子与线稿语言，
+// CoverPNG 生成 1200x630 的分享卡片底图。与 SVG 封面同一套极简索引卡语言，
 // 不放标题文字，避免依赖字体，适合作为 og:image 的稳定图片。
 func CoverPNG(seed, kind string) ([]byte, error) {
 	if seed == "" {
@@ -18,43 +18,40 @@ func CoverPNG(seed, kind string) ([]byte, error) {
 	}
 	h := hash(seed + "|" + kind)
 	bg := parseHex(tints[h%uint64(len(tints))])
-	ink := parseHex(inkColor)
+	surface := blend(bg, parseHex("#fbfaf6"), 0.78)
+	line := parseHex("#d9d6cb")
 	accent := parseHex(accentColor)
 
 	img := image.NewRGBA(image.Rect(0, 0, 1200, 630))
 	draw.Draw(img, img.Bounds(), &image.Uniform{C: bg}, image.Point{}, draw.Src)
 
-	cx, cy := 600.0, 315.0
-	switch h % 4 {
-	case 0:
-		drawCircle(img, cx, cy, 132, 7, ink)
-		drawLine(img, cx+78, cy+154, cx+250, cy+138, 7, accent)
-	case 1:
-		points := make([][2]float64, 0, 120)
-		for i := 0; i <= 120; i++ {
-			x := cx - 300 + float64(i)*5
-			y := cy + math.Sin(float64(i)/12)*72
-			points = append(points, [2]float64{x, y})
-		}
-		drawPolyline(img, points, 7, ink)
-		drawCircle(img, cx+236, cy-126, 15, 5, accent)
-	case 2:
-		drawLine(img, cx-280, cy-92, cx+196, cy-88, 7, ink)
-		drawLine(img, cx-280, cy, cx+42, cy+4, 7, ink)
-		drawLine(img, cx-280, cy+92, cx-76, cy+88, 7, ink)
-		drawCircle(img, cx+248, cy+92, 13, 5, accent)
-	default:
-		drawPolyline(img, [][2]float64{
-			{cx - 220, cy + 126}, {cx, cy - 142}, {cx + 220, cy + 126},
-		}, 7, ink)
-		drawLine(img, cx-64, cy+126, cx+102, cy+122, 7, accent)
-	}
+	card := image.Rect(52, 44, 1148, 586)
+	draw.Draw(img, card, &image.Uniform{C: surface}, image.Point{}, draw.Src)
+	drawLine(img, 52, 44, 1148, 44, 2, line)
+	drawLine(img, 52, 586, 1148, 586, 2, line)
+	drawLine(img, 52, 44, 52, 586, 2, line)
+	drawLine(img, 1148, 44, 1148, 586, 2, line)
+
+	accentLen := 44 + float64(h%3)*14
+	drawLine(img, 100, 96, 100+accentLen, 96, 3, accent)
+
+	cx := 910 + float64(h%3)*36
+	cy := 260 + float64(h%4)*20
+	drawCircle(img, cx, cy, 120, 2, line)
+	drawLine(img, 100, 482, 330, 480, 2, line)
 
 	var buf bytes.Buffer
 	if err := png.Encode(&buf, img); err != nil {
 		return nil, err
 	}
 	return buf.Bytes(), nil
+}
+
+func blend(a, b color.RGBA, t float64) color.RGBA {
+	mix := func(x, y uint8) uint8 {
+		return uint8(float64(x)*(1-t) + float64(y)*t)
+	}
+	return color.RGBA{R: mix(a.R, b.R), G: mix(a.G, b.G), B: mix(a.B, b.B), A: 255}
 }
 
 func parseHex(hex string) color.RGBA {

@@ -252,6 +252,11 @@ func (a *API) DocList(c *gin.Context) {
 			q = q.Where("id NOT IN ?", hidden)
 		}
 	}
+	// 搜索隐藏的目录页只保留在文档树里，不出现在公开的文档列表中；
+	// 作者在自己的管理列表里仍然可以看到。
+	if kind == models.KindDoc && !mine && !(viewer != nil && isSuperAdmin(viewer) && status == "all") {
+		q = q.Where("search_hidden = ?", false)
+	}
 
 	var total int64
 	q.Count(&total)

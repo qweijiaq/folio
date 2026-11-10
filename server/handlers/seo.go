@@ -154,7 +154,8 @@ func (a *API) Sitemap(c *gin.Context) {
 
 	var docs []models.Document
 	docQuery := a.DB.Select("id", "kind", "updated_at").
-		Where("status = ?", models.StatusPublished)
+		Where("status = ?", models.StatusPublished).
+		Where("kind = ? OR search_hidden = ?", models.KindArticle, false)
 	if hidden := a.hiddenDocIDs(nil); len(hidden) > 0 {
 		docQuery = docQuery.Where("id NOT IN ?", hidden)
 	}

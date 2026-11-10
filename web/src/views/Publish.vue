@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import JSZip from 'jszip'
 import { api } from '../api/client'
@@ -19,6 +19,7 @@ const chapters = ref([])
 const bookTitle = ref('')
 const uploading = ref(false)
 const uploadedCount = ref(0)
+const imagesUploaded = ref(true)
 const reviewing = ref(false)
 const publishing = ref(false)
 const issues = ref([])
@@ -35,6 +36,10 @@ const categoryID = ref(null)
 const categories = ref([])
 const parentID = ref(null)
 const allDocs = ref([])
+const referenceID = ref(null)
+const referenceContent = ref('')
+const referenceTitle = ref('')
+const referenceLoading = ref(false)
 const autoTree = ref(true)
 const rootTitle = ref('读书笔记')
 const sectionTitle = ref('')
@@ -57,28 +62,55 @@ const categoryOptions = computed(() => [
   { value: null, label: '未分类' },
   ...categories.value.map((item) => ({ value: item.id, label: item.name }))
 ])
-const parentOptions = computed(() => {
+function docDepth(doc) {
   const byId = new Map(allDocs.value.map((item) => [item.id, item]))
-  function depth(doc) {
-    let value = 0
-    let current = doc
-    const seen = new Set()
-    while (current?.parentID && value < 20 && !seen.has(current.id)) {
-      seen.add(current.id)
-      current = byId.get(current.parentID)
-      value += 1
-    }
-    return value
+  let value = 0
+  let current = doc
+  const seen = new Set()
+  while (current?.parentID && value < 20 && !seen.has(current.id)) {
+    seen.add(current.id)
+    current = byId.get(current.parentID)
+    value += 1
   }
-  return [
-    { value: null, label: '无（顶级文档）' },
-    ...allDocs.value.map((item) => ({
-      value: item.id,
-      label: `${'　'.repeat(depth(item))}${item.title}${item.status === 'draft' ? '（草稿）' : ''}`
-    }))
-  ]
-})
+  return value
+}
+const parentOptions = computed(() => [
+  { value: null, label: '无（顶级文档）' },
+  ...allDocs.value.map((item) => ({
+    value: item.id,
+    label: `${'　'.repeat(docDepth(item))}${item.title}${item.status === 'draft' ? '（草稿）' : ''}`
+  }))
+])
+const referenceOptions = computed(() => [
+  { value: null, label: '不参考' },
+  ...allDocs.value.map((item) => ({
+    value: item.id,
+    label: `${'　'.repeat(docDepth(item))}${item.title}`
+  }))
+])
 const tags = computed(() => parseTags(tagsText.value))
+const isAbsoluteImage = (ref) => {
+  const value = String(ref || '').trim().replace(/^<|>$/g, '')
+  return !value || value.startsWith('#') || /^(https?:)?\/\//i.test(value) || value.startsWith('/') || value.startsWith('data:')
+}
+const hasRelativeImage = (markdown) => {
+  const text = String(markdown || '')
+  const inline = /!\[[^\]]*\]\(\s*(<[^>]+>|[^)\s]+)|<img\b[^>]*\bsrc=["']([^"']+)["']/gi
+  let match
+  while ((match = inline.exec(text))) {
+    if (!isAbsoluteImage(match[1] || match[2] || '')) return true
+  }
+  const definitions = /^\s*\[[^\]]+\]:\s*(<[^>]+>|\S+)/gm
+  while ((match = definitions.exec(text))) {
+    if (!isAbsoluteImage(match[1])) return true
+  }
+  return false
+}
+const pendingImages = computed(() => {
+  if (zipImages.value.length && !imagesUploaded.value) return true
+  if (hasRelativeImage(rawMarkdown.value)) return true
+  return chapters.value.some((chapter) => hasRelativeImage(chapter.content))
+})
 const canPublish = computed(() => Boolean(title.value.trim() && rawMarkdown.value.trim()))
 
 function parseTags(value) {
@@ -122,12 +154,58 @@ function loadMarkdown(text, fallbackTitle) {
   edits.value = []
 }
 
-function replaceImagePaths(text, map) {
-  let output = text
-  for (const [name, url] of Object.entries(map)) {
-    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    output = output.replace(new RegExp(`(?:\\.\\./)*(?:images\\/)?${escaped}`, 'g'), url)
+function normalizeImageRef(value) {
+  let ref = String(value || '').trim().replace(/^<|>$/g, '')
+  ref = ref.split(/[?#]/)[0].replace(/\\/g, '/')
+  try {
+    ref = decodeURIComponent(ref)
+  } catch {
+    /* keep original */
   }
+  return ref.replace(/^(?:\.\.?\/)+/, '').replace(/^\/+/, '')
+}
+
+function replaceImagePaths(text, map) {
+  const byPath = new Map()
+  const byBase = new Map()
+  for (const [name, url] of Object.entries(map)) {
+    const norm = normalizeImageRef(name)
+    if (!norm) continue
+    byPath.set(norm, url)
+    const base = norm.split('/').pop()
+    if (base) {
+      if (!byBase.has(base)) byBase.set(base, url)
+      const lower = base.toLowerCase()
+      if (!byBase.has(lower)) byBase.set(lower, url)
+    }
+  }
+  const resolve = (raw) => {
+    const norm = normalizeImageRef(raw)
+    if (!norm) return null
+    if (byPath.has(norm)) return byPath.get(norm)
+    const base = norm.split('/').pop()
+    return byBase.get(base) || byBase.get(base.toLowerCase()) || null
+  }
+  const replaceDest = (raw, prefix, suffix) => {
+    const url = resolve(raw)
+    return url ? `${prefix}${url}${suffix}` : `${prefix}${raw}${suffix}`
+  }
+  let output = String(text || '')
+  // Markdown 图片 / 链接：![alt](images/a.png "title")
+  output = output.replace(
+    /(!?\[[^\]]*\]\(\s*)(<[^>]+>|[^)\s]+)((?:\s+["'][^"']*["'])?\s*\))/g,
+    (_, prefix, dest, suffix) => replaceDest(dest, prefix, suffix)
+  )
+  // HTML <img src="...">
+  output = output.replace(
+    /(<img\b[^>]*?\bsrc=["'])([^"']+)(["'])/gi,
+    (_, prefix, dest, suffix) => replaceDest(dest, prefix, suffix)
+  )
+  // 引用式图片：[id]: images/a.png
+  output = output.replace(
+    /^(\s*\[[^\]]+\]:\s*)(\S+)(.*)$/gm,
+    (_, prefix, dest, suffix) => replaceDest(dest, prefix, suffix)
+  )
   return output
 }
 
@@ -139,6 +217,7 @@ async function handleFile(file) {
       loadMarkdown(await file.text(), file.name.replace(/\.md$/i, ''))
       chapters.value = []
       zipImages.value = []
+      imagesUploaded.value = true
       toast('Markdown 已读取')
       return
     }
@@ -149,7 +228,13 @@ async function handleFile(file) {
     const zip = await JSZip.loadAsync(file)
     const markdownFiles = Object.values(zip.files).filter((item) => !item.dir && /\.md$/i.test(item.name))
     const imageFiles = Object.values(zip.files).filter((item) => !item.dir && /\.(png|jpe?g|gif|webp)$/i.test(item.name))
-    zipImages.value = imageFiles.map((item) => ({ name: item.name.split('/').pop(), entry: item }))
+    zipImages.value = imageFiles.map((item) => ({
+      name: item.name.split('/').pop(),
+      path: item.name,
+      entry: item
+    }))
+    imagesUploaded.value = zipImages.value.length === 0
+    uploadedCount.value = 0
     if (!markdownFiles.length) {
       toast('zip 里没有找到 Markdown 文件')
       return
@@ -196,7 +281,12 @@ async function handleFile(file) {
       chapters.value = list
     }
 
-    toast(`已读取 ${markdownFiles.length} 个 Markdown、${zipImages.value.length} 张图片`)
+    if (zipImages.value.length) {
+      toast(`已读取 ${markdownFiles.length} 个 Markdown、${zipImages.value.length} 张图片，正在自动上传…`)
+      await uploadZipImages()
+    } else {
+      toast(`已读取 ${markdownFiles.length} 个 Markdown`)
+    }
   } catch (err) {
     toastError(err)
   }
@@ -214,28 +304,42 @@ function onDrop(event) {
 }
 
 async function uploadZipImages() {
-  if (!zipImages.value.length || uploading.value) return
+  if (!zipImages.value.length || uploading.value) return imagesUploaded.value
   uploading.value = true
   uploadedCount.value = 0
+  imagesUploaded.value = false
+  const failures = []
   try {
     const map = {}
     for (const image of zipImages.value) {
-      const blob = await image.entry.async('blob')
-      const ext = image.name.split('.').pop().toLowerCase()
-      const type = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : `image/${ext}`
-      const file = new File([blob], image.name, { type })
-      const uploaded = await api.uploadImage(file)
-      map[image.name] = uploaded.url
-      uploadedCount.value += 1
+      try {
+        const blob = await image.entry.async('blob')
+        const ext = image.name.split('.').pop().toLowerCase()
+        const type = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : `image/${ext}`
+        const file = new File([blob], image.name, { type })
+        const uploaded = await api.uploadImage(file)
+        map[image.name] = uploaded.url
+        if (image.path) map[image.path] = uploaded.url
+        uploadedCount.value += 1
+      } catch (err) {
+        failures.push(image.name)
+      }
     }
     rawMarkdown.value = replaceImagePaths(rawMarkdown.value, map)
     chapters.value = chapters.value.map((chapter) => ({
       ...chapter,
       content: replaceImagePaths(chapter.content, map)
     }))
+    if (failures.length) {
+      toast(`有 ${failures.length} 张图片上传失败：${failures.slice(0, 3).join('、')}，请重试`)
+      return false
+    }
+    imagesUploaded.value = true
     toast(`已上传 ${uploadedCount.value} 张图片并替换路径`)
+    return true
   } catch (err) {
     toastError(err)
+    return false
   } finally {
     uploading.value = false
   }
@@ -250,10 +354,47 @@ function applyEdits(text, list) {
   return output
 }
 
+async function loadReference(id) {
+  referenceContent.value = ''
+  referenceTitle.value = ''
+  if (!id) return true
+  referenceLoading.value = true
+  try {
+    const data = await api.get(`/docs/${id}`)
+    const doc = data.doc || {}
+    referenceContent.value = doc.content || ''
+    referenceTitle.value = doc.title || ''
+    localStorage.setItem('folio.publish.reference', String(id))
+    return Boolean(referenceContent.value)
+  } catch (err) {
+    toastError(err)
+    return false
+  } finally {
+    referenceLoading.value = false
+  }
+}
+
+watch(referenceID, (id) => {
+  if (!id) {
+    referenceContent.value = ''
+    referenceTitle.value = ''
+    localStorage.removeItem('folio.publish.reference')
+    return
+  }
+  loadReference(id)
+})
+
 async function review() {
   if (!rawMarkdown.value.trim()) {
     toast('先导入或粘贴正文')
     return
+  }
+  if (referenceID.value && !referenceContent.value) {
+    const ok = await loadReference(referenceID.value)
+    if (!ok) {
+      toast('参考文档读取失败，请换一篇或取消参考')
+      return
+    }
   }
   reviewing.value = true
   try {
@@ -264,7 +405,9 @@ async function review() {
       tags: tags.value,
       perspective: perspective.value,
       mode: removeAIFlavor.value ? 'full' : 'proofread',
-      kind: targetKind.value
+      kind: targetKind.value,
+      reference: referenceContent.value,
+      referenceTitle: referenceTitle.value
     })
     issues.value = data.issues || []
     edits.value = data.edits || []
@@ -317,6 +460,14 @@ async function ensureDoc(docTitle, parent) {
 async function publish() {
   if (!canPublish.value) {
     toast('请填写标题和正文')
+    return
+  }
+  if (uploading.value) {
+    toast('图片还在上传，请稍候')
+    return
+  }
+  if (pendingImages.value) {
+    toast('还有图片是相对路径，请先上传图片后再发布')
     return
   }
   publishing.value = true
@@ -392,6 +543,10 @@ onMounted(async () => {
     const map = new Map()
     ;[...(treeData.items || []), ...(mine.items || [])].forEach((item) => map.set(item.id, item))
     allDocs.value = [...map.values()]
+    const savedReference = Number(localStorage.getItem('folio.publish.reference') || 0)
+    if (savedReference && allDocs.value.some((item) => item.id === savedReference)) {
+      referenceID.value = savedReference
+    }
   } catch (err) {
     toastError(err)
   }
@@ -438,11 +593,14 @@ onMounted(async () => {
             <textarea id="publish-content" v-model="rawMarkdown" rows="20" placeholder="粘贴 Markdown，或上传 .md / .zip"></textarea>
           </div>
           <div v-if="zipImages.length" class="publish-images">
-            <p>检测到 {{ zipImages.length }} 张图片</p>
+            <p>{{ imagesUploaded ? `已上传 ${uploadedCount} 张图片` : `检测到 ${zipImages.length} 张图片` }}</p>
             <button class="btn btn-ghost btn-sm" type="button" :disabled="uploading" @click="uploadZipImages">
-              {{ uploading ? `上传中 ${uploadedCount}/${zipImages.length}…` : '上传图片并替换路径' }}
+              {{ uploading ? `上传中 ${uploadedCount}/${zipImages.length}…` : imagesUploaded ? '重新上传图片' : '上传图片并替换路径' }}
             </button>
           </div>
+          <p v-if="pendingImages && !uploading" class="hint publish-warn">
+            还有图片是相对路径，发布会失败。请确认 zip 里的图片已上传，或把图片改成完整 URL。
+          </p>
           <div v-if="chapters.length > 1" class="publish-images">
             <p>检测到 {{ chapters.length }} 个章节</p>
             <label class="checkbox">
@@ -493,7 +651,7 @@ onMounted(async () => {
                 <label for="publish-section">上级文档</label>
                 <input id="publish-section" v-model="sectionTitle" :placeholder="bookTitle || '认知觉醒'" />
               </div>
-              <p class="hint">自动创建的父级文档会发布为公开、搜索隐藏的目录页，方便直接形成树结构。</p>
+              <p class="hint">自动创建的父级文档会发布为公开、搜索和文档列表隐藏的目录页，方便直接形成树结构。</p>
             </template>
             <div v-else class="field">
               <label>上级文档</label>
@@ -501,13 +659,20 @@ onMounted(async () => {
             </div>
             <label class="checkbox">
               <input v-model="searchHidden" type="checkbox" />
-              在搜索中隐藏（仅作为目录节点）
+              在搜索和文档列表中隐藏（仅作为目录节点）
             </label>
           </template>
 
           <div class="field">
             <label>状态</label>
             <SelectBox v-model="status" :options="statusOptions" />
+          </div>
+          <div class="field">
+            <label>参考文风 <span class="hint">可选</span></label>
+            <SelectBox v-model="referenceID" :options="referenceOptions" placeholder="不参考" />
+            <p class="hint">
+              {{ referenceLoading ? '正在读取参考文档…' : referenceTitle ? `参考：${referenceTitle}` : '选一篇已发布文档，AI 会学习它的句长、节奏和用词。' }}
+            </p>
           </div>
           <div class="field">
             <label>AI 视角</label>

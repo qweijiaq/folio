@@ -2911,6 +2911,42 @@ func TestSearchRankingAndPrivacy(t *testing.T) {
 		t.Fatalf("搜索隐藏文档仍应出现在目录树中: %v", treeData)
 	}
 
+	// 搜索隐藏的目录页不应出现在公开的「全部文档」列表里，
+	// 但作者自己的管理列表仍然需要看到。
+	status, listData := s.do(t, "GET", "/api/docs?kind=doc&pageSize=50", "", nil)
+	if status != http.StatusOK {
+		t.Fatalf("读取公开文档列表失败: %d %v", status, listData)
+	}
+	for _, item := range list(listData, "items") {
+		if uint(number(item.(map[string]any)["id"])) == hiddenID {
+			t.Fatalf("搜索隐藏文档不应出现在公开文档列表: %v", item)
+		}
+	}
+	status, listData = s.do(t, "GET", "/api/docs?kind=doc&mine=1&pageSize=50", ownerToken, nil)
+	if status != http.StatusOK {
+		t.Fatalf("读取作者文档列表失败: %d %v", status, listData)
+	}
+	foundMine := false
+	for _, item := range list(listData, "items") {
+		if uint(number(item.(map[string]any)["id"])) == hiddenID {
+			foundMine = true
+			break
+		}
+	}
+	if !foundMine {
+		t.Fatalf("作者管理列表应包含自己的搜索隐藏文档: %v", listData)
+	}
+
+	status, homeData := s.do(t, "GET", "/api/site", "", nil)
+	if status != http.StatusOK {
+		t.Fatalf("读取站点首页失败: %d %v", status, homeData)
+	}
+	for _, item := range list(homeData, "docs") {
+		if uint(number(item.(map[string]any)["id"])) == hiddenID {
+			t.Fatalf("搜索隐藏文档不应出现在首页文档推荐: %v", item)
+		}
+	}
+
 	status, data = s.do(t, "GET", "/api/search", "", nil)
 	if status != http.StatusOK || len(list(data, "items")) != 0 {
 		t.Fatalf("空搜索应返回空结果: %d %v", status, data)
@@ -3464,6 +3500,46 @@ func TestAIFeedbackAndDocContext(t *testing.T) {
 	})
 	if status != http.StatusNotFound {
 		t.Fatalf("针对不存在内容的提问应返回 404，实际 %d %v", status, data)
+	}
+}
+
+func TestPublishReviewUsesReferenceStyle(t *testing.T) {
+	var captured string
+	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		captured = string(body)
+		w.Header().Set("Content-Type", "application/json")
+		out := `{"issues":["句式可以更短"],"edits":[{"find":"原文里的这一句话需要改写。","replace":"这一句可以更短。","reason":"贴近参考文风"}],"title":"","abstract":"","tags":[]}`
+		fmt.Fprintf(w, `{"id":"msg_test","type":"message","role":"assistant","model":"claude-opus-5-5","content":[{"type":"text","text":%s}],"stop_reason":"end_turn","usage":{"input_tokens":10,"output_tokens":20}}`, strconv.Quote(out))
+	}))
+	defer fake.Close()
+
+	s := newTestAPI(t, func(cfg *config.Config) {
+		cfg.AIBaseURL = fake.URL
+		cfg.AIModel = "claude-opus-5-5"
+	})
+	token, _ := s.register(t, "publishreviewer")
+	status, data := s.do(t, "PUT", "/api/admin/ai-summary", token, map[string]any{
+		"enabled": true, "provider": "anthropic", "model": "claude-opus-5-5", "apiKey": "sk-ant-test-1234567890",
+	})
+	if status != http.StatusOK {
+		t.Fatalf("配置 AI 摘要失败: %d %v", status, data)
+	}
+
+	reference := "参考文风要求：句子短，段落之间留白，少用形容词，直接说清楚一件事。"
+	status, data = s.do(t, "POST", "/api/admin/publish/review", token, map[string]any{
+		"content": "原文里的这一句话需要改写。后面还有足够长的正文，用来通过长度检查。",
+		"title":   "待审文章", "abstract": "", "tags": []string{}, "perspective": "god",
+		"mode": "full", "kind": "doc", "reference": reference, "referenceTitle": "参考文章",
+	})
+	if status != http.StatusOK {
+		t.Fatalf("发布助审校失败: %d %v", status, data)
+	}
+	if len(list(data, "edits")) != 1 {
+		t.Fatalf("审校结果不正确: %v", data)
+	}
+	if !strings.Contains(captured, "参考文风") || !strings.Contains(captured, "参考文风要求") || !strings.Contains(captured, "参考文章") {
+		t.Fatalf("参考文风没有进入 AI 请求: %s", captured)
 	}
 }
 

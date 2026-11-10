@@ -92,14 +92,16 @@ func roughCircle(cx, cy, radius float64, h uint64) string {
 	return smoothClosed(points)
 }
 
-// CoverSVG 生成一张极简手绘封面：一层淡色纸面、一个几何线稿和一小笔强调色。
-// 不包含标题文字，适合在卡片中作为安静的装饰。
+// CoverSVG 生成一张安静的索引卡封面：淡色纸面、细边框、一小笔强调色和一组淡淡的线。
+// 不包含标题文字，适合在卡片中作为背景。
 func CoverSVG(seed, title, kind string) string {
 	if seed == "" {
 		seed = title
 	}
 	h := hash(seed + "|" + kind)
 	bg := tints[h%uint64(len(tints))]
+	line := "#d9d6cb"
+	surface := "#fbfaf6"
 
 	var b strings.Builder
 	fmt.Fprintf(&b, `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 480" width="1200" height="480" role="img">`)
@@ -107,31 +109,15 @@ func CoverSVG(seed, title, kind string) string {
 		fmt.Fprintf(&b, `<title>%s</title>`, esc(title))
 	}
 	fmt.Fprintf(&b, `<rect width="1200" height="480" fill="%s"/>`, bg)
+	fmt.Fprintf(&b, `<rect x="48" y="40" width="1104" height="400" rx="18" fill="%s" opacity="0.72" stroke="%s" stroke-width="2"/>`, surface, line)
 
-	stroke := fmt.Sprintf(`fill="none" stroke="%s" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"`, inkColor)
-	accent := fmt.Sprintf(`fill="none" stroke="%s" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"`, accentColor)
-	cx, cy := 600.0, 240.0
+	accentLen := 44 + float64(h%3)*14
+	fmt.Fprintf(&b, `<path d="M 100 92 L %.0f 92" fill="none" stroke="%s" stroke-width="3" stroke-linecap="round"/>`, 100+accentLen, accentColor)
 
-	switch h % 4 {
-	case 0:
-		fmt.Fprintf(&b, `<path d="%s" %s/>`, roughCircle(cx, cy, 96, h), stroke)
-		fmt.Fprintf(&b, `<path d="M %.1f %.1f L %.1f %.1f" %s/>`, cx+58, cy+112, cx+178, cy+100, accent)
-	case 1:
-		wave := [][2]float64{
-			{cx - 190, cy + 34}, {cx - 96, cy - 58}, {cx, cy + 26}, {cx + 96, cy - 58}, {cx + 190, cy + 34},
-		}
-		fmt.Fprintf(&b, `<path d="%s" %s/>`, smoothOpen(wave), stroke)
-		fmt.Fprintf(&b, `<circle cx="%.1f" cy="%.1f" r="11" %s/>`, cx+156, cy-84, accent)
-	case 2:
-		fmt.Fprintf(&b, `<path d="M %.1f %.1f L %.1f %.1f" %s/>`, cx-172, cy-58, cx+118, cy-56, stroke)
-		fmt.Fprintf(&b, `<path d="M %.1f %.1f L %.1f %.1f" %s/>`, cx-172, cy, cx+34, cy+2, stroke)
-		fmt.Fprintf(&b, `<path d="M %.1f %.1f L %.1f %.1f" %s/>`, cx-172, cy+58, cx-48, cy+56, stroke)
-		fmt.Fprintf(&b, `<circle cx="%.1f" cy="%.1f" r="9" %s/>`, cx+148, cy+56, accent)
-	default:
-		fmt.Fprintf(&b, `<path d="M %.1f %.1f L %.1f %.1f L %.1f %.1f" %s/>`, cx-138, cy+78, cx, cy-86, cx+138, cy+78, stroke)
-		fmt.Fprintf(&b, `<path d="M %.1f %.1f L %.1f %.1f" %s/>`, cx-38, cy+78, cx+62, cy+76, accent)
-	}
-
+	cx := 910 + float64(h%3)*36
+	cy := 180 + float64(h%4)*24
+	fmt.Fprintf(&b, `<circle cx="%.0f" cy="%.0f" r="112" fill="none" stroke="%s" stroke-width="2" opacity="0.55"/>`, cx, cy, line)
+	fmt.Fprintf(&b, `<path d="M 100 360 L 330 358" fill="none" stroke="%s" stroke-width="2" stroke-linecap="round" opacity="0.75"/>`, line)
 	b.WriteString(`</svg>`)
 	return b.String()
 }
