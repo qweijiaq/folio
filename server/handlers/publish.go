@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"strings"
@@ -106,7 +107,9 @@ JSON 格式：
   "tags": ["标签1", "标签2"]
 }
 
-edits 的 find 必须与原文逐字匹配；可以是短句，也可以是一个完整段落。优先用整段替换来统一文风，单条 find 不超过 500 字，不要返回整篇全文。最多 30 条 edits。`
+edits 的 find 必须与原文逐字匹配；可以是短句，也可以是一个完整段落。优先用整段替换来统一文风，单条 find 和 replace 都不超过 300 字，不要返回整篇全文。issues 最多 8 条，edits 最多 16 条，reason 不超过 20 字。`
+
+	compactPrompt := systemPrompt + "\n\n注意：上一次输出可能过长或格式不完整。这次请进一步压缩：issues 最多 5 条，edits 最多 8 条；每条 find/replace 不超过 200 字，reason 不超过 12 字；确保 JSON 完整闭合。"
 
 	userPrompt := "标题：" + strings.TrimSpace(in.Title) +
 		"\n摘要：" + strings.TrimSpace(in.Abstract) +
@@ -121,25 +124,48 @@ edits 的 find 必须与原文逐字匹配；可以是短句，也可以是一�
 	}
 	userPrompt += "\n\n待审正文：\n" + in.Content
 
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 120*time.Second)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 150*time.Second)
 	defer cancel()
-	raw, err := a.callSummaryAI(ctx, cfg, systemPrompt, userPrompt)
-	if err != nil {
+
+	decode := func(raw string) (publishReviewOutput, bool) {
+		rawJSON := extractJSONObject(raw)
+		if rawJSON == "" {
+			return publishReviewOutput{}, false
+		}
+		var out publishReviewOutput
+		if err := json.Unmarshal([]byte(rawJSON), &out); err != nil {
+			return publishReviewOutput{}, false
+		}
+		return out, true
+	}
+
+	jsonMode := cfg.Provider.ID == "deepseek"
+	raw, err := a.callSummaryAIWithOptions(ctx, cfg, systemPrompt, userPrompt, 8192, jsonMode)
+	if err != nil && !errors.Is(err, errAIOutputTruncated) {
 		log.Printf("发布助审校失败: %v", err)
 		fail(c, http.StatusBadGateway, "AI 审校失败，请稍后重试")
 		return
 	}
-	rawJSON := extractJSONObject(raw)
-	if rawJSON == "" {
-		log.Printf("发布助审校返回格式异常: %s", truncateRunes(raw, 500))
-		fail(c, http.StatusBadGateway, "AI 返回格式异常，请重试")
-		return
+	if err != nil {
+		log.Printf("发布助审校输出被截断，尝试紧凑重试: %s", truncateRunes(raw, 300))
 	}
-	var out publishReviewOutput
-	if err := json.Unmarshal([]byte(rawJSON), &out); err != nil {
-		log.Printf("发布助审校 JSON 解析失败: %v", err)
-		fail(c, http.StatusBadGateway, "AI 返回格式异常，请重试")
-		return
+	out, ok := decode(raw)
+	if !ok || errors.Is(err, errAIOutputTruncated) {
+		if !ok {
+			log.Printf("发布助审校返回格式异常，尝试紧凑重试: %s", truncateRunes(raw, 500))
+		}
+		raw, retryErr := a.callSummaryAIWithOptions(ctx, cfg, compactPrompt, userPrompt, 8192, jsonMode)
+		if retryErr != nil && !errors.Is(retryErr, errAIOutputTruncated) {
+			log.Printf("发布助审校紧凑重试失败: %v", retryErr)
+			fail(c, http.StatusBadGateway, "AI 审校失败，请稍后重试")
+			return
+		}
+		out, ok = decode(raw)
+		if !ok {
+			log.Printf("发布助审校紧凑重试仍返回格式异常: %s", truncateRunes(raw, 500))
+			fail(c, http.StatusBadGateway, "AI 返回格式异常，请重试")
+			return
+		}
 	}
 	if out.Issues == nil {
 		out.Issues = []string{}
@@ -147,8 +173,11 @@ edits 的 find 必须与原文逐字匹配；可以是短句，也可以是一�
 	if out.Edits == nil {
 		out.Edits = []publishEdit{}
 	}
-	if len(out.Edits) > 30 {
-		out.Edits = out.Edits[:30]
+	if len(out.Issues) > 8 {
+		out.Issues = out.Issues[:8]
+	}
+	if len(out.Edits) > 16 {
+		out.Edits = out.Edits[:16]
 	}
 	out.Tags = normalizeTags(out.Tags)
 	c.JSON(http.StatusOK, out)

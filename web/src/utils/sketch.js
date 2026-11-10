@@ -188,8 +188,8 @@ export function drawCover(canvas, {
   const typeLabel = kind === 'doc' ? '文档' : '文章'
   const eyebrow = categoryText ? `${categoryText} · ${typeLabel}` : typeLabel
 
-  const cardX = 58
-  const cardY = 38
+  const cardX = 90
+  const cardY = 56
   const cardW = width - cardX * 2
   const cardH = height - cardY * 2
   ctx.save()
@@ -203,27 +203,27 @@ export function drawCover(canvas, {
   ctx.stroke()
   ctx.restore()
 
-  const textX = cardX + 52
-  const textW = cardW - 104
+  const textX = cardX + 50
+  const textW = cardW - 100
   ctx.textAlign = 'left'
   ctx.textBaseline = 'alphabetic'
 
   ctx.fillStyle = colors.accent
-  ctx.fillRect(textX, cardY + 40, 44, Math.max(2, 1.6 * scale))
+  ctx.fillRect(textX, cardY + 42, 44, Math.max(2, 1.6 * scale))
 
   ctx.font = `500 17px ${coverHandFont}`
   ctx.fillStyle = colors.inkSoft
-  ctx.fillText(truncateCanvasText(ctx, eyebrow, textW), textX, cardY + 82)
+  ctx.fillText(truncateCanvasText(ctx, eyebrow, textW), textX, cardY + 90)
 
   const titleChars = Array.from(displayTitle).length
   let titleSize = 60
   if (titleChars > 11) titleSize = 54
-  if (titleChars > 18) titleSize = 47
-  if (titleChars > 27) titleSize = 41
+  if (titleChars > 18) titleSize = 48
+  if (titleChars > 27) titleSize = 44
   ctx.font = `600 ${titleSize}px ${coverHandFont}`
   ctx.fillStyle = colors.ink
   const titleLines = wrapCanvasText(ctx, displayTitle, textW, 2)
-  const titleStart = cardY + 150
+  const titleStart = cardY + 180
   const titleLineHeight = titleSize * 1.2
   titleLines.forEach((line, index) => {
     ctx.fillText(line, textX, titleStart + index * titleLineHeight)
@@ -235,14 +235,14 @@ export function drawCover(canvas, {
     ctx.fillStyle = colors.inkSoft
     ctx.globalAlpha = 0.86
     const abstractLines = wrapCanvasText(ctx, abstractText, textW, 2)
-    const abstractStart = Math.max(lastTitleBaseline + 50, cardY + 226)
+    const abstractStart = Math.max(lastTitleBaseline + 50, cardY + 268)
     abstractLines.forEach((line, index) => {
-      ctx.fillText(line, textX, abstractStart + index * 27)
+      ctx.fillText(line, textX, abstractStart + index * 28)
     })
     ctx.globalAlpha = 1
   }
 
-  const tagY = cardY + cardH - 38
+  const tagY = cardY + cardH - 40
   if (tagList.length) {
     ctx.save()
     ctx.globalAlpha = 0.36

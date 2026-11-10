@@ -29,6 +29,8 @@ const (
 	qaTimeout           = 120 * time.Second
 )
 
+var errAIOutputTruncated = errors.New("AI 输出被截断")
+
 var qaHTTPClient = &http.Client{Timeout: qaTimeout}
 
 type qaModelInfo struct {
@@ -275,6 +277,10 @@ func qaSystemPrompt(mode string) string {
 }
 
 func (a *API) callAnthropicQA(ctx context.Context, provider qaProviderDef, apiKey, model, systemPrompt, userPrompt string, history []qaHistoryMessage) (string, error) {
+	return a.callAnthropicQAMax(ctx, provider, apiKey, model, systemPrompt, userPrompt, history, 4096)
+}
+
+func (a *API) callAnthropicQAMax(ctx context.Context, provider qaProviderDef, apiKey, model, systemPrompt, userPrompt string, history []qaHistoryMessage, maxTokens int) (string, error) {
 	options := []option.RequestOption{option.WithAPIKey(apiKey)}
 	if provider.BaseURL != "" {
 		options = append(options, option.WithBaseURL(provider.BaseURL))
@@ -291,7 +297,7 @@ func (a *API) callAnthropicQA(ctx context.Context, provider qaProviderDef, apiKe
 	messages = append(messages, anthropic.NewUserMessage(anthropic.NewTextBlock(userPrompt)))
 	resp, err := client.Messages.New(ctx, anthropic.MessageNewParams{
 		Model:     anthropic.Model(model),
-		MaxTokens: 4096,
+		MaxTokens: int64(maxTokens),
 		System:    []anthropic.TextBlockParam{{Text: systemPrompt}},
 		Messages:  messages,
 	})
@@ -307,10 +313,18 @@ func (a *API) callAnthropicQA(ctx context.Context, provider qaProviderDef, apiKe
 			answer.WriteString(content.Text)
 		}
 	}
-	return strings.TrimSpace(answer.String()), nil
+	text := strings.TrimSpace(answer.String())
+	if resp.StopReason == anthropic.StopReasonMaxTokens {
+		return text, errAIOutputTruncated
+	}
+	return text, nil
 }
 
 func (a *API) callOpenAICompatQA(ctx context.Context, provider qaProviderDef, apiKey, model, systemPrompt, userPrompt string, history []qaHistoryMessage) (string, error) {
+	return a.callOpenAICompatQAMax(ctx, provider, apiKey, model, systemPrompt, userPrompt, history, 4096, false)
+}
+
+func (a *API) callOpenAICompatQAMax(ctx context.Context, provider qaProviderDef, apiKey, model, systemPrompt, userPrompt string, history []qaHistoryMessage, maxTokens int, jsonMode bool) (string, error) {
 	messages := make([]map[string]string, 0, len(history)+2)
 	messages = append(messages, map[string]string{"role": "system", "content": systemPrompt})
 	for _, item := range history {
@@ -321,8 +335,11 @@ func (a *API) callOpenAICompatQA(ctx context.Context, provider qaProviderDef, ap
 		"model":       model,
 		"messages":    messages,
 		"temperature": 0.3,
-		"max_tokens":  4096,
+		"max_tokens":  maxTokens,
 		"stream":      false,
+	}
+	if jsonMode {
+		payload["response_format"] = map[string]string{"type": "json_object"}
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -354,6 +371,7 @@ func (a *API) callOpenAICompatQA(ctx context.Context, provider qaProviderDef, ap
 			Message struct {
 				Content string `json:"content"`
 			} `json:"message"`
+			FinishReason string `json:"finish_reason"`
 		} `json:"choices"`
 	}
 	if err := json.Unmarshal(raw, &out); err != nil {
@@ -362,7 +380,11 @@ func (a *API) callOpenAICompatQA(ctx context.Context, provider qaProviderDef, ap
 	if len(out.Choices) == 0 {
 		return "", fmt.Errorf("服务商没有返回回答")
 	}
-	return strings.TrimSpace(out.Choices[0].Message.Content), nil
+	text := strings.TrimSpace(out.Choices[0].Message.Content)
+	if out.Choices[0].FinishReason == "length" {
+		return text, errAIOutputTruncated
+	}
+	return text, nil
 }
 
 func qaContextBlock(sources []qaSource) string {

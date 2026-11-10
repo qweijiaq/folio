@@ -104,20 +104,20 @@ func CoverSVG(seed, title, kind string) string {
 	surface := "#fbfaf6"
 
 	var b strings.Builder
-	fmt.Fprintf(&b, `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 480" width="1200" height="480" role="img">`)
+	fmt.Fprintf(&b, `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 600" width="1200" height="600" role="img">`)
 	if title != "" {
 		fmt.Fprintf(&b, `<title>%s</title>`, esc(title))
 	}
-	fmt.Fprintf(&b, `<rect width="1200" height="480" fill="%s"/>`, bg)
-	fmt.Fprintf(&b, `<rect x="48" y="40" width="1104" height="400" rx="18" fill="%s" opacity="0.72" stroke="%s" stroke-width="2"/>`, surface, line)
+	fmt.Fprintf(&b, `<rect width="1200" height="600" fill="%s"/>`, bg)
+	fmt.Fprintf(&b, `<rect x="90" y="56" width="1020" height="488" rx="18" fill="%s" opacity="0.72" stroke="%s" stroke-width="2"/>`, surface, line)
 
 	accentLen := 44 + float64(h%3)*14
-	fmt.Fprintf(&b, `<path d="M 100 92 L %.0f 92" fill="none" stroke="%s" stroke-width="3" stroke-linecap="round"/>`, 100+accentLen, accentColor)
+	fmt.Fprintf(&b, `<path d="M 140 100 L %.0f 100" fill="none" stroke="%s" stroke-width="3" stroke-linecap="round"/>`, 140+accentLen, accentColor)
 
-	cx := 910 + float64(h%3)*36
-	cy := 180 + float64(h%4)*24
+	cx := 930 + float64(h%3)*36
+	cy := 250 + float64(h%4)*24
 	fmt.Fprintf(&b, `<circle cx="%.0f" cy="%.0f" r="112" fill="none" stroke="%s" stroke-width="2" opacity="0.55"/>`, cx, cy, line)
-	fmt.Fprintf(&b, `<path d="M 100 360 L 330 358" fill="none" stroke="%s" stroke-width="2" stroke-linecap="round" opacity="0.75"/>`, line)
+	fmt.Fprintf(&b, `<path d="M 140 500 L 370 498" fill="none" stroke="%s" stroke-width="2" stroke-linecap="round" opacity="0.75"/>`, line)
 	b.WriteString(`</svg>`)
 	return b.String()
 }

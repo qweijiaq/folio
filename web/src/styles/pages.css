@@ -365,7 +365,7 @@
 }
 
 .article-cover {
-  aspect-ratio: 16 / 6.4;
+  aspect-ratio: 16 / 8;
   margin: 0 0 56px;
   overflow: hidden;
   border: 1px solid var(--line);
@@ -649,7 +649,7 @@
 }
 
 .docs-cover {
-  aspect-ratio: 16 / 5;
+  aspect-ratio: 16 / 8;
   margin: 32px 0 44px;
   overflow: hidden;
   border: 1px solid var(--line);
@@ -6242,6 +6242,58 @@
 .publish-warn {
   margin: 10px 0 0;
   color: var(--danger, #b4473a);
+}
+
+.suggest-control {
+  position: relative;
+}
+
+.doc-suggest {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 6px);
+  right: 0;
+  left: 0;
+  max-height: 232px;
+  overflow: auto;
+  padding: 5px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm, 8px);
+  background: var(--surface);
+  box-shadow: 0 14px 34px rgba(20, 18, 14, 0.14);
+}
+
+.doc-suggest-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.doc-suggest-item:hover,
+.doc-suggest-item:focus-visible {
+  background: var(--accent-soft);
+}
+
+.doc-suggest-item span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.doc-suggest-item small {
+  flex: 0 0 auto;
+  color: var(--ink-faint);
+  font-size: 11px;
 }
 
 .publish-file-input {

@@ -72,5 +72,5 @@ watch(
 </script>
 
 <template>
-  <canvas ref="canvas" class="cover-img" width="1200" height="480" role="img" :aria-label="alt" />
+  <canvas ref="canvas" class="cover-img" width="1200" height="600" role="img" :aria-label="alt" />
 </template>

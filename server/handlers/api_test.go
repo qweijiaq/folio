@@ -3503,6 +3503,46 @@ func TestAIFeedbackAndDocContext(t *testing.T) {
 	}
 }
 
+func TestPublishReviewRetriesWhenOutputIsTruncated(t *testing.T) {
+	requests := 0
+	valid := `{"issues":[],"edits":[{"find":"原文里的这一句话需要改写。","replace":"这一句可以更短。","reason":"更紧凑"}],"title":"","abstract":"","tags":[]}`
+	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		w.Header().Set("Content-Type", "application/json")
+		if requests == 1 {
+			fmt.Fprintf(w, `{"choices":[{"message":{"content":%s},"finish_reason":"length"}]}`, strconv.Quote(`{"issues":["输出到这里被截断`))
+			return
+		}
+		fmt.Fprintf(w, `{"choices":[{"message":{"content":%s},"finish_reason":"stop"}]}`, strconv.Quote(valid))
+	}))
+	defer fake.Close()
+
+	s := newTestAPI(t, func(cfg *config.Config) {
+		cfg.DeepSeekBaseURL = fake.URL
+	})
+	token, _ := s.register(t, "publishretry")
+	status, data := s.do(t, "PUT", "/api/admin/ai-summary", token, map[string]any{
+		"enabled": true, "provider": "deepseek", "model": "deepseek-chat", "apiKey": "sk-test-1234567890",
+	})
+	if status != http.StatusOK {
+		t.Fatalf("配置 AI 摘要失败: %d %v", status, data)
+	}
+
+	status, data = s.do(t, "POST", "/api/admin/publish/review", token, map[string]any{
+		"content": "原文里的这一句话需要改写。后面还有足够长的正文，用来通过长度检查。",
+		"title":   "待审文章", "mode": "full", "perspective": "god", "kind": "doc",
+	})
+	if status != http.StatusOK {
+		t.Fatalf("截断后应自动紧凑重试: %d %v", status, data)
+	}
+	if requests != 2 {
+		t.Fatalf("应重试一次，实际请求 %d 次", requests)
+	}
+	if len(list(data, "edits")) != 1 {
+		t.Fatalf("重试结果不正确: %v", data)
+	}
+}
+
 func TestPublishReviewUsesReferenceStyle(t *testing.T) {
 	var captured string
 	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

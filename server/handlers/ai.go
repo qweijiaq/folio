@@ -31,10 +31,14 @@ func (a *API) AIStatus(c *gin.Context) {
 }
 
 func (a *API) callSummaryAI(ctx context.Context, cfg aiSummaryConfig, systemPrompt, userPrompt string) (string, error) {
+	return a.callSummaryAIWithOptions(ctx, cfg, systemPrompt, userPrompt, 4096, false)
+}
+
+func (a *API) callSummaryAIWithOptions(ctx context.Context, cfg aiSummaryConfig, systemPrompt, userPrompt string, maxTokens int, jsonMode bool) (string, error) {
 	if cfg.Provider.APIStyle == "anthropic" {
-		return a.callAnthropicQA(ctx, cfg.Provider, cfg.APIKey, cfg.Model, systemPrompt, userPrompt, nil)
+		return a.callAnthropicQAMax(ctx, cfg.Provider, cfg.APIKey, cfg.Model, systemPrompt, userPrompt, nil, maxTokens)
 	}
-	return a.callOpenAICompatQA(ctx, cfg.Provider, cfg.APIKey, cfg.Model, systemPrompt, userPrompt, nil)
+	return a.callOpenAICompatQAMax(ctx, cfg.Provider, cfg.APIKey, cfg.Model, systemPrompt, userPrompt, nil, maxTokens, jsonMode)
 }
 
 func truncateRunes(s string, n int) string {

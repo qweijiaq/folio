@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import JSZip from 'jszip'
 import { api } from '../api/client'
+import { auth } from '../stores/auth'
 import { toast, toastError } from '../stores/toast'
 import MarkdownView from '../components/MarkdownView.vue'
 import SelectBox from '../components/SelectBox.vue'
@@ -19,6 +20,7 @@ const chapters = ref([])
 const bookTitle = ref('')
 const uploading = ref(false)
 const uploadedCount = ref(0)
+const reusedCount = ref(0)
 const imagesUploaded = ref(true)
 const reviewing = ref(false)
 const publishing = ref(false)
@@ -43,6 +45,8 @@ const referenceLoading = ref(false)
 const autoTree = ref(true)
 const rootTitle = ref('读书笔记')
 const sectionTitle = ref('')
+const rootFocus = ref(false)
+const sectionFocus = ref(false)
 const status = ref('draft')
 const searchHidden = ref(false)
 const perspective = ref('god')
@@ -88,6 +92,60 @@ const referenceOptions = computed(() => [
     label: `${'　'.repeat(docDepth(item))}${item.title}`
   }))
 ])
+
+function sameTitle(a, b) {
+  return String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase()
+}
+
+const rootDocs = computed(() => allDocs.value.filter((item) => !item.parentID))
+const rootMatch = computed(() => rootDocs.value.find((item) => sameTitle(item.title, rootTitle.value)))
+const sectionPool = computed(() => {
+  if (rootMatch.value) return allDocs.value.filter((item) => item.parentID === rootMatch.value.id)
+  return allDocs.value.filter((item) => item.parentID)
+})
+
+function filterDocSuggestions(pool, query) {
+  const value = String(query || '').trim().toLowerCase()
+  const list = value ? pool.filter((item) => item.title.toLowerCase().includes(value)) : pool
+  return list.slice(0, 6)
+}
+
+const rootSuggestions = computed(() => filterDocSuggestions(rootDocs.value, rootTitle.value))
+const sectionSuggestions = computed(() => filterDocSuggestions(sectionPool.value, sectionTitle.value))
+const rootHint = computed(() => {
+  const value = rootTitle.value.trim()
+  if (!value) return '留空会使用默认顶级文档。输入时会提示已有文档。'
+  return rootMatch.value
+    ? `将复用已有顶级文档「${rootMatch.value.title}」`
+    : `将新建顶级文档「${value}」`
+})
+const sectionHint = computed(() => {
+  const value = sectionTitle.value.trim()
+  if (!value) return '留空会直接放在顶级文档下。'
+  const parent = rootMatch.value
+  const existing = parent && allDocs.value.find((item) => item.parentID === parent.id && sameTitle(item.title, value))
+  return existing ? `将复用已有文档「${existing.title}」` : `将新建上级文档「${value}」`
+})
+
+function pickRoot(doc) {
+  rootTitle.value = doc.title
+  rootFocus.value = false
+}
+
+function pickSection(doc) {
+  sectionTitle.value = doc.title
+  if (doc.parentID) {
+    const parent = allDocs.value.find((item) => item.id === doc.parentID)
+    if (parent) rootTitle.value = parent.title
+  }
+  sectionFocus.value = false
+}
+
+function parentTitle(doc) {
+  const parent = allDocs.value.find((item) => item.id === doc.parentID)
+  return parent ? `属于 ${parent.title}` : '已有'
+}
+
 const tags = computed(() => parseTags(tagsText.value))
 const isAbsoluteImage = (ref) => {
   const value = String(ref || '').trim().replace(/^<|>$/g, '')
@@ -235,6 +293,7 @@ async function handleFile(file) {
     }))
     imagesUploaded.value = zipImages.value.length === 0
     uploadedCount.value = 0
+    reusedCount.value = 0
     if (!markdownFiles.length) {
       toast('zip 里没有找到 Markdown 文件')
       return
@@ -303,28 +362,79 @@ function onDrop(event) {
   if (file) handleFile(file)
 }
 
+const IMAGE_CACHE_PREFIX = 'folio.publish.images.v1'
+
+function imageCacheKey() {
+  return `${IMAGE_CACHE_PREFIX}.${auth.user?.id || 'anon'}`
+}
+
+function loadImageCache() {
+  try {
+    const raw = localStorage.getItem(imageCacheKey())
+    const parsed = raw ? JSON.parse(raw) : {}
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+
+function saveImageCache(cache) {
+  try {
+    const entries = Object.entries(cache)
+    const trimmed = entries.length > 600 ? Object.fromEntries(entries.slice(-600)) : cache
+    localStorage.setItem(imageCacheKey(), JSON.stringify(trimmed))
+  } catch {
+    /* 缓存失败不影响上传 */
+  }
+}
+
+async function hashBlob(blob) {
+  if (!globalThis.crypto?.subtle) return ''
+  try {
+    const digest = await crypto.subtle.digest('SHA-256', await blob.arrayBuffer())
+    return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')
+  } catch {
+    return ''
+  }
+}
+
 async function uploadZipImages() {
   if (!zipImages.value.length || uploading.value) return imagesUploaded.value
   uploading.value = true
   uploadedCount.value = 0
+  reusedCount.value = 0
   imagesUploaded.value = false
   const failures = []
+  const cache = loadImageCache()
+  const seen = new Map()
   try {
     const map = {}
     for (const image of zipImages.value) {
       try {
         const blob = await image.entry.async('blob')
-        const ext = image.name.split('.').pop().toLowerCase()
-        const type = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : `image/${ext}`
-        const file = new File([blob], image.name, { type })
-        const uploaded = await api.uploadImage(file)
-        map[image.name] = uploaded.url
-        if (image.path) map[image.path] = uploaded.url
-        uploadedCount.value += 1
+        const hash = await hashBlob(blob)
+        let url = hash ? seen.get(hash) || cache[hash] : ''
+        if (!url) {
+          const ext = image.name.split('.').pop().toLowerCase()
+          const type = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : `image/${ext}`
+          const file = new File([blob], image.name, { type })
+          const uploaded = await api.uploadImage(file)
+          url = uploaded.url
+          uploadedCount.value += 1
+          if (hash) {
+            seen.set(hash, url)
+            cache[hash] = url
+          }
+        } else {
+          reusedCount.value += 1
+        }
+        map[image.name] = url
+        if (image.path) map[image.path] = url
       } catch (err) {
         failures.push(image.name)
       }
     }
+    saveImageCache(cache)
     rawMarkdown.value = replaceImagePaths(rawMarkdown.value, map)
     chapters.value = chapters.value.map((chapter) => ({
       ...chapter,
@@ -335,7 +445,12 @@ async function uploadZipImages() {
       return false
     }
     imagesUploaded.value = true
-    toast(`已上传 ${uploadedCount.value} 张图片并替换路径`)
+    const processed = uploadedCount.value + reusedCount.value
+    if (reusedCount.value) {
+      toast(`已处理 ${processed} 张图片，其中 ${reusedCount.value} 张直接复用`)
+    } else {
+      toast(`已上传 ${uploadedCount.value} 张图片并替换路径`)
+    }
     return true
   } catch (err) {
     toastError(err)
@@ -441,7 +556,7 @@ async function ensureDoc(docTitle, parent) {
   const clean = docTitle.trim()
   if (!clean) return null
   const existing = allDocs.value.find(
-    (item) => item.title === clean && (parent ? item.parentID === parent : !item.parentID)
+    (item) => sameTitle(item.title, clean) && (parent ? item.parentID === parent : !item.parentID)
   )
   if (existing) return existing.id
   const data = await api.post('/docs', {
@@ -593,9 +708,13 @@ onMounted(async () => {
             <textarea id="publish-content" v-model="rawMarkdown" rows="20" placeholder="粘贴 Markdown，或上传 .md / .zip"></textarea>
           </div>
           <div v-if="zipImages.length" class="publish-images">
-            <p>{{ imagesUploaded ? `已上传 ${uploadedCount} 张图片` : `检测到 ${zipImages.length} 张图片` }}</p>
+            <p>
+              {{ imagesUploaded
+                ? `已处理 ${uploadedCount + reusedCount} 张图片${reusedCount ? `（复用 ${reusedCount} 张）` : ''}`
+                : `检测到 ${zipImages.length} 张图片` }}
+            </p>
             <button class="btn btn-ghost btn-sm" type="button" :disabled="uploading" @click="uploadZipImages">
-              {{ uploading ? `上传中 ${uploadedCount}/${zipImages.length}…` : imagesUploaded ? '重新上传图片' : '上传图片并替换路径' }}
+              {{ uploading ? `上传中 ${uploadedCount + reusedCount}/${zipImages.length}…` : imagesUploaded ? '重新上传图片' : '上传图片并替换路径' }}
             </button>
           </div>
           <p v-if="pendingImages && !uploading" class="hint publish-warn">
@@ -644,14 +763,60 @@ onMounted(async () => {
             </label>
             <template v-if="autoTree">
               <div class="field">
-                <label for="publish-root">顶级文档</label>
-                <input id="publish-root" v-model="rootTitle" placeholder="读书笔记" />
+                <label for="publish-root">顶级文档 <span class="hint">输入或选择已有</span></label>
+                <div class="suggest-control">
+                  <input
+                    id="publish-root"
+                    v-model="rootTitle"
+                    placeholder="读书笔记"
+                    autocomplete="off"
+                    @focus="rootFocus = true"
+                    @blur="rootFocus = false"
+                    @keydown.esc="rootFocus = false"
+                  />
+                  <div v-if="rootFocus && rootSuggestions.length" class="doc-suggest">
+                    <button
+                      v-for="doc in rootSuggestions"
+                      :key="doc.id"
+                      class="doc-suggest-item"
+                      type="button"
+                      @mousedown.prevent="pickRoot(doc)"
+                    >
+                      <span>{{ doc.title }}</span>
+                      <small>{{ doc.status === 'draft' ? '草稿' : '已有' }}</small>
+                    </button>
+                  </div>
+                </div>
+                <p class="hint">{{ rootHint }}</p>
               </div>
               <div class="field">
-                <label for="publish-section">上级文档</label>
-                <input id="publish-section" v-model="sectionTitle" :placeholder="bookTitle || '认知觉醒'" />
+                <label for="publish-section">上级文档 <span class="hint">输入或选择已有</span></label>
+                <div class="suggest-control">
+                  <input
+                    id="publish-section"
+                    v-model="sectionTitle"
+                    :placeholder="bookTitle || '认知觉醒'"
+                    autocomplete="off"
+                    @focus="sectionFocus = true"
+                    @blur="sectionFocus = false"
+                    @keydown.esc="sectionFocus = false"
+                  />
+                  <div v-if="sectionFocus && sectionSuggestions.length" class="doc-suggest">
+                    <button
+                      v-for="doc in sectionSuggestions"
+                      :key="doc.id"
+                      class="doc-suggest-item"
+                      type="button"
+                      @mousedown.prevent="pickSection(doc)"
+                    >
+                      <span>{{ doc.title }}</span>
+                      <small>{{ doc.status === 'draft' ? '草稿' : parentTitle(doc) }}</small>
+                    </button>
+                  </div>
+                </div>
+                <p class="hint">{{ sectionHint }}</p>
               </div>
-              <p class="hint">自动创建的父级文档会发布为公开、搜索和文档列表隐藏的目录页，方便直接形成树结构。</p>
+              <p class="hint">输入已有标题会自动复用文档；选择其他分区的上级文档时，会自动补全顶级文档。</p>
             </template>
             <div v-else class="field">
               <label>上级文档</label>
