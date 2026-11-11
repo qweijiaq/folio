@@ -3,6 +3,11 @@
 # 依赖 aliyun CLI（已配置 AK 或 ECS RAM 角色）和 openssl。
 set -euo pipefail
 
+# systemd oneshot 环境里可能没有 HOME，aliyun CLI 会因此找不到 /root/.aliyun/config.json。
+# 这里显式兜底，保证通过 systemd、cron 或手动执行时行为一致。
+export HOME="${HOME:-/root}"
+export PATH="${PATH:-/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin}"
+
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 

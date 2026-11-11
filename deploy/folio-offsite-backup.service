@@ -6,4 +6,6 @@ After=network-online.target
 [Service]
 Type=oneshot
 WorkingDirectory=/opt/folio
+Environment=HOME=/root
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin
 ExecStart=/opt/folio/scripts/offsite-backup.sh
