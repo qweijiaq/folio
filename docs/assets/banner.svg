@@ -10,7 +10,7 @@
   <circle cx="648" cy="174" r="4" fill="#2f7d5d"/>
   <g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="19" fill="#3a3f47">
     <text x="668" y="100">blog · docs · comments, one admin</text>
-    <text x="668" y="140">RSS / SEO / AI Q&A with your key</text>
+    <text x="668" y="140">RSS / SEO / AI Q&amp;A with your key</text>
     <text x="668" y="180">SQLite or MySQL, docker compose</text>
   </g>
 </svg>
